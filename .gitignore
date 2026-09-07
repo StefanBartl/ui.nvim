@@ -1,0 +1,4 @@
+docs/map/
+.deps/
+.claude/worktrees/
+doc/tags
