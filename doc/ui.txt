@@ -1,0 +1,165 @@
+*ui.txt*  Statusline, tabline and theme layer for Neovim
+
+Author:  Stefan Bartl
+License: MIT
+
+==============================================================================
+CONTENTS                                                     *ui-contents*
+
+    1. Introduction ........................ |ui-introduction|
+    2. Requirements ........................ |ui-requirements|
+    3. Setup ............................... |ui-setup|
+    4. Commands ............................ |ui-commands|
+    5. Keymaps ............................. |ui-keymaps|
+    6. Statusline variants ................. |ui-variants|
+    7. Health .............................. |ui-health|
+
+==============================================================================
+1. INTRODUCTION                                          *ui-introduction*
+
+ui.nvim is the frame around the window: statusline, tabline and theme
+assembly.
+
+Its sibling plugin my.nvim is the other half of the same split, and the line
+between them is worth stating plainly:
+
+    my.nvim paints inside the window. ui.nvim paints the frame around it.
+
+Cursorline, mode tinting, indent guides and occurrence highlighting are
+content; they work with any statusline. Statusline, tabline and theme assembly
+are frame.
+
+==============================================================================
+2. REQUIREMENTS                                          *ui-requirements*
+
+    Neovim      0.10+
+    lib.nvim    required
+    NvChad      REQUIRED TODAY -- v2.5
+
+The NvChad requirement is the plugin's current state, not its intent. Five
+symbols are still reached for (`nvchad.stl.utils`, `nvconfig`,
+`nvchad.tabufline`, `base46`, `base46.themes`) across 32 call sites; three of
+those reads are unguarded and throw without NvChad.
+
+Removing that coupling is the whole roadmap. Until it is done,
+|:checkhealth| reports a missing NvChad as an ERROR rather than a note --
+installing this plugin without it gets you something that loads and throws.
+
+Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
+`neotest`, `casedesk.nvim`.
+
+==============================================================================
+3. SETUP                                                        *ui-setup*
+
+Two entry points, at different times.
+
+`ui.config.setup()` runs while NvChad boots, through `chadrc`, and answers
+"which theme, which layout": >lua
+    -- lua/chadrc.lua
+    local ok, config = pcall(function()
+      return require("ui.config").setup()
+    end)
+
+    return {
+      base46 = config.base46,
+      ui = { statusline = config.ui.statusline },
+    }
+<
+`ui.setup(opts)` runs afterwards, from your own config, and answers "which
+keymaps and commands exist": >lua
+    require("ui").setup({ all = true })
+<
+Nothing is on by default -- the two halves are independently useful, so the
+flags are explicit: >lua
+    require("ui").setup({ usrcmds = true })  -- commands only, no keymaps
+<
+    all       (boolean) shorthand for every flag below
+    keymaps   (boolean) buffer/tab navigation and tabline mappings
+    usrcmds   (boolean) the :UI command and theme management
+
+Theme overrides go to `ui.config.setup`, not here: >lua
+    require("ui.config").setup({
+      base46 = { theme = "rosepine", transparency = true },
+    })
+<
+==============================================================================
+4. COMMANDS                                                  *ui-commands*
+
+                                                                       *:UI*
+:UI theme {name}
+    Switch to a theme and reload every highlight. {name} completes over the
+    installed base46 themes, read at the moment <Tab> is pressed.
+
+:UI themes
+    List available themes, marking the active one.
+
+:UI toggle
+    Swap between the two themes in `base46.theme_toggle`.
+
+:UI transparency
+    Toggle background transparency.
+
+:UI status
+    Current theme, transparency state and statusline variant.
+
+:UI help
+    The subcommand list, in a float.
+
+No subcommand takes a range or a count: each acts on global state, where
+neither has a meaning.
+
+==============================================================================
+5. KEYMAPS                                                    *ui-keymaps*
+
+Registered by `ui.setup({ keymaps = true })`.
+
+    <Tab>          next buffer
+    <S-Tab>        previous buffer
+    <leader>bc     close the current buffer, keeping the window layout
+
+    <leader>tr     move the current buffer right in the tabline
+    <leader>tl     move it left
+    <leader>tt     move the current buffer into a new tab
+
+Every one is wrapped: a failure notifies and returns rather than raising,
+because these sit on keys pressed constantly and a traceback out of <Tab>
+makes the editor feel broken.
+
+`<leader>tr` and `<leader>tl` go through `nvchad.tabufline`, guarded -- without
+NvChad they are bound and do nothing.
+
+==============================================================================
+6. STATUSLINE VARIANTS                                       *ui-variants*
+
+Six layouts ship. Which one is assembled is the STATUSLINE_VARIANT constant in
+`lua/ui/config/init.lua`, readable through `ui.config.get_variant()`. It is a
+setup-time choice: NvChad reads the assembled table once while booting.
+
+    normal           NvChad's own statusline, unmodified (the default)
+    base             minimal: cursor, working directory, progress
+    lspbased         LSP-aware breadcrumbs plus the enhanced segments
+    custom           the older custom breadcrumb implementation
+    custom_light     "custom", assembled through a merge-based setup()
+    custom_minimal   "custom", built on NvChad's gen_block pattern
+
+An unknown name falls back to `normal` with a notification rather than
+throwing. |:checkhealth| reports the active variant and whether its module
+resolves, because that fallback is otherwise quiet.
+
+==============================================================================
+7. HEALTH                                                     *ui-health*
+
+>vim
+    :checkhealth ui
+<
+Four sections: dependencies (including which NvChad symbols are missing and
+whether that is fatal or degrading), the assembled configuration, which
+submodules `setup()` turned on, and the soft dependencies each statusline
+segment needs.
+
+The dependency section returns early on a fatal miss -- everything below it
+assembles a configuration out of exactly the symbols that just came back
+missing.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

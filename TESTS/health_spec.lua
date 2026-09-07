@@ -1,0 +1,93 @@
+-- See TESTS/config_spec.lua for what these three suppressions cover and why.
+---@diagnostic disable: need-check-nil, undefined-field, discard-returns
+
+--- `:checkhealth ui`, run WITHOUT NvChad — which is the case that matters.
+---
+--- The report's whole job is to say "NvChad is a hard dependency and it is
+--- missing" instead of letting a user discover it as a stack trace. So the
+--- assertions are about that message existing and being an error, not a note.
+
+local health_mod = require("ui.health")
+
+--- Capture what `M.check()` reports, replacing `vim.health` for the call.
+---@return { level: string, msg: string }[]
+local function capture()
+  local calls = {}
+  local saved = vim.health
+  --- `vim.health.error`/`warn` take advice as a second argument, and that is
+  --- where the sentences a reader acts on actually live -- so the capture
+  --- folds it into the recorded text rather than dropping it.
+  ---@param level string
+  ---@return fun(msg: string, advice: string[]|nil): nil
+  local function rec(level)
+    return function(msg, advice)
+      local text = tostring(msg)
+      if type(advice) == "table" then
+        text = text .. " | " .. table.concat(advice, " | ")
+      end
+      calls[#calls + 1] = { level = level, msg = text }
+    end
+  end
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.health = {
+    start = rec("start"),
+    ok = rec("ok"),
+    info = rec("info"),
+    warn = rec("warn"),
+    error = rec("error"),
+  }
+  pcall(health_mod.check)
+  vim.health = saved
+  return calls
+end
+
+--- Whether any captured line of `level` contains `needle`.
+---@param calls { level: string, msg: string }[]
+---@param level string
+---@param needle string
+---@return boolean
+local function has(calls, level, needle)
+  for _, c in ipairs(calls) do
+    if c.level == level and c.msg:find(needle, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+describe("ui.health", function()
+  it("runs without throwing", function()
+    assert.has_no.errors(function()
+      capture()
+    end)
+  end)
+
+  it("finds lib.nvim, which the test harness puts on the rtp", function()
+    assert.is_true(has(capture(), "ok", "lib.nvim is available"))
+  end)
+
+  it("reports a missing NvChad as an error, not a note", function()
+    -- The one thing this report exists for. A `warn` or an `info` here would
+    -- let someone install the plugin and wonder why nothing renders.
+    local calls = capture()
+    assert.is_true(has(calls, "error", "nvconfig"))
+    assert.is_true(has(calls, "error", "nvchad.stl.utils"))
+  end)
+
+  it("says NvChad is hard rather than optional", function()
+    assert.is_true(has(capture(), "error", "HARD dependency"))
+  end)
+
+  it("stops after the dependency section when NvChad is absent", function()
+    -- Everything below assembles a configuration out of the symbols that just
+    -- came back missing; continuing would be a wall of secondary failures.
+    local calls = capture()
+    local starts = {}
+    for _, c in ipairs(calls) do
+      if c.level == "start" then
+        starts[#starts + 1] = c.msg
+      end
+    end
+    assert.same({ "Dependencies" }, starts)
+  end)
+end)

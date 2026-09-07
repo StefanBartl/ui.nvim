@@ -1,0 +1,98 @@
+---@module 'ui.statusline.modules.lsp'
+--- LSP-first breadcrumbs for NvChad statusline (async + cached), with Treesitter fallback.
+
+local M = {}
+
+-- Lazy-load submodules to break circular dependencies
+local lsp_path_helpers
+local doc_symbols
+local devicons
+local formatters
+
+local function ensure_deps()
+  if not lsp_path_helpers then
+    lsp_path_helpers = require("ui.statusline.modules.lsp.helpers.paths")
+  end
+  if not doc_symbols then
+    doc_symbols = require("ui.statusline.modules.lsp.symbols.document_symbols")
+  end
+  if not devicons then
+    devicons = require("ui.statusline.modules.file_icons.devicons")
+  end
+  if not formatters then
+    formatters = require("ui.statusline.modules.formatters")
+  end
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+function M.symbol_context_smart()
+  ensure_deps()
+  return doc_symbols.symbol_context_smart()
+end
+
+function M.mode_band_group()
+  local hl_module = require("ui.statusline.modules.highlighting")
+  return hl_module.mode_band_group()
+end
+
+---@param group string
+function M.hl_open(group)
+  local hl_module = require("ui.statusline.modules.highlighting")
+  return hl_module.hl_open(group)
+end
+
+--------------------------------------------------------------------------------
+-- Renderers
+--------------------------------------------------------------------------------
+
+local SEP_HEX = "f0058"
+
+function M.render_breadcrumbs_lspfirst()
+  ensure_deps()
+  local utils = require("nvchad.stl.utils")
+  local bufnr = utils.stbufnr()
+  local rel = lsp_path_helpers.display_path_for_buf(bufnr)
+  local ctx = doc_symbols.symbol_context_smart()
+  local icon = devicons.file_icon_segment_lsp()
+
+  local cp = require("lib.lua.strings.convert.hex_to_string")
+  local sep = (function()
+    return (
+      " "
+      .. (cp(SEP_HEX) ~= "" and vim.fn.strdisplaywidth(cp(SEP_HEX)) == 1 and cp(SEP_HEX) or ((vim.o.columns >= 100) and "⟶" or "›"))
+      .. " "
+    )
+  end)()
+
+  local line = formatters.compact_breadcrumb_line(rel, ctx, sep, nil)
+  line = formatters.stl_escape(line)
+  return icon .. " " .. line .. "%*"
+end
+
+---@param band_group string
+function M.render_breadcrumbs_inherit_lspfirst(band_group)
+  ensure_deps()
+  local utils = require("nvchad.stl.utils")
+  local bufnr = utils.stbufnr()
+  local rel = lsp_path_helpers.display_path_for_buf(bufnr)
+  local ctx = doc_symbols.symbol_context_smart()
+  local icon = devicons.file_icon_segment_inherit(band_group)
+
+  local cp = require("lib.lua.strings.convert.hex_to_string")
+  local sep = (function()
+    return (
+      " "
+      .. (cp(SEP_HEX) ~= "" and vim.fn.strdisplaywidth(cp(SEP_HEX)) == 1 and cp(SEP_HEX) or ((vim.o.columns >= 100) and "⟶" or "›"))
+      .. " "
+    )
+  end)()
+
+  local line = formatters.compact_breadcrumb_line(rel, ctx, sep, nil)
+  line = formatters.stl_escape(line)
+  return icon .. " " .. line
+end
+
+return M

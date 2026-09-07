@@ -1,7 +1,9 @@
-> **Planning stage — not implemented.** This repository holds the scope and the
-> reasoning, and no `lua/` tree yet. Nothing here is installable. An empty
-> plugin that can be added to a spec and does nothing would be worse than no
-> repository at all, so there deliberately is no entry point.
+> **Alpha — and it still requires NvChad.** The implementation moved in on
+> 2026-09-08, but the decoupling has not happened yet: five NvChad/base46
+> symbols are still reached for, three of them unguarded. `:checkhealth ui`
+> reports that as an error, not a note. Installing this without NvChad gets you
+> a plugin that throws. Removing that coupling is the whole
+> [roadmap](docs/ROADMAP.md).
 
 # ui.nvim
 
@@ -18,22 +20,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Neovim](https://img.shields.io/badge/Neovim-0.10%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2FLuaJIT-2C2D72?logo=lua&logoColor=white)](https://www.lua.org)
-![Status](https://img.shields.io/badge/status-planning-lightgrey)
+![Status](https://img.shields.io/badge/status-alpha-red)
 
-The frame around the window: statusline, tabline, theme assembly. Planned as
-the layer that lets a Neovim config stand on its own instead of on a
-distribution's UI.
+The frame around the window: statusline, tabline, theme assembly. The layer
+meant to let a Neovim config stand on its own instead of on a distribution's
+UI — which it does not do yet, because it is still standing on one.
 
 ---
 
 ## Table of contents
 
+- [Documentation](#documentation)
 - [What this is for](#what-this-is-for)
 - [Scope](#scope)
-- [The measurement](#the-measurement)
+- [Requirements](#requirements)
+- [The coupling to NvChad](#the-coupling-to-nvchad)
 - [What it is not](#what-it-is-not)
 - [Status](#status)
 - [License](#license)
+
+---
+
+## Documentation
+
+Start at [docs/README.md](docs/README.md), which says what is where.
+
+- [Roadmap](docs/ROADMAP.md) — the measured NvChad coupling and what is left to do.
+- [Configuration](docs/configuration.md) — both setup entry points and the six statusline variants.
+- [Bindings cheatsheet](docs/BINDINGS.md) — commands, keymaps and autocommands.
+- [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
+
+`:help ui` is the same reference inside the editor.
 
 ---
 
@@ -50,9 +67,23 @@ still depending on the thing it replaced. `ui.nvim` is the plan for taking
 that last step: the same UI, standing on Neovim's own APIs.
 
 It starts from an existing, working implementation rather than from a blank
-page. Roughly 4,500 lines of statusline, tabline and theme code already run
-in one config against NvChad. The interesting number is how much of it is
-actually coupled — see [The measurement](#the-measurement).
+page: roughly 4,500 lines of statusline, tabline and theme code that ran in one
+config against NvChad, moved here on 2026-09-08. It still runs against NvChad —
+see [The coupling to NvChad](#the-coupling-to-nvchad) for exactly how much.
+
+---
+
+## Requirements
+
+| | |
+| --- | --- |
+| Neovim | **0.10+** |
+| [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
+| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | **required today** — see below. Removing this is the roadmap |
+
+Optional, each detected at runtime and blanking only its own segment:
+`nvim-web-devicons` (file icons), `neotest` (test-runner segment),
+`casedesk.nvim` (working-directory badge).
 
 ---
 
@@ -78,30 +109,30 @@ assembly are frame.
 
 ---
 
-## The measurement
+## The coupling to NvChad
 
-The reason this is a plan and not a guess. The existing implementation's
-coupling to NvChad was measured rather than estimated: every `require` in
-those 4,500 lines was extracted and grouped.
+Five symbols, 32 call sites, counted on 2026-09-08:
 
-The result is **two symbols**:
+| Symbol | Calls | Guarded | What it provides |
+| --- | ---: | ---: | --- |
+| `nvchad.stl.utils` | 21 | 14 | Statusline primitives: separator glyphs, the mode table |
+| `nvconfig` | 3 | **0** | NvChad's resolved UI configuration, read for separator style |
+| `nvchad.tabufline` | 3 | 3 | Buffer/tab movement for the tabline keymaps |
+| `base46` | 4 | 4 | Theme loading and the transparency toggle |
+| `base46.themes` | 1 | 1 | The theme list `:UI theme` completes over |
 
-| Symbol | What it provides |
-| --- | --- |
-| `nvchad.stl.utils` | Statusline primitives — separators, the mode table |
-| `nvconfig` | The distribution's resolved UI/theme configuration, read-only |
+Twenty-two of the thirty-two already sit behind a `pcall`, so they have a
+defined behaviour when the symbol is absent and need something to fall back
+*to* rather than a rewrite. The three unguarded `nvconfig` reads are the sharp
+edge — they throw outright — and they are where step 3 of the roadmap starts.
 
-Everything else it uses is either
-[lib.nvim](https://github.com/StefanBartl/lib.nvim) (the shared runtime) or
-Neovim's own API. The original design note assumed "seven files reference
-`nvchad.*`" and treated the decoupling as the large, uncertain part of the
-work. It is not: two symbols, one of them a read of configuration and the
-other a small helper table.
-
-That does not make the work trivial — a palette has to come from somewhere
-once `nvconfig` is gone, and that is a real decision about whether to depend
-on a colorscheme library or ship a palette. But it does make it a bounded
-decision rather than an open-ended port.
+> **An earlier version of this section claimed "exactly two symbols" and made
+> a point of the number.** It was wrong. The measurement counted
+> `require("x")` with a single regex and never matched `pcall(require, "x")`,
+> which is the form most of this code uses — precisely because most of these
+> calls are already guarded. Three symbols were invisible to it. The number is
+> corrected here rather than quietly fixed, because the wrong one was used to
+> argue that the decoupling was smaller than the original design note assumed.
 
 ---
 
@@ -109,21 +140,25 @@ decision rather than an open-ended port.
 
 | Not | Because |
 | --- | --- |
-| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is the open question above |
+| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is [the open decision](docs/ROADMAP.md#open-decisions) |
 | A distribution | No plugin list, no opinionated bundle. One UI layer |
-| A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from four layouts that are already in daily use |
+| A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from six layouts that are already in daily use |
 | Where content highlighting goes | That is [my.nvim](https://github.com/StefanBartl/my.nvim). See [Scope](#scope) |
 
 ---
 
 ## Status
 
-Planning. The scope above is settled; the implementation has not started.
+Alpha. The code is here and runs; the decoupling has not happened.
 
-The full plan, including the migration order and the open questions, is in
-the author's own notes rather than here — this repository will get its
-`docs/ROADMAP.md` filled in as decisions are made. See
-[docs/ROADMAP.md](docs/ROADMAP.md) for what is written down so far.
+```vim
+:checkhealth ui
+```
+
+names every dependency, says which NvChad symbols are missing when they are,
+and is explicit that NvChad is a hard requirement rather than an optional
+integration. [docs/ROADMAP.md](docs/ROADMAP.md) has the measured coupling, the
+order of work, and the four decisions still open.
 
 ---
 
