@@ -125,11 +125,7 @@ end
 ---@nodiscard
 ---@return string
 function M.file_icon_segment()
-  local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-  if not ok_utils then
-    return ""
-  end
-
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
 
   -- Validate buffer
@@ -156,11 +152,7 @@ end
 ---@param band_group string
 ---@return string
 function M.file_icon_segment_inherit(band_group)
-  local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-  if not ok_utils then
-    return ""
-  end
-
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
 
   -- Validate buffer
@@ -186,11 +178,7 @@ end
 ---@nodiscard
 ---@return string
 function M.file_icon_segment_lsp()
-  local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-  if not ok_utils then
-    return ""
-  end
-
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
 
   -- Validate buffer

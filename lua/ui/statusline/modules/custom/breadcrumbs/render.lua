@@ -11,7 +11,7 @@ local M = {}
 --- Render the centered breadcrumbs module (no leading/trailing spaces to keep centering exact).
 --- @return string
 function M.render_breadcrumbs()
-  local utils = require("nvchad.stl.utils")
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
   local path = vim.api.nvim_buf_get_name(bufnr)
   if path == "" then

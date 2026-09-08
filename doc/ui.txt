@@ -35,14 +35,18 @@ tabline and theme assembly are frame.
     lib.nvim    required
     NvChad      REQUIRED TODAY -- v2.5
 
-The NvChad requirement is the plugin's current state, not its intent. Five
-symbols are still reached for (`nvchad.stl.utils`, `nvconfig`,
-`nvchad.tabufline`, `base46`, `base46.themes`) across 32 call sites; three of
-those reads are unguarded and throw without NvChad.
+The NvChad requirement is the plugin's current state, not its intent. Step 3
+of the roadmap ported this plugin's own reads of `nvchad.stl.utils` and
+`nvconfig` into its own code; what remains is `nvchad.tabufline`, `base46`,
+`base46.themes` -- and a bigger gap step 3 surfaced: this plugin has never
+had its own statusline render entrypoint. `vim.o.statusline` and the
+`generate()` loop that walks `order`/`modules` into a string are still
+entirely NvChad's (`nvchad.init` + `nvchad.stl.utils.generate()`).
 
 Removing that coupling is the whole roadmap. Until it is done,
 |:checkhealth| reports a missing NvChad as an ERROR rather than a note --
-installing this plugin without it gets you something that loads and throws.
+installing this plugin without it gets you something that loads and renders
+nothing.
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 `neotest`, `casedesk.nvim`.

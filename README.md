@@ -1,9 +1,12 @@
 > **Alpha — and it still requires NvChad.** The implementation moved in on
-> 2026-09-08, but the decoupling has not happened yet: five NvChad/base46
-> symbols are still reached for, three of them unguarded. `:checkhealth ui`
-> reports that as an error, not a note. Installing this without NvChad gets you
-> a plugin that throws. Removing that coupling is the whole
-> [roadmap](docs/ROADMAP.md).
+> 2026-09-08; step 3 of the decoupling (2026-09-08 too) ported the statusline
+> primitives and separator config this plugin's own code used to read from
+> NvChad, and every module now loads with NvChad entirely absent. What is
+> still missing is bigger than the remaining symbols (`nvchad.tabufline`,
+> `base46`): this plugin has never had its own statusline render entrypoint —
+> `vim.o.statusline` and the `generate()` loop are still entirely NvChad's.
+> `:checkhealth ui` reports that as an error, not a note. Removing it is the
+> whole [roadmap](docs/ROADMAP.md).
 
 # ui.nvim
 
@@ -108,7 +111,7 @@ assembly are frame.
 
 ## The coupling to NvChad
 
-Five symbols, 32 call sites, counted on 2026-09-08:
+Counted on 2026-09-08, before step 3:
 
 | Symbol | Calls | Guarded | What it provides |
 | --- | ---: | ---: | --- |
@@ -118,18 +121,29 @@ Five symbols, 32 call sites, counted on 2026-09-08:
 | `base46` | 4 | 4 | Theme loading and the transparency toggle |
 | `base46.themes` | 1 | 1 | The theme list `:UI theme` completes over |
 
-Twenty-two of the thirty-two already sit behind a `pcall`, so they have a
-defined behaviour when the symbol is absent and need something to fall back
-*to* rather than a rewrite. The three unguarded `nvconfig` reads are the sharp
-edge — they throw outright — and they are where step 3 of the roadmap starts.
+Step 3 (also 2026-09-08) ported `nvchad.stl.utils` into this plugin's own
+`ui.statusline.utils.primitives` and gave every statusline variant its own
+`separator_style` literal instead of reading `nvconfig`. Neither symbol is
+required by this plugin's code any more, and every statusline variant module
+now loads and assembles with NvChad entirely absent from the runtimepath
+(verified headless). `nvchad.tabufline`, `base46` and `base46.themes` are
+unchanged — steps 4 and 5.
 
-> **An earlier version of this section claimed "exactly two symbols" and made
-> a point of the number.** It was wrong. The measurement counted
+> **That still does not mean this plugin renders without NvChad, and the
+> "five symbols, 32 call sites" count above was never the whole coupling.**
+> `ui.config.setup()` only ever returned a config table; something else has
+> always had to turn `{order, modules}` into `vim.o.statusline`. That
+> something is entirely NvChad's: `nvchad.init` sets `vim.o.statusline =
+> "%!v:lua.require('nvchad.stl.<theme>')()"`, and `nvchad.stl.<theme>` calls
+> `nvchad.stl.utils.generate()` — a render entrypoint this plugin has never
+> had one of its own. None of steps 3-5 as written closes that gap; it needs
+> its own line in [the roadmap](docs/ROADMAP.md).
+>
+> A separate, earlier version of this section claimed "exactly two symbols"
+> and made a point of the number. It was wrong: the measurement counted
 > `require("x")` with a single regex and never matched `pcall(require, "x")`,
 > which is the form most of this code uses — precisely because most of these
-> calls are already guarded. Three symbols were invisible to it. The number is
-> corrected here rather than quietly fixed, because the wrong one was used to
-> argue that the decoupling was smaller than the original design note assumed.
+> calls are already guarded. Three symbols were invisible to it.
 
 ---
 

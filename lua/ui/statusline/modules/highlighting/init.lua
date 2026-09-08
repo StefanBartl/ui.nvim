@@ -62,12 +62,7 @@ function M.mode_band_group()
   -- Update cache
   last_mode = m
 
-  local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-  if not ok_utils then
-    mode_band_cache = "St_Normalmode"
-    return mode_band_cache
-  end
-
+  local utils = require("ui.statusline.utils.primitives")
   local name = (utils.modes[m] and utils.modes[m][2]) or "Normal"
   mode_band_cache = "St_" .. name .. "mode"
 

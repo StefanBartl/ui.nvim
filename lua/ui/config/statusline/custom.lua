@@ -17,12 +17,17 @@ local casedesk = lazy.require("ui.statusline.modules.casedesk")
 -- Modules
 -- ============================================================================
 
+-- The single source for this variant's separator style: the config table
+-- below and the module closures that call `get_separators` both read this,
+-- rather than a global config that separator style used to be read back from.
+local SEPARATOR_STYLE = "round" -- "arrow", "round", "block", "default"
+
 return {
   base46 = require("ui.config.base46"),
   ui = {
     statusline = {
       theme = "minimal", -- or "vscode_colored"
-      separator_style = "round", -- "arrow", "round", "block", "default"
+      separator_style = SEPARATOR_STYLE,
 
       order = {
         "mode",
@@ -68,8 +73,8 @@ return {
         --- Mode (overrides the NvChad default, adds separators)
         --- @return string
         mode = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils or not utils.is_activewin() then
+          local utils = require("ui.statusline.utils.primitives")
+          if not utils.is_activewin() then
             return ""
           end
 
@@ -78,7 +83,7 @@ return {
           local mode_name = modes[m][1]
           local mode_type = modes[m][2]
 
-          local sep = get_separators()
+          local sep = get_separators(SEPARATOR_STYLE)
 
           local current_mode = "%#St_" .. mode_type .. "Mode#  " .. mode_name
           local mode_sep1 = "%#St_" .. mode_type .. "ModeSep#" .. sep.right
@@ -88,11 +93,7 @@ return {
 
         --- @return string
         git = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
-
+          local utils = require("ui.statusline.utils.primitives")
           local git_status = utils.git()
           if not git_status or git_status == "" then
             return ""
@@ -110,18 +111,14 @@ return {
             return ""
           end
 
-          local sep = get_separators()
+          local sep = get_separators(SEPARATOR_STYLE)
 
           return hl_module.hl_open(band) .. content .. "%#" .. band .. "Sep#" .. sep.right .. " "
         end,
 
         --- @return string
         diagnostics = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
-
+          local utils = require("ui.statusline.utils.primitives")
           local diag = utils.diagnostics()
           if not diag or diag == "" then
             return ""
@@ -132,11 +129,7 @@ return {
 
         --- @return string
         lsp = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
-
+          local utils = require("ui.statusline.utils.primitives")
           local lsp_status = utils.lsp()
           if not lsp_status or lsp_status == "" then
             return ""

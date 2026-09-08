@@ -2,14 +2,17 @@
 --- `:checkhealth ui`.
 ---
 --- The first section is the one that matters most: **NvChad is a hard
---- dependency here.** This plugin paints the frame, and today it does so
---- through NvChad's base46 and statusline primitives. Installing it without
---- NvChad produces a plugin that loads and
---- renders nothing, which is exactly the failure a health check should name
---- rather than leave to guesswork.
+--- dependency here.** This plugin's own code no longer reaches into
+--- `nvchad.stl.utils` or `nvconfig` (step 3 of the roadmap replaced both),
+--- but it still has no statusline render entrypoint of its own -- NvChad's
+--- `nvchad.init` + `nvchad.stl.utils.generate()` is what turns the config
+--- table `ui.config.setup()` assembles into `vim.o.statusline`. Installing
+--- this without NvChad produces a plugin that loads and renders nothing,
+--- which is exactly the failure a health check should name rather than leave
+--- to guesswork.
 ---
---- Decoupling from those five symbols is the whole roadmap
---- (`docs/ROADMAP.md`); until it is done, this report says so out loud.
+--- Removing that coupling is the whole roadmap (`docs/ROADMAP.md`); until it
+--- is done, this report says so out loud.
 
 local M = {}
 
@@ -79,16 +82,29 @@ local function check_dependencies()
   end
   health.ok(("all %d required lib.nvim modules resolve"):format(#lib_modules))
 
-  -- The NvChad and base46 symbols this plugin still reaches for. Reported one
-  -- by one because they fail for different reasons and with different
-  -- consequences: the first two are unguarded at their call sites and throw,
-  -- the rest sit behind a `pcall` and only blank the feature they serve.
+  -- Step 3 of the roadmap ported the statusline primitives this plugin used
+  -- to read out of `nvchad.stl.utils` (separators, the mode table, git/
+  -- diagnostics/lsp text) into `ui.statusline.utils.primitives`, and the
+  -- `nvconfig.ui.statusline.separator_style` reads into a literal each
+  -- variant now owns. Neither symbol is required by this plugin's own code
+  -- any more -- `require("ui").setup()` and every statusline variant module
+  -- load cleanly without NvChad now.
   --
-  -- Fatal ones first, so the top of the section is the answer.
+  -- What still makes NvChad a hard dependency is a layer above that: nothing
+  -- in this plugin sets `vim.o.statusline` or walks an `order`/`modules`
+  -- table into a rendered string. `chadrc.lua` hands NvChad's own
+  -- `nvchad.init` a config table, and NvChad is what turns that into
+  -- `vim.o.statusline = "%!v:lua.require('nvchad.stl.<theme>')()"` and calls
+  -- `nvchad.stl.utils.generate(order, modules)`. That render entrypoint has
+  -- never existed in this plugin -- it is not covered by steps 3-5 as
+  -- written, and needs its own line in the roadmap.
   local nvchad_ok = true
   for _, entry in ipairs({
-    { "nvconfig", "NvChad's resolved UI configuration -- read unguarded, throws when absent" },
-    { "nvchad.stl.utils", "statusline primitives (separators, mode table)" },
+    { "nvconfig", "read by NvChad's own render pipeline, not by this plugin's code" },
+    {
+      "nvchad.stl.utils",
+      "generate()/vim.o.statusline wiring; not this plugin's primitives any more",
+    },
   }) do
     if has(entry[1]) then
       health.ok(("%s -- %s"):format(entry[1], entry[2]))
@@ -96,8 +112,10 @@ local function check_dependencies()
       nvchad_ok = false
       health.error(("%s is missing -- %s"):format(entry[1], entry[2]), {
         "NvChad is a HARD dependency of this plugin, not an optional one",
+        "This plugin has no statusline render entrypoint of its own yet --",
+        "nvchad.init + nvchad.stl.utils.generate() is what turns the config",
+        "table ui.config.setup() assembles into vim.o.statusline",
         "Install NvChad/NvChad (branch v2.5), or do not install ui.nvim",
-        "Removing this coupling is the plugin's roadmap, not its current state",
       })
     end
   end

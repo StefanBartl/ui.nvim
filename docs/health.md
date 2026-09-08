@@ -16,8 +16,8 @@ the report says is downstream of that.
 | --- | --- |
 | ✅ `lib.nvim is available` | The root module resolves |
 | ✅ `all 10 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
-| ✅ `nvconfig` / `nvchad.stl.utils` | The two symbols read **unguarded**. Present, so the plugin can render |
-| ❌ `nvconfig is missing` / `nvchad.stl.utils is missing` | Fatal. These are read without a `pcall`, so the statusline throws rather than degrading. Install NvChad (v2.5), or do not install this plugin |
+| ✅ `nvconfig` / `nvchad.stl.utils` | Present. Neither is read by this plugin's own code any more (step 3), but nothing here sets `vim.o.statusline` either — NvChad's `nvchad.init` + `nvchad.stl.utils.generate()` is what renders the config `ui.config.setup()` assembles |
+| ❌ `nvconfig is missing` / `nvchad.stl.utils is missing` | Fatal. This plugin has no render entrypoint of its own, so without NvChad's the statusline never renders at all. Install NvChad (v2.5), or do not install this plugin |
 | ⚠️ `nvchad.tabufline` / `base46` / `base46.themes` missing | Guarded at every call site: the tabline keymaps and theme switching stop working, nothing throws |
 | ❌ `lib.nvim is not on the runtimepath` | Install `StefanBartl/lib.nvim` |
 
@@ -26,9 +26,9 @@ it assembles a configuration out of exactly those symbols, so continuing would
 print a wall of secondary failures that says nothing the first one did not.
 
 The error/warning split is the useful part: it separates "this will not run"
-from "this feature is off". The measured coupling — five symbols, 32 call
-sites, 22 of them guarded — is in [ROADMAP.md](ROADMAP.md), and removing it is
-the plugin's entire roadmap.
+from "this feature is off". The measured coupling and the render-entrypoint
+gap step 3 surfaced are in [ROADMAP.md](ROADMAP.md), and removing both is the
+plugin's entire roadmap.
 
 ---
 

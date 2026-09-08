@@ -15,6 +15,11 @@ local filetree_cwd_mode = lazy.require("ui.statusline.modules.filetree_cwd_mode"
 
 local M = {}
 
+-- NvChad's own nvconfig.lua default for `ui.statusline.separator_style`,
+-- which this variant never overrode -- now the explicit value instead of an
+-- implicit fallback. See docs/ROADMAP.md, step 3.
+local SEPARATOR_STYLE = "default"
+
 -- Mirrors nvchad.stl.utils' `orders.default`, with two insertions. The `%=`
 -- entries are the alignment breaks, so the list is really three groups:
 -- left (up to the first `%=`), centre, right (after the second).
@@ -53,6 +58,7 @@ local order = {
 M.ui = {
   statusline = {
     order = order,
+    separator_style = SEPARATOR_STYLE,
     modules = {
       -- Only "plugin_progress", "plugin_summary" and "filetree_cwd_mode" are
       -- provided here; every other key in `order` above resolves to NvChad's
@@ -86,11 +92,11 @@ M.ui = {
         end
 
         -- Same left separator NvChad's own default `cursor` uses, resolved the
-        -- same way (nvchad/stl/default.lua lines 5-8) so it tracks whatever
-        -- `separator_style` is configured instead of hardcoding one glyph.
-        local sep_style = require("nvconfig").ui.statusline.separator_style
-        local sep_icons = require("nvchad.stl.utils").separators
-        local separators = (type(sep_style) == "table" and sep_style) or sep_icons[sep_style]
+        -- same way (nvchad/stl/default.lua lines 5-8), against this variant's
+        -- own `SEPARATOR_STYLE` rather than a global config.
+        local sep_icons = require("ui.statusline.utils.primitives").separators
+        local separators = (type(SEPARATOR_STYLE) == "table" and SEPARATOR_STYLE)
+          or sep_icons[SEPARATOR_STYLE]
         local sep_l = separators["left"]
 
         local pieces = { render_module.cursor_classic() }

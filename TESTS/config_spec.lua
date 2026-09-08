@@ -40,9 +40,10 @@ describe("ui.config", function()
   local cfg = require("ui.config")
 
   it("assembles without NvChad", function()
-    -- The layouts reach for `nvconfig` inside closures, not at load time, so
-    -- assembly has to work in a bare session even today. If this starts
-    -- failing, a require moved to the top of a layout file.
+    -- Step 3 of the roadmap replaced every layout's `nvconfig`/
+    -- `nvchad.stl.utils` read with a local literal and
+    -- `ui.statusline.utils.primitives`, so assembly no longer touches NvChad
+    -- at all. If this starts failing, a new NvChad require crept back in.
     local ok, assembled = pcall(cfg.setup)
     assert.is_true(ok, tostring(assembled))
     assert.equals("table", type(assembled))

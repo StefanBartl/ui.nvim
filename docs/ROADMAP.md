@@ -46,7 +46,7 @@ It claimed "exactly two symbols" and made a point of the number. It counted
 is the form most of this code uses, because most of these calls are already
 guarded. Three symbols were invisible to it.
 
-Counted properly, both call forms, on 2026-09-08:
+Counted properly, both call forms, on 2026-09-08, before step 3:
 
 | Symbol | Calls | Files | Guarded by `pcall` | What it provides |
 | --- | ---: | ---: | ---: | --- |
@@ -56,22 +56,34 @@ Counted properly, both call forms, on 2026-09-08:
 | `base46` | 4 | 2 | 4 | Theme loading, transparency toggle |
 | `base46.themes` | 1 | 1 | 1 | The theme name list `:UI theme` completes over |
 
-Five symbols, 32 call sites. That is still a bounded job — 22 of the 32 are
-already behind a `pcall`, so they have a defined absent-behaviour and only
-need something to fall back *to* — but it is not the "two data symbols" the
-first pass claimed, and the plan below was written against that wrong number.
+**Step 3 is done (2026-09-08).** `nvchad.stl.utils` is ported to
+`lua/ui/statusline/utils/primitives.lua`; the three unguarded `nvconfig`
+reads (`config/statusline/custom_minimal.lua`, `config/statusline/normal.lua`,
+`statusline/utils/get_separators.lua`) are each a local `separator_style`
+literal now. Verified headless with NvChad entirely off the runtimepath:
+every statusline variant module requires and `ui.config.setup()` assembles
+without error. `nvchad.tabufline`, `base46`, `base46.themes` are unchanged.
 
-The three unguarded `nvconfig` reads are the sharp edge: `config/statusline/
-custom_minimal.lua`, `config/statusline/normal.lua` and
-`statusline/utils/get_separators.lua` throw outright without NvChad. Those are
-where a decoupling has to start, not where it can end.
+### A second correction: the symbol count was never the whole coupling
+
+Finishing step 3 did not make the plugin render without NvChad, and it was
+never going to — the "5 symbols, 32 call sites" measurement only ever counted
+`require()` calls inside *this repository*. It could not see the one piece
+that matters most, because that piece has never lived here: something has to
+turn the `{order, modules}` table `ui.config.setup()` assembles into
+`vim.o.statusline`, and today that something is entirely NvChad's —
+`nvchad.init` sets `vim.o.statusline = "%!v:lua.require('nvchad.stl.<theme>')
+()"`, and `nvchad.stl.<theme>` calls `nvchad.stl.utils.generate(order,
+modules)`. This plugin has never owned a render entrypoint of its own. See
+the new step 4 in [Order of work](#order-of-work) below — step 3's own text
+("no decision, just typing") did not anticipate needing it.
 
 ### What each one actually needs
 
 | Symbol | Replacement |
 | --- | --- |
-| `nvchad.stl.utils` | Data. The separator sets are a handful of string pairs and the mode table is one constant. No decision, just typing |
-| `nvconfig` | Only `ui.statusline.separator_style` is read. Once the separators are this plugin's own, so is the setting |
+| `nvchad.stl.utils` | ~~Data. Separator sets and the mode table.~~ Done — `ui.statusline.utils.primitives` |
+| `nvconfig` | ~~Only `ui.statusline.separator_style` is read.~~ Done — each variant owns a `SEPARATOR_STYLE` literal |
 | `nvchad.tabufline` | Buffer/tab movement. `lib.nvim.buf_win_tab` already does part of it; the rest is `nvim_buf_delete` and list bookkeeping |
 | `base46` / `base46.themes` | **The open decision.** This is the palette question below |
 
@@ -162,17 +174,30 @@ palette source is present, and which colorscheme the groups were derived from.
 2. ~~Repository scaffold to the project gate~~ — done: `config/DEFAULTS.lua`,
    `bindings/{keymaps,usrcmds}`, `@types/`, `health.lua`, `.luacheckrc`,
    `TESTS/` with a runner that fails loudly, LuaLS at zero.
-3. **Replace `nvchad.stl.utils` and the three unguarded `nvconfig` reads.**
-   Data and one setting; no decision, just typing. This is what makes the
-   plugin load at all without NvChad.
-4. Replace `nvchad.tabufline` — buffer/tab movement, partly already in
+3. ~~Replace `nvchad.stl.utils` and the three unguarded `nvconfig` reads.~~ —
+   done 2026-09-08: `lua/ui/statusline/utils/primitives.lua`, and each
+   statusline variant now owns its own `separator_style` literal. Verified
+   headless with NvChad off the runtimepath: every variant module requires,
+   `ui.config.setup()` assembles, `luacheck`/`stylua` clean, spec suite green.
+4. **Give this plugin its own statusline render entrypoint.** Step 3 made
+   every module *loadable* without NvChad, but nothing here has ever set
+   `vim.o.statusline` or walked an `order`/`modules` table into a string —
+   that has always been `nvchad.init` + `nvchad.stl.utils.generate()`,
+   entirely outside this repository, which is why the "5 symbols" count never
+   surfaced it. Needed regardless of steps 5-7 below: without it the plugin
+   loads cleanly and renders nothing, NvChad present or not. Roughly the
+   `generate()` loop from `nvchad/stl/utils.lua` (~15 lines) plus the one-line
+   `vim.o.statusline` assignment from `nvchad/init.lua` — mechanical once
+   named, but new scope, not covered by the original "5 symbols" plan.
+5. Replace `nvchad.tabufline` — buffer/tab movement, partly already in
    `lib.nvim.buf_win_tab`.
-5. Decide [the palette question](#open-decisions) and replace `base46`.
-6. Host wiring, then remove `lua/wkdnvchad/` from the config only after the
+6. Decide [the palette question](#open-decisions) and replace `base46`.
+7. Host wiring, then remove `lua/wkdnvchad/` from the config only after the
    new modules demonstrably load.
 
-Step 3 is the next one and needs no decision. Step 5 is the one that needs
-thinking rather than typing.
+Step 4 is the next one and needs no decision, only naming what already runs
+in NvChad's own code. Step 6 is the one that needs thinking rather than
+typing.
 
 ---
 

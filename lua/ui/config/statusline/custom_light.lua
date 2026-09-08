@@ -78,20 +78,14 @@ function M.register_statusline_modules(stl_config)
 
   -- Diagnostics module (re-wrapped with mode band)
   stl_config.modules.diagnostics = function()
-    local okU, U = pcall(require, "nvchad.stl.utils")
-    if not okU then
-      return ""
-    end
+    local U = require("ui.statusline.utils.primitives")
     local s = U.diagnostics()
     return hl_module.hl_wrap(hl_module.mode_band_group(), hl_module.stl_strip_hl(s))
   end
 
   -- LSP status module
   stl_config.modules.lsp = function()
-    local okU, U = pcall(require, "nvchad.stl.utils")
-    if not okU then
-      return ""
-    end
+    local U = require("ui.statusline.utils.primitives")
     local s = U.lsp()
     return hl_module.hl_wrap(hl_module.mode_band_group(), hl_module.stl_strip_hl(s))
   end

@@ -8,16 +8,23 @@ local hl_module = lazy.require("ui.statusline.modules.highlighting")
 local lsp_module = lazy.require("ui.statusline.modules.lsp")
 local cursor_module = lazy.require("ui.statusline.cursor_ctl")
 
+-- The single source for this variant's separator style: the config table
+-- below and `get_gen_block` both read this, rather than a global config that
+-- separator style used to be read back from.
+local SEPARATOR_STYLE = "arrow"
+
 -- ============================================================================
 -- Gen block helper (mirrors NvChad's own nvchad/stl/minimal.lua)
 -- ============================================================================
 
 local function get_gen_block()
-  local config = require("nvconfig").ui.statusline
-  local sep_style = config.separator_style
-  local utils = require("nvchad.stl.utils")
+  local utils = require("ui.statusline.utils.primitives")
 
-  sep_style = (sep_style ~= "round" and sep_style ~= "block") and "block" or sep_style
+  -- gen_block's own left/right frame only reads as intended with "round" or
+  -- "block" glyphs; any other configured style falls back to "block" here,
+  -- same as before.
+  local sep_style = (SEPARATOR_STYLE ~= "round" and SEPARATOR_STYLE ~= "block") and "block"
+    or SEPARATOR_STYLE
   local sep_icons = utils.separators
   local separators = (type(sep_style) == "table" and sep_style) or sep_icons[sep_style]
 
@@ -48,7 +55,7 @@ return {
   ui = {
     statusline = {
       theme = "default",
-      separator_style = "arrow",
+      separator_style = SEPARATOR_STYLE,
 
       order = {
         "mode",
@@ -64,8 +71,8 @@ return {
       modules = {
         --- Mode (minimal.lua style)
         mode = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils or not utils.is_activewin() then
+          local utils = require("ui.statusline.utils.primitives")
+          if not utils.is_activewin() then
             return ""
           end
 
@@ -84,10 +91,7 @@ return {
 
         --- Git
         git = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
+          local utils = require("ui.statusline.utils.primitives")
           return "%#St_gitIcons#" .. utils.git()
         end,
 
@@ -105,19 +109,13 @@ return {
 
         --- Diagnostics
         diagnostics = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
+          local utils = require("ui.statusline.utils.primitives")
           return utils.diagnostics()
         end,
 
         --- LSP
         lsp = function()
-          local ok_utils, utils = pcall(require, "nvchad.stl.utils")
-          if not ok_utils then
-            return ""
-          end
+          local utils = require("ui.statusline.utils.primitives")
           return "%#St_Lsp#" .. utils.lsp()
         end,
 

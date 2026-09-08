@@ -52,7 +52,7 @@ local SEP_HEX = "f0058"
 
 function M.render_breadcrumbs_lspfirst()
   ensure_deps()
-  local utils = require("nvchad.stl.utils")
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
   local rel = lsp_path_helpers.display_path_for_buf(bufnr)
   local ctx = doc_symbols.symbol_context_smart()
@@ -75,7 +75,7 @@ end
 ---@param band_group string
 function M.render_breadcrumbs_inherit_lspfirst(band_group)
   ensure_deps()
-  local utils = require("nvchad.stl.utils")
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
   local rel = lsp_path_helpers.display_path_for_buf(bufnr)
   local ctx = doc_symbols.symbol_context_smart()

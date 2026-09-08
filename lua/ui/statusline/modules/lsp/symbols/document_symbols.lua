@@ -290,7 +290,7 @@ end
 ---@nodiscard
 ---@return string|nil
 function M.symbol_context_lsp()
-  local utils = require("nvchad.stl.utils")
+  local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
   local items, hierarchical = get_cached_doc_symbols(bufnr)
 
