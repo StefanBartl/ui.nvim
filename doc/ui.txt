@@ -20,14 +20,13 @@ CONTENTS                                                     *ui-contents*
 ui.nvim is the frame around the window: statusline, tabline and theme
 assembly.
 
-Its sibling plugin my.nvim is the other half of the same split, and the line
-between them is worth stating plainly:
+The dividing line this plugin draws is worth stating plainly:
 
-    my.nvim paints inside the window. ui.nvim paints the frame around it.
+    Content lives inside the window. ui.nvim paints the frame around it.
 
 Cursorline, mode tinting, indent guides and occurrence highlighting are
-content; they work with any statusline. Statusline, tabline and theme assembly
-are frame.
+content; they work with any statusline and are out of scope here. Statusline,
+tabline and theme assembly are frame.
 
 ==============================================================================
 2. REQUIREMENTS                                          *ui-requirements*

@@ -32,10 +32,9 @@ It is `lua/ui/**` here now.
 | `bindings/keymaps/` | 3 | Buffer and tab navigation, tabline reordering |
 | `bindings/usrcmds/` | 3 | `:UI theme/themes/toggle/transparency/status/help` and theme management |
 
-The extraction was mostly a move, the way
-[my.nvim](https://github.com/StefanBartl/my.nvim)'s was — with one difference
-that is the whole point of this repository: my.nvim had nothing to decouple
-from, and this has five things.
+The extraction was mostly a move — a prefix rename out of the host config,
+verified by grep — with one difference that is the whole point of this
+repository: it still has five things to decouple from a distribution.
 
 ---
 
@@ -110,13 +109,14 @@ the migration has a step where both exist.
 
 ### 4. Whether the winbar comes here
 
-`my.nvim` renders breadcrumbs into `vim.wo.winbar`. A winbar is frame, not
-content, so by this repository's own dividing line it belongs here. Against
-that: the breadcrumb *content* is produced by my.nvim's context providers,
-which are deeply tied to its configuration registry.
+Breadcrumbs are currently rendered into `vim.wo.winbar` from outside this
+plugin. A winbar is frame, not content, so by this repository's own dividing
+line it belongs here. Against that: the breadcrumb *content* is produced by a
+separate content layer's context providers, deeply tied to that layer's own
+configuration registry.
 
-Likely answer: my.nvim keeps producing the string and gains a way to hand it
-over, ui.nvim decides where it is drawn. Not settled.
+Likely answer: that layer keeps producing the string and gains a way to hand
+it over, `ui.nvim` decides where it is drawn. Not settled.
 
 ---
 
@@ -178,10 +178,10 @@ thinking rather than typing.
 
 ## Explicitly out of scope
 
-| Not | Where it belongs |
+| Not | Because |
 | --- | --- |
-| Cursorline, mode tinting, indent guides, occurrence highlighting | [my.nvim](https://github.com/StefanBartl/my.nvim) — content, not frame |
-| The declarative option set | my.nvim |
+| Cursorline, mode tinting, indent guides, occurrence highlighting | Content, not frame — out of scope here |
+| The declarative option set | Content, not frame |
 | A colorscheme | See [decision 1](#open-decisions); the goal is to consume one, not to be one |
 | A plugin bundle | This is a UI layer, not a distribution |
 | A statusline DSL | Presets, not a framework — see [decision 2](#open-decisions) |

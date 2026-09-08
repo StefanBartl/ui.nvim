@@ -1,11 +1,10 @@
 ---@module 'ui.health'
 --- `:checkhealth ui`.
 ---
---- The first section is the one that matters most, and it is the difference
---- between this plugin and its sibling: **NvChad is a hard dependency here.**
---- my.nvim paints inside the window and works with any setup; this paints the
---- frame, and today it does so through NvChad's base46 and statusline
---- primitives. Installing it without NvChad produces a plugin that loads and
+--- The first section is the one that matters most: **NvChad is a hard
+--- dependency here.** This plugin paints the frame, and today it does so
+--- through NvChad's base46 and statusline primitives. Installing it without
+--- NvChad produces a plugin that loads and
 --- renders nothing, which is exactly the failure a health check should name
 --- rather than leave to guesswork.
 ---

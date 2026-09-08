@@ -33,8 +33,7 @@ require("ui").setup({
 })
 ```
 
-Unlike its sibling [my.nvim](https://github.com/StefanBartl/my.nvim), nothing
-here is on by default. A host that wants everything passes `all = true`, which
+Nothing here is on by default. A host that wants everything passes `all = true`, which
 is what the flags exist to make explicit — the two halves are independently
 useful, and a config that already has its own buffer keymaps wants only
 `usrcmds`.
@@ -101,8 +100,8 @@ single segment.
 everything shipped: the theme block, the statusline variant, and the module
 flags `ui.setup` walks.
 
-Unlike my.nvim's registry, these tables are **not** live configuration —
-nothing mutates them at runtime. `:UI theme` writes through base46 and NvChad's
+These tables are **not** live configuration — nothing mutates them at
+runtime. `:UI theme` writes through base46 and NvChad's
 own state, not through here, which is also why there is no `reset` to build on
 top of them.
 

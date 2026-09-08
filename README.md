@@ -8,13 +8,12 @@
 # ui.nvim
 
 ```
-██╗   ██╗██╗
-██║   ██║██║
-██║   ██║██║
-██║   ██║██║
-╚██████╔╝██║
- ╚═════╝ ╚═╝
-                                               .nvim
+██╗   ██╗██╗   ███╗   ██╗██╗   ██╗██╗███╗   ███╗
+██║   ██║██║   ████╗  ██║██║   ██║██║████╗ ████║
+██║   ██║██║   ██╔██╗ ██║██║   ██║██║██╔████╔██║
+██║   ██║██║   ██║╚██╗██║╚██╗ ██╔╝██║██║╚██╔╝██║
+╚██████╔╝██║██╗██║ ╚████║ ╚████╔╝ ██║██║ ╚═╝ ██║
+ ╚═════╝ ╚═╝╚═╝╚═╝  ╚═══╝  ╚═══╝  ╚═╝╚═╝     ╚═╝
 ```
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -96,15 +95,13 @@ Optional, each detected at runtime and blanking only its own segment:
 | Theme | Palette assembly, a theme toggle, transparency, the `:UI` command that drives all of it |
 | Highlights | The groups the frame paints with, kept stable across theme switches |
 
-The sibling plugin [my.nvim](https://github.com/StefanBartl/my.nvim) is the
-other half of the same split, and the line between them is worth stating
-plainly:
+The dividing line this repository draws is worth stating plainly:
 
-> **my.nvim paints inside the window. ui.nvim paints the frame around it.**
+> **Content lives inside the window. `ui.nvim` paints the frame around it.**
 
-Cursorline, mode tinting, indent guides, occurrence highlighting and the
+Cursorline, mode tinting, indent guides, occurrence highlighting and a
 declarative option set are content — they work with any statusline and any
-distribution, and they are already extracted. Statusline, tabline and theme
+distribution, and are out of scope here. Statusline, tabline and theme
 assembly are frame.
 
 ---
@@ -143,7 +140,7 @@ edge — they throw outright — and they are where step 3 of the roadmap starts
 | A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is [the open decision](docs/ROADMAP.md#open-decisions) |
 | A distribution | No plugin list, no opinionated bundle. One UI layer |
 | A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from six layouts that are already in daily use |
-| Where content highlighting goes | That is [my.nvim](https://github.com/StefanBartl/my.nvim). See [Scope](#scope) |
+| Where content highlighting goes | Out of scope here — see [Scope](#scope) |
 
 ---
 

@@ -88,9 +88,9 @@ local opts = require("documentation.config").build(root, {
     },
     -- Bindings are the outer layer: they call into the statusline and theme
     -- modules, never the reverse. A segment registering its own command is
-    -- the failure my.nvim's predecessor shipped for months -- a command that
-    -- was defined and never registered, because the only caller was a
-    -- subsystem nobody enabled.
+    -- the failure an earlier iteration of this code shipped for months -- a
+    -- command that was defined and never registered, because the only caller
+    -- was a subsystem nobody enabled.
     {
       from = "ui.statusline",
       to = "ui.bindings",
