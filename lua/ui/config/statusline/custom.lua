@@ -158,7 +158,13 @@ return {
           end
 
           local content = table.concat(pieces, "")
-          local sep = get_separators()
+          -- Every other call site in this file passes SEPARATOR_STYLE; this
+          -- one didn't, so `get_separators()` indexed `primitives.separators
+          -- [nil]` and threw. Silent before step 4: NvChad's own
+          -- `nvchad.stl.utils.generate()` doesn't pcall a module call, and
+          -- the failure only surfaces with the cursor-progress mode active
+          -- (see ui.statusline.cursor_ctl) -- easy to never hit in normal use.
+          local sep = get_separators(SEPARATOR_STYLE)
 
           -- Cursor as in the default theme: left + right separator
           return "%#St_pos_sep#" .. sep.left .. "%#St_pos_icon# %#St_pos_text# " .. content .. " "

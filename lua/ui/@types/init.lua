@@ -40,4 +40,12 @@
 ---@field statusline { variant: Ui.StatuslineVariant }
 ---@field modules Ui.Modules
 
+--- The assembled shape `ui.statusline.render.generate()`/`enable()` consume
+--- -- the `ui.statusline` half of what `ui.config.setup()` returns.
+---@class Ui.Statusline.Config
+---@field order (string|"%=")[] # walked in order; "%=" passes through as the alignment break
+---@field modules? table<string, string|fun(): string> # per-key override; a key absent here falls back to `theme`'s module set
+---@field theme? string # fallback module-set name (see ui.statusline.themes.*); default "default"
+---@field separator_style? string|{left: string, right: string} # passed to the theme's `build()`
+
 return {}

@@ -33,20 +33,23 @@ tabline and theme assembly are frame.
 
     Neovim      0.10+
     lib.nvim    required
-    NvChad      REQUIRED TODAY -- v2.5
+    NvChad      not required by this plugin's own code (v2.5, if present)
 
-The NvChad requirement is the plugin's current state, not its intent. Step 3
-of the roadmap ported this plugin's own reads of `nvchad.stl.utils` and
-`nvconfig` into its own code; what remains is `nvchad.tabufline`, `base46`,
-`base46.themes` -- and a bigger gap step 3 surfaced: this plugin has never
-had its own statusline render entrypoint. `vim.o.statusline` and the
-`generate()` loop that walks `order`/`modules` into a string are still
-entirely NvChad's (`nvchad.init` + `nvchad.stl.utils.generate()`).
+As of roadmap step 4, this plugin's own code no longer needs NvChad to load,
+assemble, OR render: `ui.statusline.render` is now the `vim.o.statusline` /
+`generate()` walk that used to be entirely `nvchad.init` +
+`nvchad.stl.utils.generate()` (step 3 had already ported the primitives and
+separator reads that walk itself uses). Verified headless, NvChad absent
+from the runtimepath: all six statusline variants assemble and render end to
+end.
 
-Removing that coupling is the whole roadmap. Until it is done,
-|:checkhealth| reports a missing NvChad as an ERROR rather than a note --
-installing this plugin without it gets you something that loads and renders
-nothing.
+What is NOT true yet: that a real install of this plugin renders without
+NvChad. Nothing outside this plugin's own tests calls
+`ui.statusline.render.enable()` -- the reference host this plugin was
+extracted from still wires `chadrc.lua` to NvChad's own renderer, and
+rewiring that host is roadmap step 7, not done. `nvchad.tabufline` and
+`base46`/`base46.themes` remain genuine soft dependencies for the tabline and
+theme (steps 5-6).
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 `neotest`, `casedesk.nvim`.
@@ -155,14 +158,16 @@ resolves, because that fallback is otherwise quiet.
 >vim
     :checkhealth ui
 <
-Four sections: dependencies (including which NvChad symbols are missing and
-whether that is fatal or degrading), the assembled configuration, which
-submodules `setup()` turned on, and the soft dependencies each statusline
-segment needs.
+Five sections: dependencies (lib.nvim required; NvChad presence reported as
+information, not a dependency check, since step 4; `nvchad.tabufline`/
+`base46`/`base46.themes` still genuinely soft), the assembled configuration,
+this plugin's own statusline render entrypoint (resolves? renders the
+"default" theme's fallback modules without NvChad?), which submodules
+`setup()` turned on, and the soft dependencies each statusline segment needs.
 
-The dependency section returns early on a fatal miss -- everything below it
-assembles a configuration out of exactly the symbols that just came back
-missing.
+The dependency section returns early only if lib.nvim itself is missing or
+incomplete -- everything below it needs lib.nvim, and a missing NvChad no
+longer stops the report (it stopped being fatal at step 4).
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

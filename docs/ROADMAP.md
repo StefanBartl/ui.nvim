@@ -1,9 +1,11 @@
 # Roadmap — ui.nvim
 
 The implementation moved in on 2026-09-08 (one prefix rename out of the host
-config, verified by grep). What is left is the decoupling: this plugin still
-requires NvChad, and `:checkhealth ui` says so as an error rather than a note.
-This file is the scope, the measured coupling, and the decisions still open.
+config, verified by grep). What is left is the decoupling: this plugin's own
+code no longer requires NvChad to load, assemble or render (steps 1-4, all
+2026-09-08); the tabline, the theme palette and the host wiring do not — steps
+5-7. This file is the scope, the measured coupling, and the decisions still
+open.
 
 ---
 
@@ -74,9 +76,11 @@ turn the `{order, modules}` table `ui.config.setup()` assembles into
 `vim.o.statusline`, and today that something is entirely NvChad's —
 `nvchad.init` sets `vim.o.statusline = "%!v:lua.require('nvchad.stl.<theme>')
 ()"`, and `nvchad.stl.<theme>` calls `nvchad.stl.utils.generate(order,
-modules)`. This plugin has never owned a render entrypoint of its own. See
-the new step 4 in [Order of work](#order-of-work) below — step 3's own text
-("no decision, just typing") did not anticipate needing it.
+modules)`. This plugin had never owned a render entrypoint of its own — see
+step 4 in [Order of work](#order-of-work) below, **done as of 2026-09-08**,
+which closed exactly this gap: `ui.statusline.render` is that walk now, own
+code, own tests, no NvChad symbol touched. Step 3's own text ("no decision,
+just typing") had not anticipated needing it.
 
 ### What each one actually needs
 
@@ -179,25 +183,44 @@ palette source is present, and which colorscheme the groups were derived from.
    statusline variant now owns its own `separator_style` literal. Verified
    headless with NvChad off the runtimepath: every variant module requires,
    `ui.config.setup()` assembles, `luacheck`/`stylua` clean, spec suite green.
-4. **Give this plugin its own statusline render entrypoint.** Step 3 made
-   every module *loadable* without NvChad, but nothing here has ever set
-   `vim.o.statusline` or walked an `order`/`modules` table into a string —
-   that has always been `nvchad.init` + `nvchad.stl.utils.generate()`,
-   entirely outside this repository, which is why the "5 symbols" count never
-   surfaced it. Needed regardless of steps 5-7 below: without it the plugin
-   loads cleanly and renders nothing, NvChad present or not. Roughly the
-   `generate()` loop from `nvchad/stl/utils.lua` (~15 lines) plus the one-line
-   `vim.o.statusline` assignment from `nvchad/init.lua` — mechanical once
-   named, but new scope, not covered by the original "5 symbols" plan.
+4. ~~Give this plugin its own statusline render entrypoint.~~ — done
+   2026-09-08: `lua/ui/statusline/render.lua`. `generate(cfg)` is the
+   `order`/`modules` walk (`nvchad/stl/utils.lua`'s `generate()`, own code);
+   `enable(cfg)`/`render()`/`disable()` are the `vim.o.statusline` wiring
+   (`nvchad/init.lua`'s one-line assignment, own code). A key a variant's
+   own `modules` does not cover falls back to `ui.statusline.themes.default`
+   — a ported `nvchad/stl/default.lua`, the only base theme any of the six
+   shipped variants actually needs (`custom`'s `theme = "minimal"` and
+   `custom_minimal`'s `theme = "default"` both cover every key in their own
+   `order` themselves, so neither ever reads the fallback). `file()`, the
+   `lsp_msg` state and the `LspProgress` autocmd — the other things this
+   plugin used to reach into `nvchad.stl.utils` for but step 3 had not
+   ported, because nothing needed them until something actually called
+   `generate()` — moved into `ui.statusline.utils.primitives` alongside it.
+   Verified headless, NvChad off the runtimepath: all six shipped variants
+   assemble through `ui.config.setup()` and render end to end through
+   `generate()` (`TESTS/statusline_render_spec.lua`); `:checkhealth ui`'s
+   dependency section no longer stops at NvChad being absent.
+   `luacheck`/`stylua` clean, full spec suite green.
+
+   **One real bug turned up proving this end to end**, not a hypothetical:
+   `ui.config.statusline.custom`'s `cursor` module called `get_separators()`
+   with no argument — every other call site in that file passes
+   `SEPARATOR_STYLE`, this one didn't, and `get_separators.lua` indexed a nil
+   table. Silent before this step: `nvchad.stl.utils.generate()` does not
+   `pcall` a module call, so the failure only ever surfaced with the
+   cursor-progress mode active, live, under the real host. `generate()` here
+   does `pcall` each module (a broken segment renders empty and warns once,
+   rather than taking the whole statusline down on every redraw) — which is
+   what caught it in a headless test the moment `custom` was exercised as a
+   normal case rather than a special one. Fixed in the same commit.
 5. Replace `nvchad.tabufline` — buffer/tab movement, partly already in
    `lib.nvim.buf_win_tab`.
 6. Decide [the palette question](#open-decisions) and replace `base46`.
 7. Host wiring, then remove `lua/wkdnvchad/` from the config only after the
    new modules demonstrably load.
 
-Step 4 is the next one and needs no decision, only naming what already runs
-in NvChad's own code. Step 6 is the one that needs thinking rather than
-typing.
+Step 5 is next. Step 6 is the one that needs thinking rather than typing.
 
 ---
 

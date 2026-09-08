@@ -1,12 +1,15 @@
-> **Alpha — and it still requires NvChad.** The implementation moved in on
-> 2026-09-08; step 3 of the decoupling (2026-09-08 too) ported the statusline
-> primitives and separator config this plugin's own code used to read from
-> NvChad, and every module now loads with NvChad entirely absent. What is
-> still missing is bigger than the remaining symbols (`nvchad.tabufline`,
-> `base46`): this plugin has never had its own statusline render entrypoint —
-> `vim.o.statusline` and the `generate()` loop are still entirely NvChad's.
-> `:checkhealth ui` reports that as an error, not a note. Removing it is the
-> whole [roadmap](docs/ROADMAP.md).
+> **Alpha.** The implementation moved in on 2026-09-08; step 3 (2026-09-08)
+> ported the statusline primitives and separator config this plugin's own
+> code used to read from NvChad, and step 4 (2026-09-08) gave it a statusline
+> render entrypoint of its own — `ui.statusline.render`, the
+> `vim.o.statusline` / `generate()` walk that used to be entirely
+> `nvchad.init` + `nvchad.stl.utils.generate()`. Every module, and every one
+> of the six shipped layouts end to end, now assembles and renders with
+> NvChad entirely absent from the runtimepath (verified headless).
+> `nvchad.tabufline` and `base46` remain — the tabline and the theme palette,
+> steps 5 and 6 — and the *host* this plugin was extracted from still wires
+> `chadrc.lua` to NvChad's own renderer (step 7, not done). See
+> [roadmap](docs/ROADMAP.md).
 
 # ui.nvim
 
@@ -81,7 +84,7 @@ see [The coupling to NvChad](#the-coupling-to-nvchad) for exactly how much.
 | --- | --- |
 | Neovim | **0.10+** |
 | [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
-| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | **required today** — see below. Removing this is the roadmap |
+| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (step 4) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
 
 Optional, each detected at runtime and blanking only its own segment:
 `nvim-web-devicons` (file icons), `neotest` (test-runner segment),
@@ -121,23 +124,40 @@ Counted on 2026-09-08, before step 3:
 | `base46` | 4 | 4 | Theme loading and the transparency toggle |
 | `base46.themes` | 1 | 1 | The theme list `:UI theme` completes over |
 
-Step 3 (also 2026-09-08) ported `nvchad.stl.utils` into this plugin's own
+Step 3 (2026-09-08) ported `nvchad.stl.utils` into this plugin's own
 `ui.statusline.utils.primitives` and gave every statusline variant its own
 `separator_style` literal instead of reading `nvconfig`. Neither symbol is
 required by this plugin's code any more, and every statusline variant module
-now loads and assembles with NvChad entirely absent from the runtimepath
-(verified headless). `nvchad.tabufline`, `base46` and `base46.themes` are
-unchanged — steps 4 and 5.
+loads and assembles with NvChad entirely absent from the runtimepath.
+`nvchad.tabufline`, `base46` and `base46.themes` are unchanged — steps 5 and
+6.
 
-> **That still does not mean this plugin renders without NvChad, and the
+> **Step 3 alone did not mean this plugin rendered without NvChad, and the
 > "five symbols, 32 call sites" count above was never the whole coupling.**
-> `ui.config.setup()` only ever returned a config table; something else has
-> always had to turn `{order, modules}` into `vim.o.statusline`. That
-> something is entirely NvChad's: `nvchad.init` sets `vim.o.statusline =
-> "%!v:lua.require('nvchad.stl.<theme>')()"`, and `nvchad.stl.<theme>` calls
-> `nvchad.stl.utils.generate()` — a render entrypoint this plugin has never
-> had one of its own. None of steps 3-5 as written closes that gap; it needs
-> its own line in [the roadmap](docs/ROADMAP.md).
+> `ui.config.setup()` only ever returned a config table; something else had
+> to turn `{order, modules}` into `vim.o.statusline`. Before step 4 that
+> something was entirely NvChad's: `nvchad.init` set `vim.o.statusline =
+> "%!v:lua.require('nvchad.stl.<theme>')()"`, and `nvchad.stl.<theme>` called
+> `nvchad.stl.utils.generate()`.
+>
+> **Step 4 (2026-09-08) closed that gap.** `ui.statusline.render.generate()`
+> is the same walk, own code, own tests, and `enable()`/`render()`/
+> `disable()` are the `vim.o.statusline` wiring around it. Every `order` key
+> a variant's own `modules` does not cover falls back to
+> `ui.statusline.themes.default` — the one theme any of the six shipped
+> layouts actually needs; `minimal`/`vscode`/`vscode_colored` are not ported,
+> since nothing here falls through to them (see that module's own doc
+> comment). Proving it end to end (`TESTS/statusline_render_spec.lua`)
+> surfaced one real bug along the way: `custom.lua`'s `cursor` module called
+> `get_separators()` with no argument, indexing a nil table — silent under
+> NvChad's own `generate()`, which does not `pcall` a module call, and only
+> reachable with the cursor-progress mode active. Fixed in the same commit.
+>
+> What step 4 does **not** mean: that this plugin renders without NvChad
+> *today*, for a user of the reference host it was extracted from. Nothing
+> outside this plugin's own tests calls `enable()` yet — the host's
+> `chadrc.lua` still hands its config to NvChad's own renderer, and rewiring
+> that is step 7.
 >
 > A separate, earlier version of this section claimed "exactly two symbols"
 > and made a point of the number. It was wrong: the measurement counted
@@ -160,16 +180,18 @@ unchanged — steps 4 and 5.
 
 ## Status
 
-Alpha. The code is here and runs; the decoupling has not happened.
+Alpha. The code is here and runs, and steps 3-4 of the decoupling are done —
+the tabline and theme (steps 5-6) and the host wiring (step 7) are not.
 
 ```vim
 :checkhealth ui
 ```
 
-names every dependency, says which NvChad symbols are missing when they are,
-and is explicit that NvChad is a hard requirement rather than an optional
-integration. [docs/ROADMAP.md](docs/ROADMAP.md) has the measured coupling, the
-order of work, and the four decisions still open.
+names every dependency, reports its own statusline render entrypoint as
+resolving and rendering standalone, and says whether NvChad is present as
+information rather than a fatal error — it stopped being one at step 4.
+[docs/ROADMAP.md](docs/ROADMAP.md) has the measured coupling, the order of
+work, and the four decisions still open.
 
 ---
 

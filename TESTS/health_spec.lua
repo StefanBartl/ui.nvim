@@ -3,9 +3,13 @@
 
 --- `:checkhealth ui`, run WITHOUT NvChad — which is the case that matters.
 ---
---- The report's whole job is to say "NvChad is a hard dependency and it is
---- missing" instead of letting a user discover it as a stack trace. So the
---- assertions are about that message existing and being an error, not a note.
+--- Before step 4 of the roadmap, this report's whole job was to say "NvChad
+--- is a hard dependency and it is missing" instead of letting a user
+--- discover it as a stack trace. As of step 4 that claim is false: this
+--- plugin's own `ui.statusline.render` renders without NvChad, so the
+--- report says so as information, not as the fatal error it used to be —
+--- and the sections after "Dependencies" now run even with NvChad absent,
+--- because nothing below depends on it resolving any more.
 
 local health_mod = require("ui.health")
 
@@ -66,21 +70,22 @@ describe("ui.health", function()
     assert.is_true(has(capture(), "ok", "lib.nvim is available"))
   end)
 
-  it("reports a missing NvChad as an error, not a note", function()
-    -- The one thing this report exists for. A `warn` or an `info` here would
-    -- let someone install the plugin and wonder why nothing renders.
+  it("reports a missing NvChad as information, not an error", function()
+    -- Step 4: this plugin's own code no longer needs nvconfig/nvchad.stl.utils
+    -- at all -- reporting their absence as a fatal error would now be a lie.
     local calls = capture()
-    assert.is_true(has(calls, "error", "nvconfig"))
-    assert.is_true(has(calls, "error", "nvchad.stl.utils"))
+    assert.is_true(has(calls, "info", "NvChad is not present"))
+    assert.is_false(has(calls, "error", "nvconfig"))
+    assert.is_false(has(calls, "error", "nvchad.stl.utils"))
   end)
 
-  it("says NvChad is hard rather than optional", function()
-    assert.is_true(has(capture(), "error", "HARD dependency"))
+  it("no longer calls NvChad a hard dependency", function()
+    assert.is_false(has(capture(), "error", "HARD dependency"))
   end)
 
-  it("stops after the dependency section when NvChad is absent", function()
-    -- Everything below assembles a configuration out of the symbols that just
-    -- came back missing; continuing would be a wall of secondary failures.
+  it("runs every section even with NvChad absent", function()
+    -- Nothing below "Dependencies" needs NvChad any more, so a missing
+    -- NvChad must not cut the report short the way it used to.
     local calls = capture()
     local starts = {}
     for _, c in ipairs(calls) do
@@ -88,6 +93,18 @@ describe("ui.health", function()
         starts[#starts + 1] = c.msg
       end
     end
-    assert.same({ "Dependencies" }, starts)
+    assert.same({
+      "Dependencies",
+      "Configuration",
+      "Statusline render entrypoint",
+      "Modules",
+      "Statusline segments",
+    }, starts)
+  end)
+
+  it("reports its own render entrypoint as resolving and rendering", function()
+    local calls = capture()
+    assert.is_true(has(calls, "ok", "ui.statusline.render resolves"))
+    assert.is_true(has(calls, "ok", "renders the 'default' theme's fallback modules"))
   end)
 end)
