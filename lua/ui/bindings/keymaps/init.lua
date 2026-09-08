@@ -11,6 +11,7 @@ local lazy = require("lib.lua.lazy")
 
 -- Lazy-load heavy modules
 local custom_tabufline = lazy.require("ui.bindings.keymaps.tabufline")
+local tabufline_state = lazy.require("ui.bindings.keymaps.tabufline.state")
 local move_buf_tab = lazy.require("lib.nvim.buf_win_tab.move_buffer_to_tab")
 
 ---@nodiscard
@@ -24,6 +25,11 @@ end
 -- ---------------------------------------------------------------------------
 ---@return nil
 local function attach_buffers()
+  -- Every mapping below reads or writes vim.t.bufs (via custom_tabufline);
+  -- without this, that list is never populated and each one silently does
+  -- nothing. See tabufline/state.lua's doc comment for why.
+  tabufline_state.setup()
+
   -- <Tab> -> next buffer, supports count
   map("n", "<Tab>", function()
     local cnt = get_count()
@@ -57,17 +63,21 @@ end
 -- ---------------------------------------------------------------------------
 ---@return nil
 local function attach_tabs()
+  -- move_buf() also reads/writes vim.t.bufs; idempotent, so no harm if
+  -- attach_buffers() already called this in the same setup() run.
+  tabufline_state.setup()
+
   map("n", "<leader>tr", function()
-    local ok, tabufline = pcall(require, "nvchad.tabufline")
-    if ok and tabufline.move_buf then
-      tabufline.move_buf(1)
+    local ok, err = pcall(tabufline_state.move_buf, 1)
+    if not ok then
+      notify.warn("[ui.bindings.keymaps] Move tab right failed: " .. tostring(err))
     end
   end, { desc = "[Tabs] Move tab right" })
 
   map("n", "<leader>tl", function()
-    local ok, tabufline = pcall(require, "nvchad.tabufline")
-    if ok and tabufline.move_buf then
-      tabufline.move_buf(-1)
+    local ok, err = pcall(tabufline_state.move_buf, -1)
+    if not ok then
+      notify.warn("[ui.bindings.keymaps] Move tab left failed: " .. tostring(err))
     end
   end, { desc = "[Tabs] Move tab left" })
 

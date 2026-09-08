@@ -1,14 +1,16 @@
 > **Alpha.** The implementation moved in on 2026-09-08; step 3 (2026-09-08)
 > ported the statusline primitives and separator config this plugin's own
-> code used to read from NvChad, and step 4 (2026-09-08) gave it a statusline
+> code used to read from NvChad, step 4 (2026-09-08) gave it a statusline
 > render entrypoint of its own — `ui.statusline.render`, the
 > `vim.o.statusline` / `generate()` walk that used to be entirely
-> `nvchad.init` + `nvchad.stl.utils.generate()`. Every module, and every one
-> of the six shipped layouts end to end, now assembles and renders with
-> NvChad entirely absent from the runtimepath (verified headless).
-> `nvchad.tabufline` and `base46` remain — the tabline and the theme palette,
-> steps 5 and 6 — and the *host* this plugin was extracted from still wires
-> `chadrc.lua` to NvChad's own renderer (step 7, not done). See
+> `nvchad.init` + `nvchad.stl.utils.generate()` — and step 5 (2026-09-08)
+> replaced `nvchad.tabufline`: `vim.t.bufs` bookkeeping and buffer/tab
+> movement are `ui.bindings.keymaps.tabufline.state`'s own code now. Every
+> module, every one of the six shipped statusline layouts end to end, and
+> buffer/tab navigation now work with NvChad entirely absent from the
+> runtimepath (verified headless). Only `base46` remains — the theme
+> palette, step 6 — and the *host* this plugin was extracted from still
+> wires `chadrc.lua` to NvChad's own renderer (step 7, not done). See
 > [roadmap](docs/ROADMAP.md).
 
 # ui.nvim
@@ -84,7 +86,7 @@ see [The coupling to NvChad](#the-coupling-to-nvchad) for exactly how much.
 | --- | --- |
 | Neovim | **0.10+** |
 | [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
-| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (step 4) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
+| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (steps 4-5) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
 
 Optional, each detected at runtime and blanking only its own segment:
 `nvim-web-devicons` (file icons), `neotest` (test-runner segment),
@@ -129,8 +131,7 @@ Step 3 (2026-09-08) ported `nvchad.stl.utils` into this plugin's own
 `separator_style` literal instead of reading `nvconfig`. Neither symbol is
 required by this plugin's code any more, and every statusline variant module
 loads and assembles with NvChad entirely absent from the runtimepath.
-`nvchad.tabufline`, `base46` and `base46.themes` are unchanged — steps 5 and
-6.
+`base46` and `base46.themes` are unchanged — step 6, the palette question.
 
 > **Step 3 alone did not mean this plugin rendered without NvChad, and the
 > "five symbols, 32 call sites" count above was never the whole coupling.**
@@ -159,6 +160,21 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 > `chadrc.lua` still hands its config to NvChad's own renderer, and rewiring
 > that is step 7.
 >
+> **Step 5 (2026-09-08) replaced `nvchad.tabufline`, and found the same
+> shape of gap one level down.** `nvchad.tabufline` never appeared as a
+> `require()` at the three call sites that needed it by accident, any more
+> than `nvconfig` did before step 4 — what those three sites called for was
+> `close_buffer()`/`move_buf()`, but what made this plugin's own
+> `next()`/`prev()` do anything at all was `vim.t.bufs`, and that list was
+> built and kept current by autocmds that lived entirely in NvChad's own
+> `nvchad/tabufline/lazyload.lua`, required from `nvchad/init.lua` and never
+> named anywhere in this repo. `ui.bindings.keymaps.tabufline.state` ports
+> the bookkeeping and the two functions; the roadmap's own claim that
+> `lib.nvim.buf_win_tab` "already does part of it" turned out not to hold up
+> once checked — grepped for the actual functions, no match. Not ported,
+> same reasoning as step 4: a rendered tabline (`vim.o.tabline`) is separate,
+> larger scope, still "Planned scope > Tabline".
+>
 > A separate, earlier version of this section claimed "exactly two symbols"
 > and made a point of the number. It was wrong: the measurement counted
 > `require("x")` with a single regex and never matched `pcall(require, "x")`,
@@ -180,8 +196,8 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 
 ## Status
 
-Alpha. The code is here and runs, and steps 3-4 of the decoupling are done —
-the tabline and theme (steps 5-6) and the host wiring (step 7) are not.
+Alpha. The code is here and runs, and steps 3-5 of the decoupling are done —
+the theme palette (step 6) and the host wiring (step 7) are not.
 
 ```vim
 :checkhealth ui

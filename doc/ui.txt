@@ -35,21 +35,24 @@ tabline and theme assembly are frame.
     lib.nvim    required
     NvChad      not required by this plugin's own code (v2.5, if present)
 
-As of roadmap step 4, this plugin's own code no longer needs NvChad to load,
-assemble, OR render: `ui.statusline.render` is now the `vim.o.statusline` /
-`generate()` walk that used to be entirely `nvchad.init` +
-`nvchad.stl.utils.generate()` (step 3 had already ported the primitives and
-separator reads that walk itself uses). Verified headless, NvChad absent
-from the runtimepath: all six statusline variants assemble and render end to
-end.
+As of roadmap step 5, this plugin's own code no longer needs NvChad to load,
+assemble, render, OR move buffers and tabs: `ui.statusline.render` is the
+`vim.o.statusline` / `generate()` walk that used to be entirely
+`nvchad.init` + `nvchad.stl.utils.generate()` (step 4; step 3 had already
+ported the primitives and separator reads that walk itself uses), and
+`ui.bindings.keymaps.tabufline.state` is the `vim.t.bufs` bookkeeping and
+`close_buffer()`/`move_buf()` that used to be entirely
+`nvchad/tabufline/lazyload.lua` + `nvchad.tabufline` (step 5). Verified
+headless, NvChad absent from the runtimepath: all six statusline variants
+assemble and render end to end, and buffer/tab navigation works against real
+buffers and tabs.
 
 What is NOT true yet: that a real install of this plugin renders without
 NvChad. Nothing outside this plugin's own tests calls
 `ui.statusline.render.enable()` -- the reference host this plugin was
 extracted from still wires `chadrc.lua` to NvChad's own renderer, and
-rewiring that host is roadmap step 7, not done. `nvchad.tabufline` and
-`base46`/`base46.themes` remain genuine soft dependencies for the tabline and
-theme (steps 5-6).
+rewiring that host is roadmap step 7, not done. `base46`/`base46.themes`
+remain a genuine soft dependency for the theme (step 6).
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 `neotest`, `casedesk.nvim`.
@@ -131,8 +134,9 @@ Every one is wrapped: a failure notifies and returns rather than raising,
 because these sit on keys pressed constantly and a traceback out of <Tab>
 makes the editor feel broken.
 
-`<leader>tr` and `<leader>tl` go through `nvchad.tabufline`, guarded -- without
-NvChad they are bound and do nothing.
+`<leader>tr` and `<leader>tl` go through `ui.bindings.keymaps.tabufline.state`
+(own code, step 5, not `nvchad.tabufline`) -- they work with NvChad entirely
+absent.
 
 ==============================================================================
 6. STATUSLINE VARIANTS                                       *ui-variants*
@@ -159,11 +163,13 @@ resolves, because that fallback is otherwise quiet.
     :checkhealth ui
 <
 Five sections: dependencies (lib.nvim required; NvChad presence reported as
-information, not a dependency check, since step 4; `nvchad.tabufline`/
-`base46`/`base46.themes` still genuinely soft), the assembled configuration,
-this plugin's own statusline render entrypoint (resolves? renders the
-"default" theme's fallback modules without NvChad?), which submodules
-`setup()` turned on, and the soft dependencies each statusline segment needs.
+information, not a dependency check, since step 4; `base46`/`base46.themes`
+still genuinely soft; `nvchad.tabufline` gone from this list entirely, step
+5), the assembled configuration, this plugin's own statusline render
+entrypoint (resolves? renders the "default" theme's fallback modules without
+NvChad?), which submodules `setup()` turned on (buffer/tab navigation
+included, under `keymaps`), and the soft dependencies each statusline
+segment needs.
 
 The dependency section returns early only if lib.nvim itself is missing or
 incomplete -- everything below it needs lib.nvim, and a missing NvChad no

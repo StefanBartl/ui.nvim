@@ -14,8 +14,11 @@
 --- the actual host still wires `chadrc.lua` to NvChad's own render pipeline,
 --- and rewiring it is step 7, not this one. A user running this plugin
 --- through that unmodified host is still, in practice, running NvChad's
---- renderer. `nvchad.tabufline` / `base46` remain genuine soft dependencies
---- for the tabline and theme, unaffected by step 4 (steps 5-6).
+--- renderer. Step 5 replaced `nvchad.tabufline` the same way (own
+--- `vim.t.bufs` bookkeeping, own `close_buffer`/`move_buf`) -- it is gone
+--- from this report's dependency list entirely, not merely soft, the same
+--- as `nvconfig`/`nvchad.stl.utils` at step 4. `base46` remains a genuine
+--- soft dependency for the theme (step 6).
 
 local M = {}
 
@@ -42,9 +45,10 @@ local function has(mod)
   return (pcall(require, mod))
 end
 
---- The hard dependency: lib.nvim. NvChad is not one any more (step 4) --
---- `nvchad.tabufline`/`base46` are checked further down, as the soft
---- dependencies they have always been.
+--- The hard dependency: lib.nvim. NvChad is not one any more -- `base46` is
+--- checked further down, as the soft dependency it has always been (theme
+--- loading, step 6). `nvchad.tabufline` is gone from this report entirely
+--- (step 5): this plugin's own code no longer reads it under any name.
 ---@return boolean ok # false stops the rest of the report
 local function check_dependencies()
   health.start("Dependencies")
@@ -98,10 +102,14 @@ local function check_dependencies()
     health.info("NvChad is not present -- this plugin's own code does not need it any more")
   end
 
-  -- Guarded at every call site: absent means a blank tabline keymap or no
-  -- theme switching, not a traceback.
+  -- `nvchad.tabufline` dropped from this list at step 5: buffer/tab
+  -- movement and the `vim.t.bufs` bookkeeping behind it are this plugin's
+  -- own code now (`ui.bindings.keymaps.tabufline.state`), not a NvChad
+  -- symbol to check for. `base46` remains -- theme loading, step 6.
+  --
+  -- Guarded at every call site: absent means no theme switching, not a
+  -- traceback.
   for _, entry in ipairs({
-    { "nvchad.tabufline", "buffer/tab movement for the tabline keymaps" },
     { "base46", "theme loading and the transparency toggle" },
     { "base46.themes", "the theme list `:UI theme` completes over" },
   }) do

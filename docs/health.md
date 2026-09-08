@@ -4,9 +4,10 @@
 :checkhealth ui
 ```
 
-Four sections. The first is the one that matters, and it is why this file is
-short: **NvChad is a hard dependency of this plugin today.** Everything else
-the report says is downstream of that.
+Five sections. As of roadmap step 5, only one thing in the first is fatal:
+`lib.nvim` missing. NvChad's presence is information now, not a dependency
+check — steps 3-5 replaced everything this plugin's own code used to read
+out of it, one gap at a time.
 
 ---
 
@@ -16,19 +17,13 @@ the report says is downstream of that.
 | --- | --- |
 | ✅ `lib.nvim is available` | The root module resolves |
 | ✅ `all 10 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
-| ✅ `nvconfig` / `nvchad.stl.utils` | Present. Neither is read by this plugin's own code any more (step 3), but nothing here sets `vim.o.statusline` either — NvChad's `nvchad.init` + `nvchad.stl.utils.generate()` is what renders the config `ui.config.setup()` assembles |
-| ❌ `nvconfig is missing` / `nvchad.stl.utils is missing` | Fatal. This plugin has no render entrypoint of its own, so without NvChad's the statusline never renders at all. Install NvChad (v2.5), or do not install this plugin |
-| ⚠️ `nvchad.tabufline` / `base46` / `base46.themes` missing | Guarded at every call site: the tabline keymaps and theme switching stop working, nothing throws |
-| ❌ `lib.nvim is not on the runtimepath` | Install `StefanBartl/lib.nvim` |
+| ❌ `lib.nvim is not on the runtimepath` | Fatal — install `StefanBartl/lib.nvim`. Only failure that stops the report |
+| ℹ️ `NvChad is present` / `NvChad is not present` | Neither is an error. The host this plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer (step 7, not done) — this line just says whether that path exists on this machine, not whether this plugin's own code needs it (it doesn't) |
+| ✅ `base46` / `base46.themes` missing → ⚠️ | The one genuine soft dependency left: theme loading and the transparency toggle (step 6, undecided). Guarded at every call site — degrades, does not throw |
 
-The section **returns early** when a fatal symbol is missing. Everything below
-it assembles a configuration out of exactly those symbols, so continuing would
-print a wall of secondary failures that says nothing the first one did not.
-
-The error/warning split is the useful part: it separates "this will not run"
-from "this feature is off". The measured coupling and the render-entrypoint
-gap step 3 surfaced are in [ROADMAP.md](ROADMAP.md), and removing both is the
-plugin's entire roadmap.
+`nvconfig`, `nvchad.stl.utils` and `nvchad.tabufline` are gone from this
+section entirely — not reclassified as soft, removed, because this plugin's
+own code no longer reads any of them under any name (steps 3-5).
 
 ---
 
@@ -40,7 +35,21 @@ plugin's entire roadmap.
 | ℹ️ `statusline variant: x` | Which of the six layouts is assembled |
 | ✅ `variant module ui.config.statusline.x resolves` | The variant name is a module path at heart; a typo in it degrades to `normal` with a notification nobody sees twice |
 | ❌ `variant "x" does not resolve` | It will silently fall back to `normal`. This line is why the check exists |
-| ✅ `ui.config.setup() assembles` | The table NvChad reads through `chadrc` was produced |
+| ✅ `ui.config.setup() assembles` | The table this plugin's own `ui.statusline.render` (or, until step 7, NvChad through `chadrc`) reads was produced, without touching a NvChad symbol |
+
+---
+
+## Statusline render entrypoint
+
+New at step 4. Checks the module that replaced `nvchad.init` +
+`nvchad.stl.utils.generate()`.
+
+| Line | Means |
+| --- | --- |
+| ✅ `ui.statusline.render resolves` | `generate`/`enable`/`render`/`disable` are all present |
+| ✅ `generate() renders the 'default' theme's fallback modules without NvChad` | A synthetic config ran through `generate()` and produced a string, standalone |
+| ℹ️ `a config is currently enable()d` | Something called `ui.statusline.render.enable()` — `vim.o.statusline` is this plugin's, not the host's |
+| ℹ️ `enable() has not been called` | The common case today: `vim.o.statusline` is whatever the host last set (NvChad, through `chadrc.lua`, until step 7) |
 
 ---
 
@@ -55,6 +64,12 @@ load it and make the report a lie.
 | ✅ `keymaps` / `usrcmds` | `setup()` turned it on |
 | ℹ️ `… is off` | You did not ask for it. Informational, not a warning |
 | ⚠️ `:UI is not registered` | `usrcmds` never ran — `require("ui").setup({ all = true })` |
+
+`keymaps` also covers buffer/tab navigation as of step 5 — `<Tab>`/`<S-Tab>`/
+`<leader>bc`/`<leader>tr`/`<leader>tl` all run on
+`ui.bindings.keymaps.tabufline.state`'s own `vim.t.bufs` bookkeeping, not
+`nvchad.tabufline`. Nothing in this section reports that separately; if
+`keymaps` is on, so is buffer/tab navigation.
 
 ---
 

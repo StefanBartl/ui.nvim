@@ -66,9 +66,9 @@ Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of
 `<Tab>` makes the editor feel broken.
 
-`<leader>tr` and `<leader>tl` go through `nvchad.tabufline`, guarded by
-`pcall` — without NvChad they are bound and do nothing. That is a known gap,
-not a design: see [ROADMAP.md](ROADMAP.md).
+`<leader>tr` and `<leader>tl` go through `ui.bindings.keymaps.tabufline.state`
+(own code as of roadmap step 5, not `nvchad.tabufline`) — they work with
+NvChad entirely absent.
 
 ---
 

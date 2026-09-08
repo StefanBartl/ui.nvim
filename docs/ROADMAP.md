@@ -2,9 +2,10 @@
 
 The implementation moved in on 2026-09-08 (one prefix rename out of the host
 config, verified by grep). What is left is the decoupling: this plugin's own
-code no longer requires NvChad to load, assemble or render (steps 1-4, all
-2026-09-08); the tabline, the theme palette and the host wiring do not — steps
-5-7. This file is the scope, the measured coupling, and the decisions still
+code no longer requires NvChad to load, assemble, render, or move buffers and
+tabs (steps 1-5, all 2026-09-08); the theme palette and the host wiring do
+not — steps 6-7. This file is the scope, the measured coupling, and the
+decisions still
 open.
 
 ---
@@ -88,7 +89,7 @@ just typing") had not anticipated needing it.
 | --- | --- |
 | `nvchad.stl.utils` | ~~Data. Separator sets and the mode table.~~ Done — `ui.statusline.utils.primitives` |
 | `nvconfig` | ~~Only `ui.statusline.separator_style` is read.~~ Done — each variant owns a `SEPARATOR_STYLE` literal |
-| `nvchad.tabufline` | Buffer/tab movement. `lib.nvim.buf_win_tab` already does part of it; the rest is `nvim_buf_delete` and list bookkeeping |
+| `nvchad.tabufline` | ~~Buffer/tab movement.~~ Done — `ui.bindings.keymaps.tabufline.state`. `lib.nvim.buf_win_tab`'s existing modules turned out to have no overlap once checked (see step 5 below) |
 | `base46` / `base46.themes` | **The open decision.** This is the palette question below |
 
 ---
@@ -214,13 +215,32 @@ palette source is present, and which colorscheme the groups were derived from.
    rather than taking the whole statusline down on every redraw) — which is
    what caught it in a headless test the moment `custom` was exercised as a
    normal case rather than a special one. Fixed in the same commit.
-5. Replace `nvchad.tabufline` — buffer/tab movement, partly already in
-   `lib.nvim.buf_win_tab`.
+5. ~~Replace `nvchad.tabufline`.~~ — done 2026-09-08:
+   `lua/ui/bindings/keymaps/tabufline/state.lua`. `nvchad.tabufline` never
+   appeared as a `require()` in this repo's own three call sites by
+   accident, the same way `nvconfig` didn't at step 4 -- what those three
+   call sites actually needed was `close_buffer()`/`move_buf()`, but what
+   made `next()`/`prev()` (already NvChad-independent code) do anything at
+   all was `vim.t.bufs` -- populated and kept current by `BufAdd`/
+   `BufEnter`/`tabnew`/`BufDelete` autocmds that lived in NvChad's own
+   `nvchad/tabufline/lazyload.lua`, `require`d from `nvchad/init.lua`, never
+   named in this repo. Same shape of gap as step 4's render entrypoint, one
+   level down: the render entrypoint was missing pipe-work outside this
+   repo's `require()` graph; here it was state bookkeeping outside it.
+   `state.lua` ports both the bookkeeping and the two functions, own code,
+   `TESTS/tabufline_state_spec.lua` (12 tests) drives real buffer/tab
+   operations against it headless, without NvChad. The roadmap's own claim
+   that `lib.nvim.buf_win_tab` "already does part of it" did not hold up
+   once checked -- grepped for `close_buffer`/`move_buf`/`vim.t.bufs` across
+   that module, no match; it solves a different problem (safe-save, capture,
+   tab utilities). What is intentionally NOT here, same reasoning as step 4:
+   a rendered tabline (`vim.o.tabline` / `nvchad.tabufline.modules`) --
+   separate, larger scope, see "Planned scope, by area > Tabline" above.
 6. Decide [the palette question](#open-decisions) and replace `base46`.
 7. Host wiring, then remove `lua/wkdnvchad/` from the config only after the
    new modules demonstrably load.
 
-Step 5 is next. Step 6 is the one that needs thinking rather than typing.
+Step 6 is next, and the one that needs thinking rather than typing.
 
 ---
 

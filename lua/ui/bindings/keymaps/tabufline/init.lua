@@ -1,14 +1,14 @@
 ---@module 'ui.bindings.keymaps.tabufline'
---- Custom buffer navigation without automatic centering
+--- Custom buffer navigation without automatic centering.
+---
+--- `close_n_buffers()` used to reach into `nvchad.tabufline` for
+--- `close_buffer()`; that and the `vim.t.bufs` bookkeeping every function
+--- here depends on are now `ui.bindings.keymaps.tabufline.state`'s own code
+--- -- see that module's doc comment for why the bookkeeping was the part
+--- that actually mattered.
 
 local notify = require("lib.nvim.notify").create("[ui.bindings.keymaps.tabufline]")
-
--- Guarded: nvchad.tabufline is absent on the "normal" NvChad UI. Only
--- close_n_buffers() needs it; every other function here works off vim.t.bufs.
-local ok_tabufline, nvchad_tabufline = pcall(require, "nvchad.tabufline")
-if not ok_tabufline then
-  nvchad_tabufline = nil
-end
+local state = require("ui.bindings.keymaps.tabufline.state")
 
 local M = {}
 
@@ -142,25 +142,17 @@ function M.close_n_buffers(n)
     return false
   end
 
-  if not nvchad_tabufline then
-    notify.error("[ui.tabufline] nvchad.tabufline not available")
-    return false
-  end
-
-  if type(nvchad_tabufline.close_buffer) ~= "function" then
-    notify.warn("[ui.tabufline] close_buffer not available")
-    return false
-  end
   local success = true
 
   for _ = 1, n do
-    local ok = pcall(nvchad_tabufline.close_buffer)
+    local ok, err = pcall(state.close_buffer)
     if not ok then
+      notify.warn("[ui.tabufline] close_buffer failed: " .. tostring(err))
       success = false
       break
     end
 
-    -- Same here: redraw so NvChad refreshes its buffer list
+    -- Same here: redraw so vim.t.bufs (and any tabline reading it) refreshes.
     vim.cmd("redraw")
   end
   return success
