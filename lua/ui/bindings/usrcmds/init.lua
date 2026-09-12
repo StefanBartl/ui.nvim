@@ -43,7 +43,7 @@ local function ui_transparency(args)
   local action = args[2]
 
   if action == "on" then
-    local success = theme.set_transparency(false)
+    local success = theme.set_transparency(true)
     if success then
       notify.info("✨ Transparenz aktiviert")
     end
@@ -51,7 +51,7 @@ local function ui_transparency(args)
   end
 
   if action == "off" then
-    local success = theme.set_transparency(true)
+    local success = theme.set_transparency(false)
     if success then
       notify.info("🎨 Transparenz deaktiviert")
     end

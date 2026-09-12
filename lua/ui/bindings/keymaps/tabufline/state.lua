@@ -139,7 +139,7 @@ function M.close_buffer(bufnr)
   bufnr = bufnr or api.nvim_get_current_buf()
 
   if vim.bo[bufnr].buftype == "terminal" then
-    vim.cmd(vim.bo.buflisted and "set nobl | enew" or "hide")
+    vim.cmd(vim.bo[bufnr].buflisted and "set nobl | enew" or "hide")
     vim.cmd("redrawtabline")
     return
   end

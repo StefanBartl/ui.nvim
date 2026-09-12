@@ -149,14 +149,23 @@ local function find_git_root(path)
   return result
 end
 
---- Shorten with home tilde (uses lib.cross for cross-platform)
+--- Shorten with home tilde (uses lib.cross for cross-platform).
+--- `override`, when not nil, wins over the module's own live config -- lets
+--- a caller request a specific style for one call without mutating shared
+--- state (see M.display_path, which used to do exactly that).
 ---@param s string
+---@param override? boolean
 ---@return string
-local function home_tilde(s)
-  local config_mod = require("ui.statusline.modules.lsp.config")
-  local options = config_mod.get_cfg()
+local function home_tilde(s, override)
+  local use_tilde
+  if override ~= nil then
+    use_tilde = override
+  else
+    local config_mod = require("ui.statusline.modules.lsp.config")
+    use_tilde = config_mod.get_cfg().path_home_tilde
+  end
 
-  if not options.path_home_tilde then
+  if not use_tilde then
     return s
   end
 
@@ -202,14 +211,20 @@ end
 ---@nodiscard
 ---@param mode '"repo"'|'"cwd"'|'"home"'
 ---@param path string
+---@param home_tilde_override? boolean # see M.display_path
 ---@return string
-function M.path_relative(mode, path)
+function M.path_relative(mode, path, home_tilde_override)
   local abs = M.path_absolute(path)
   if abs == "" then
     return "[No Name]"
   end
 
-  local cache_key = mode .. ":" .. abs
+  -- The "repo" (no-git-root fallback) and "home" branches both feed through
+  -- home_tilde(), whose output depends on home_tilde_override -- the cache
+  -- key must include it (PERF-46), or a cached "repo"/"home" result for this
+  -- path silently keeps serving the tilde-state from whichever call happened
+  -- to run first.
+  local cache_key = mode .. ":" .. tostring(home_tilde_override) .. ":" .. abs
   local cached = path_cache:get(cache_key)
   if cached then
     return cached
@@ -226,13 +241,13 @@ function M.path_relative(mode, path)
         result = rel
       end
     else
-      result = home_tilde(rel_from(uv.os_homedir() or "", abs))
+      result = home_tilde(rel_from(uv.os_homedir() or "", abs), home_tilde_override)
     end
   elseif mode == "cwd" then
     local cwd = norm_sep(fn.getcwd())
     result = rel_from(cwd, abs)
   else -- "home"
-    result = home_tilde(abs)
+    result = home_tilde(abs, home_tilde_override)
   end
 
   path_cache:put(cache_key, result)
@@ -240,36 +255,34 @@ function M.path_relative(mode, path)
 end
 
 ---@nodiscard
+--- `cfg`, when given, overrides the module's live config for THIS call only
+--- -- it used to write the override into `config_mod` (`config_mod.set(...)`),
+--- which meant one caller's one-off style request permanently changed what
+--- every other caller of this module saw afterwards. Two statusline segments
+--- (or two windows) wanting different path styles at the same time would
+--- fight over that shared state; now each call is self-contained.
 ---@param cfg { path_mode?: string, path_home_tilde?: boolean }|nil
 ---@param path_or_buf integer|string
 ---@return string
 function M.display_path(cfg, path_or_buf)
   local config_mod = require("ui.statusline.modules.lsp.config")
 
-  if type(cfg) == "table" then
-    if cfg.path_mode ~= nil then
-      config_mod.set("path_mode", cfg.path_mode)
-    end
-    if cfg.path_home_tilde ~= nil then
-      config_mod.set("path_home_tilde", not not cfg.path_home_tilde)
-    end
-  end
+  local mode = (type(cfg) == "table" and cfg.path_mode) or config_mod.get("path_mode") or "auto"
+  local home_tilde_override = type(cfg) == "table" and cfg.path_home_tilde or nil
 
   local abs = M.path_absolute(path_or_buf)
   if abs == "" then
     return "[No Name]"
   end
 
-  local mode = config_mod.get("path_mode") or "auto"
-
   if mode == "absolute" then
-    return home_tilde(abs)
+    return home_tilde(abs, home_tilde_override)
   elseif mode == "repo" then
-    return M.path_relative("repo", abs)
+    return M.path_relative("repo", abs, home_tilde_override)
   elseif mode == "cwd" then
-    return M.path_relative("cwd", abs)
+    return M.path_relative("cwd", abs, home_tilde_override)
   elseif mode == "home" then
-    return M.path_relative("home", abs)
+    return M.path_relative("home", abs, home_tilde_override)
   else -- "auto"
     local root = find_git_root(abs)
     if root then
@@ -280,7 +293,7 @@ function M.display_path(cfg, path_or_buf)
     if rel ~= abs then
       return rel
     end
-    return home_tilde(abs)
+    return home_tilde(abs, home_tilde_override)
   end
 end
 

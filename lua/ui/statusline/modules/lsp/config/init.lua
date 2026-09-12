@@ -56,7 +56,10 @@ end
 
 --- Update multiple fields at once with runtime type checks.
 --- Unknown keys are ignored.
---- Type mismatches are rejected.
+--- Type mismatches are rejected -- per field, not for the whole patch: a bad
+--- field must not cost the other, valid fields in the same call (`pairs()`
+--- order is unspecified, so a `return` here used to drop an arbitrary subset
+--- of an otherwise-valid patch depending on hash order).
 ---
 ---@param patch table<string, any>
 function M.update(patch)
@@ -81,7 +84,6 @@ function M.update(patch)
             value_type
           )
         )
-        return
       end
     end
   end

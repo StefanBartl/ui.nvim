@@ -12,7 +12,12 @@
 ---@return {left: string, right: string}
 return function(sep_style)
   local sep_icons = require("ui.statusline.utils.primitives").separators
-  local separators = (type(sep_style) == "table" and sep_style) or sep_icons[sep_style]
+  -- An unrecognized style name falls back to "default" rather than indexing
+  -- nil -- a typo in a custom variant's separator_style degrades instead of
+  -- crashing every redraw.
+  local separators = (type(sep_style) == "table" and sep_style)
+    or sep_icons[sep_style]
+    or sep_icons.default
 
   return {
     left = separators["left"],

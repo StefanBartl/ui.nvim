@@ -18,7 +18,16 @@ end
 
 -- Caches with proper invalidation
 local icon_cache = require("lib.lua.memo.lru").new(256)
-local hl_cache = { name = "St_FileIcon", fg = nil, bg = nil }
+
+-- One highlight group PER (fg, bg) combination actually seen, not one shared
+-- mutable group: with a single global group, two windows on different
+-- filetypes/modes at the same time (any split layout) had the second
+-- window's redraw silently overwrite the first window's icon color, because
+-- both `%#St_FileIcon#` references pointed at the one group this module kept
+-- repainting. Keyed by hex, not by table identity, so it survives across
+-- calls; reset on ColorScheme since the color values themselves go stale.
+---@type table<string, true>
+local hl_built = {}
 
 -- Devicons module lazy-loaded
 local devicons_mod = nil
@@ -48,22 +57,28 @@ local function mode_band_bg_hex()
 end
 
 ---@nodiscard
+---@param hex string|nil
+---@return string
+local function hex_key(hex)
+  return hex and hex:gsub("#", "") or "none"
+end
+
+---@nodiscard
 ---@param fg string|nil
 ---@param band_bg string|nil
 ---@return string
 local function ensure_icon_hl(fg, band_bg)
-  -- Skip if unchanged
-  if hl_cache.fg == fg and hl_cache.bg == band_bg then
-    return hl_cache.name
+  local name = "St_FileIcon_" .. hex_key(fg) .. "_" .. hex_key(band_bg)
+  if hl_built[name] then
+    return name
   end
 
-  local ok = pcall(api.nvim_set_hl, 0, hl_cache.name, { fg = fg, bg = band_bg })
+  local ok = pcall(api.nvim_set_hl, 0, name, { fg = fg, bg = band_bg })
   if ok then
-    hl_cache.fg = fg
-    hl_cache.bg = band_bg
+    hl_built[name] = true
   end
 
-  return hl_cache.name
+  return name
 end
 
 ---@nodiscard
@@ -218,7 +233,7 @@ end
 -- Clear cache on colorscheme change
 Autocmd.create("ColorScheme", function()
   icon_cache = require("lib.lua.memo.lru").new(256)
-  hl_cache = { name = "St_FileIcon", fg = nil, bg = nil }
+  hl_built = {}
 end, {
   group = Autocmd.group("UiDeviconsCache", true),
   desc = "Clear devicons cache on colorscheme change",
