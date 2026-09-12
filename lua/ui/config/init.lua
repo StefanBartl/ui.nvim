@@ -167,4 +167,28 @@ function M.last()
   return _last_config
 end
 
+---@class Ui.Config.SavedState
+---@field last_config table?
+---@field variant_name string?
+
+--- Snapshot the live-config state, to be restored with `M.__restore_state`.
+--- For a caller that needs to run `M.setup()` purely to verify it works
+--- (`:checkhealth ui`'s "does ui.config.setup() assemble" check, notably)
+--- without that probe call overwriting the *actually* active configuration
+--- -- discovered live: running `:checkhealth ui` after `:UI variant
+--- personal` made `:UI status` report "default" again, because the health
+--- check's own `pcall(cfg_mod.setup)` (no variant given) reassigned
+--- `_current_variant_name` right back to the boot default.
+---@return Ui.Config.SavedState
+function M.__save_state()
+  return { last_config = _last_config, variant_name = _current_variant_name }
+end
+
+---@param saved Ui.Config.SavedState
+---@return nil
+function M.__restore_state(saved)
+  _last_config = saved.last_config
+  _current_variant_name = saved.variant_name
+end
+
 return M

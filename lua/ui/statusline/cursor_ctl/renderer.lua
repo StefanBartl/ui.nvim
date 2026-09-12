@@ -31,7 +31,12 @@ local function pct_bar(pct)
   return bars[idx]
 end
 
---- Build a compact progress token like "  37%▅ " (escaped for statusline).
+--- Build a compact progress token like "  37% ▅ " (escaped for statusline).
+---
+--- A space separates "%" from the bar glyph -- without it, a full/near-full
+--- block character (█) sits close enough to the percent sign that they read
+--- as touching/overlapping in most fonts, especially at the high end of the
+--- 8-level scale.
 --- @param pct integer|nil
 --- @param prefix string  -- e.g. "R" or "C" or ""
 --- @return string
@@ -40,7 +45,7 @@ function M.pct_token(pct, prefix)
     return esc_percent("  --%  ")
   end
   local bar = pct_bar(pct)
-  local txt = string.format(" %s%3d%%%s ", (prefix and (prefix .. "") or ""), pct, bar)
+  local txt = string.format(" %s%3d%% %s ", (prefix and (prefix .. "") or ""), pct, bar)
   return esc_percent(txt)
 end
 

@@ -108,4 +108,19 @@ describe("ui.health", function()
     assert.is_true(has(calls, "ok", "ui.statusline.render resolves"))
     assert.is_true(has(calls, "ok", "renders the 'default' theme's fallback modules"))
   end)
+
+  it("does not reset the actually active variant back to the boot default", function()
+    -- Regression: check_config() used to call ui.config.setup() with no
+    -- variant to verify assembly, and that call's own bookkeeping silently
+    -- overwrote whichever variant was really active (found live: running
+    -- :checkhealth ui after :UI variant personal made :UI status report
+    -- "default" again).
+    local cfg = require("ui.config")
+    cfg.setup({ variant = "minimal" })
+    assert.equals("minimal", cfg.get_variant())
+
+    capture()
+
+    assert.equals("minimal", cfg.get_variant())
+  end)
 end)

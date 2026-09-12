@@ -187,7 +187,16 @@ local function check_config()
     )
   end
 
+  -- Save/restore around this probe call: M.setup() here is only to prove it
+  -- doesn't error, but it is the same M.setup() a real caller uses, and it
+  -- records what it assembled as "the active configuration" -- calling it
+  -- with no variant would otherwise silently reset an actually-active
+  -- runtime switch (`:UI variant personal`) back to the boot default the
+  -- moment someone runs `:checkhealth ui`.
+  local saved_state = cfg_mod.__save_state()
   local ok_setup, assembled = pcall(cfg_mod.setup)
+  cfg_mod.__restore_state(saved_state)
+
   if ok_setup and type(assembled) == "table" then
     health.ok("ui.config.setup() assembles")
   else
@@ -196,7 +205,7 @@ local function check_config()
 
   local active = cfg_mod.get_variant()
   if active then
-    health.info(("active variant (last ui.config.setup() call): %s"):format(active))
+    health.info(("active variant (currently live, unaffected by this check): %s"):format(active))
   end
 end
 
