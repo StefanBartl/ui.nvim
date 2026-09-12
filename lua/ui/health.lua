@@ -173,15 +173,17 @@ local function check_config()
 
   local cfg_mod = require("ui.config")
   local variant = cfg_mod.STATUSLINE_VARIANT
-  health.info(("statusline variant: %s"):format(tostring(variant)))
+  health.info(("statusline variant (boot default): %s"):format(tostring(variant)))
 
-  -- The variant is a module path at heart, and a typo in it degrades to
-  -- "default" with a notification nobody sees twice.
-  if has("ui.config.statusline." .. tostring(variant)) then
-    health.ok(("variant module ui.config.statusline.%s resolves"):format(tostring(variant)))
+  -- A typo degrades to "default" with a notification nobody sees twice.
+  -- Checked against the registry, not a direct require: a host-registered
+  -- variant has no `ui.config.statusline.*` file to find at all.
+  local ok_variants, variants = pcall(require, "ui.config.variants")
+  if ok_variants and variants.exists(variant) then
+    health.ok(("variant %q is registered and resolves"):format(tostring(variant)))
   else
     health.error(
-      ("variant %q does not resolve -- it will fall back to 'default'"):format(tostring(variant))
+      ("variant %q is not registered -- it will fall back to 'default'"):format(tostring(variant))
     )
   end
 
@@ -190,6 +192,11 @@ local function check_config()
     health.ok("ui.config.setup() assembles")
   else
     health.error("ui.config.setup() failed: " .. tostring(assembled))
+  end
+
+  local active = cfg_mod.get_variant()
+  if active then
+    health.info(("active variant (last ui.config.setup() call): %s"):format(active))
   end
 end
 
@@ -238,6 +245,25 @@ local function check_segments()
   health.info("These are soft: a missing one blanks its segment, nothing else.")
 end
 
+--- Frame ownership: this module resolving is what lets a content plugin
+--- (my.nvim's hl_config.breadcrumbs, or any other) contribute a winbar line
+--- instead of writing vim.wo.winbar itself. See ui.winbar's own doc comment
+--- for the full ownership pattern -- it mirrors lsp.nvim/my.nvim's existing
+--- vim.diagnostic.config() contribute/apply split.
+---@return nil
+local function check_winbar()
+  health.start("Winbar")
+
+  local ok, winbar = pcall(require, "ui.winbar")
+  if not ok or type(winbar.set) ~= "function" then
+    health.error(
+      "ui.winbar did not load -- a contributing plugin will fall back to applying directly"
+    )
+    return
+  end
+  health.ok("ui.winbar resolves -- available for a content plugin to contribute to")
+end
+
 --- Entry point for `:checkhealth ui`.
 ---@return nil
 function M.check()
@@ -251,6 +277,7 @@ function M.check()
   check_render_entrypoint()
   check_modules()
   check_segments()
+  check_winbar()
 end
 
 return M

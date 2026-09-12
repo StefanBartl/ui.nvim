@@ -99,6 +99,7 @@ describe("ui.health", function()
       "Statusline render entrypoint",
       "Modules",
       "Statusline segments",
+      "Winbar",
     }, starts)
   end)
 

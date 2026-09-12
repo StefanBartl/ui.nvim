@@ -129,11 +129,13 @@ end
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_status(_args)
   local info = theme.get_info()
+  local variant = require("ui.config").get_variant()
 
   local lines = {
     "╭─ UI Status ─────────────────╮",
     string.format("│ Theme:        %-15s │", info.theme or "none"),
     string.format("│ Transparenz:  %-15s │", info.transparency and "an" or "aus"),
+    string.format("│ Variante:     %-15s │", variant or "(unbenannt)"),
   }
 
   if info.toggle_themes and #info.toggle_themes > 0 then
@@ -146,6 +148,79 @@ local function ui_status(_args)
 
   lines[#lines + 1] =
     "╰─────────────────────────────╯"
+
+  notify.info(table.concat(lines, "\n"))
+end
+
+---Switch the active statusline variant and make it render immediately.
+---`ui.config.setup()` only assembles a config; `ui.statusline.render.enable()`
+---is the separate step that actually points `vim.o.statusline` at it -- both
+---are needed for a runtime switch to be visible, not just recorded.
+---@param name string
+---@return boolean success
+local function switch_variant(name)
+  local variants = require("ui.config.variants")
+  if not variants.exists(name) then
+    return false
+  end
+
+  local ok, assembled = pcall(require("ui.config").setup, { variant = name })
+  if not ok then
+    return false
+  end
+
+  require("ui.statusline.render").enable(assembled.ui.statusline)
+  return true
+end
+
+---Handle variant command
+---@param args string[]
+local function ui_variant(args)
+  local name = args[2]
+  local variants = require("ui.config.variants")
+
+  if not name or name == "" then
+    local current = require("ui.config").get_variant()
+    notify.info(
+      string.format(
+        "Aktuelle Variante: %s\nNutze :UI variant <name> zum Wechseln",
+        current or "(unbenannt -- per Tabelle direkt übergeben)"
+      )
+    )
+    return
+  end
+
+  if not variants.exists(name) then
+    notify.error(
+      string.format(
+        "Variante '%s' nicht gefunden.\n\nVerfügbare Varianten:\n%s",
+        name,
+        table.concat(variants.list(), ", ")
+      )
+    )
+    return
+  end
+
+  if switch_variant(name) then
+    notify.info(string.format("🎨 Statusline-Variante geändert zu: %s", name))
+  else
+    notify.error(string.format("Fehler beim Wechseln zu Variante '%s'", name))
+  end
+end
+
+---Handle variants list command
+---@param _args string[] # Unused: this subcommand takes no argument
+local function ui_variants(_args)
+  local variants = require("ui.config.variants")
+  local names = variants.list()
+  local current = require("ui.config").get_variant()
+
+  local lines = { string.format("Verfügbare Statusline-Varianten (%d):", #names), "" }
+
+  for _, name in ipairs(names) do
+    local marker = (name == current) and "✓ " or "  "
+    table.insert(lines, marker .. name)
+  end
 
   notify.info(table.concat(lines, "\n"))
 end
@@ -180,6 +255,10 @@ local function ui_help(_args)
 │  :UI themes                 Alle Themes auflisten    │
 │  :UI toggle                 Zwischen Themes wechseln │
 │                                                      │
+│  :UI variant                Aktuelle Variante zeigen │
+│  :UI variant <name>         Variante wechseln        │
+│  :UI variants               Alle Varianten auflisten │
+│                                                      │
 │  :UI status                 Aktuelle Config zeigen   │
 │  :UI help                   Diese Hilfe anzeigen     │
 │                                                      │
@@ -210,6 +289,8 @@ local function dispatcher(opts)
     transparency = ui_transparency,
     theme = ui_theme,
     themes = ui_themes,
+    variant = ui_variant,
+    variants = ui_variants,
     toggle = ui_toggle,
     status = ui_status,
     help = ui_help,
@@ -257,6 +338,8 @@ local function complete(arglead, cmdline, _cursorpos)
       "transparency",
       "theme",
       "themes",
+      "variant",
+      "variants",
       "toggle",
       "status",
       "help",
@@ -274,6 +357,13 @@ local function complete(arglead, cmdline, _cursorpos)
 
     if subcmd == "theme" then
       return filter(arglead, theme.list_themes())
+    end
+
+    if subcmd == "variant" then
+      -- The registry, not a static list: a host's own require("ui.config
+      -- .variants").register(name, ...) shows up here the moment it runs,
+      -- same as the four shipped presets.
+      return filter(arglead, require("ui.config.variants").list())
     end
   end
 

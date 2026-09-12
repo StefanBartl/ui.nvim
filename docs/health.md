@@ -81,3 +81,17 @@ Three soft dependencies, each blanking only its own segment when absent:
 
 An `ℹ️ not installed` line here is never a problem — it is the report saying
 which part of the statusline will be empty and why.
+
+---
+
+## Winbar
+
+| Line | Means |
+| --- | --- |
+| ✅ `ui.winbar resolves` | A content plugin (my.nvim's `hl_config.breadcrumbs`, or any other) can contribute a winbar line to it instead of writing `vim.wo.winbar` itself |
+| ❌ `ui.winbar did not load` | A contributing plugin will fall back to applying directly — not fatal to this plugin, but means the ownership handoff isn't happening |
+
+This section only reports whether `ui.winbar` is *available* — whether
+anything is actually contributing to it is `:checkhealth my`'s (or whichever
+content plugin's) job to report, the same split as the diagnostics
+ownership pattern this mirrors.

@@ -11,16 +11,21 @@
 --- four generic choices in `lua/ui/config/statusline/`.
 ---
 --- To use this (or a copy of it, adjusted to your own segments): copy this
---- file into your OWN Neovim config, then hand it to `ui.config.setup()`
---- directly instead of naming one of the shipped presets --
---- `ui.config.setup()` accepts a fully-built variant table via `opts.variant`
---- for exactly this case:
+--- file into your OWN Neovim config, then either
 ---
----   require("ui.config").setup({
----     variant = require("your_config.statusline"), -- this file, in your own config
----   })
+---   1. hand it to `ui.config.setup()` directly, anonymously:
 ---
---- See docs/configuration.md, "Bringing your own variant".
+---        require("ui.config").setup({
+---          variant = require("your_config.statusline"), -- this file, in your own config
+---        })
+---
+---   2. or register it under a name first, so it shows up in `:UI variant`
+---      and its completion next to the four shipped presets:
+---
+---        require("ui.config.variants").register("personal", require("your_config.statusline"))
+---        require("ui.config").setup({ variant = "personal" })
+---
+--- See docs/configuration.md, "ui.config.variants".
 
 local lazy = require("lib.lua.lazy")
 local render_module = lazy.require("ui.statusline.cursor_ctl.renderer")

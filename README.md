@@ -32,6 +32,22 @@
 > gained `opts.variant`, a way to hand it a fully-built statusline table
 > directly — the mechanism a host now uses for exactly the kind of
 > plugin-specific statusline `custom` used to be.
+>
+> **2026-09-12, third round: the winbar gets the same ownership split as
+> diagnostics, and a variant registry replaces the anonymous-table-only
+> version of `opts.variant` from an hour earlier.** `ui.winbar.set(line,
+> winid)` (new) is the one thing about a winbar that is actually a frame
+> concern — the scheduled, window-validity-checked write. A content plugin
+> (my.nvim's `hl_config.breadcrumbs`) keeps everything else (debouncing,
+> skip-rules, the string itself) and hands the result over when this module
+> is present, same shape as the `vim.diagnostic.config()` contribute/apply
+> split lsp.nvim/my.nvim already had. Separately: `ui.config.variants` is
+> now the one registry both the four shipped presets and any host-registered
+> variant live in, `:UI variant {name}`/`:UI variants` switch and list
+> against it, and switching is a genuine runtime operation now —
+> `ui.config.setup()` + `ui.statusline.render.enable()` — not just a
+> boot-time constant, because this plugin has owned its own render
+> entrypoint since step 4.
 
 # ui.nvim
 
@@ -122,6 +138,7 @@ Optional, each detected at runtime and blanking only its own segment:
 | Tabline | Buffer and tab navigation, buffer reordering, moving a buffer to another tab |
 | Theme | Palette assembly, a theme toggle, transparency, the `:UI` command that drives all of it |
 | Highlights | The groups the frame paints with, kept stable across theme switches |
+| Winbar | Owns the `vim.wo.winbar` write (`ui.winbar.set`) — a content plugin (breadcrumbs, typically) keeps producing the string and hands it over instead of writing the surface itself |
 
 The dividing line this repository draws is worth stating plainly:
 

@@ -14,6 +14,16 @@ local M = {}
 ---@type table?
 local _last_config = nil
 
+--- The name `M.setup()` last resolved through `ui.config.variants`, or nil
+--- if the most recent call brought an anonymous table via `opts.variant`
+--- directly (which has no name to report). `M.get_variant()` and `:UI
+--- variant`/`:UI status` read this -- it is the actually active variant,
+--- which can differ from `M.STATUSLINE_VARIANT` after a runtime switch
+--- (`:UI variant <name>` calls `M.setup` again without touching that
+--- constant).
+---@type string?
+local _current_variant_name = nil
+
 -- ============================================================================
 -- STATUSLINE VARIANT SELECTION
 -- ============================================================================
@@ -55,36 +65,44 @@ M.STATUSLINE_VARIANT = "default"
 -- Config Assembly
 -- ============================================================================
 
---- Bringing your own variant: `opts.variant`, when it is a table, is used
---- directly instead of resolving `M.STATUSLINE_VARIANT` against this repo's
---- own `ui.config.statusline.*` modules. The table has the same shape as any
---- file under `lua/ui/config/statusline/` -- `{ ui = { statusline = {...} },
---- setup = function(config) ... end }` -- it just does not have to live
---- inside this plugin to be usable. This is the mechanism
---- `docs/examples/personal-statusline-example.lua` assumes.
+--- Bringing your own variant, two ways:
+---
+---   * `opts.variant` as a TABLE is used directly, anonymously -- the same
+---     shape as any file under `lua/ui/config/statusline/`
+---     (`{ ui = { statusline = {...} }, setup = function(config) ... end }`),
+---     it just does not have to live inside this plugin.
+---     `docs/examples/personal-statusline-example.lua` is the worked example.
+---   * `opts.variant` as a STRING, or `M.STATUSLINE_VARIANT` when `opts.variant`
+---     is absent, resolves through `ui.config.variants` -- the four shipped
+---     presets plus whatever a host registered under its own name via
+---     `require("ui.config.variants").register(name, variant)`. Registering
+---     first is what makes a variant nameable: `:UI variant <name>` and its
+---     completion both read the same registry.
+---
+--- An anonymous table has no name for `M.get_variant()`/`:UI status` to
+--- report; register it under a name instead if that matters.
 ---@param opts table
 ---@return table
 local function load_statusline_config(opts)
   if type(opts.variant) == "table" then
+    _current_variant_name = nil
     return opts.variant
   end
 
-  local variant = M.STATUSLINE_VARIANT
-  local config_path = "ui.config.statusline." .. variant
+  local variants = require("ui.config.variants")
+  local name = (type(opts.variant) == "string" and opts.variant) or M.STATUSLINE_VARIANT
+  local resolved = variants.resolve(name)
 
-  local ok, config = pcall(require, config_path)
-  if not ok then
+  if not resolved then
     notify.warn(
-      string.format(
-        "[ui.config] Failed to load statusline variant '%s': %s\nFalling back to 'default'",
-        variant,
-        tostring(config)
-      )
+      string.format("[ui.config] Unknown statusline variant '%s'. Falling back to 'default'", name)
     )
-    return (require("ui.config.statusline.default"))
+    name = "default"
+    resolved = variants.resolve("default")
   end
 
-  return config
+  _current_variant_name = name
+  return resolved
 end
 
 ---Setup complete configuration
@@ -133,10 +151,14 @@ function M.setup(user_opts)
   return config
 end
 
----Get current statusline variant
----@return string
+---The name of the variant `M.setup()` actually assembled last time it ran --
+---nil before the first call, and nil after a call whose `opts.variant` was
+---an anonymous table (see `load_statusline_config`). This is the live
+---value, which can differ from `M.STATUSLINE_VARIANT` after a runtime
+---switch (`:UI variant <name>`).
+---@return string?
 function M.get_variant()
-  return M.STATUSLINE_VARIANT
+  return _current_variant_name
 end
 
 ---The most recently assembled config, or nil if `M.setup()` has not run yet.

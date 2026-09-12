@@ -114,6 +114,14 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI transparency
     Toggle background transparency.
 
+:UI variant {name}
+    Switch the active statusline preset at runtime. {name} completes over
+    the variant registry (see |ui-variants| below): the four shipped
+    presets, plus anything a host registered under its own name.
+
+:UI variants
+    List registered variants, marking the active one.
+
 :UI status
     Current theme, transparency state and statusline variant.
 
@@ -147,10 +155,10 @@ absent.
 ==============================================================================
 6. STATUSLINE VARIANTS                                       *ui-variants*
 
-Four generic presets ship. Which one is assembled is the STATUSLINE_VARIANT
-constant in `lua/ui/config/init.lua`, readable through
-`ui.config.get_variant()`. It is a setup-time choice: NvChad reads the
-assembled table once while booting.
+Four generic presets ship. Which one is assembled at boot is the
+STATUSLINE_VARIANT constant in `lua/ui/config/init.lua` -- but since this
+plugin owns its own render entrypoint (step 4), that is no longer the only
+chance: `:UI variant {name}` switches it at runtime.
 
     default   full-featured, closest to the historical NvChad default
     minimal   cursor, working directory, progress -- nothing else
@@ -158,14 +166,23 @@ assembled table once while booting.
     blocks    "lsp"'s segments, drawn as gen_block chips
 
 An unknown name falls back to `default` with a notification rather than
-throwing. |:checkhealth| reports the active variant and whether its module
-resolves, because that fallback is otherwise quiet.
+throwing. |:checkhealth| reports the boot-time default, whether it is
+registered, and the actually active one (`ui.config.get_variant()`)
+separately -- they can differ after a runtime switch.
 
 This used to be six presets; `custom` (personal-plugin-coupled: casedesk.nvim,
 filetree.nvim) moved to docs/examples/personal-statusline-example.lua instead
 of staying a shipped preset, and `lspbased`/`custom_light` (the same segment
-set assembled two different ways) became one file, `lsp`. A host with its own
-plugin-specific segments passes a fully-built variant table directly: >lua
+set assembled two different ways) became one file, `lsp`.
+
+`ui.config.variants` is the registry both the four shipped presets and any
+host-registered variant live in -- what `:UI variant`'s completion and
+`ui.config.setup({ variant = "name" })` both read: >lua
+    require("ui.config.variants").register("personal", require("your_config.statusline"))
+    require("ui.config").setup({ variant = "personal" })
+<
+`opts.variant` also still accepts a table directly, used anonymously without
+a name to register: >lua
     require("ui.config").setup({
       variant = require("your_config.statusline"),
     })
@@ -177,14 +194,15 @@ plugin-specific segments passes a fully-built variant table directly: >lua
 >vim
     :checkhealth ui
 <
-Five sections: dependencies (lib.nvim required; NvChad presence reported as
+Six sections: dependencies (lib.nvim required; NvChad presence reported as
 information, not a dependency check, since step 4; `nvchad.tabufline` gone
 from this list entirely at step 5, `base46`/`base46.themes` gone the same way
 at step 6), the assembled configuration, this plugin's own statusline render
 entrypoint (resolves? renders the "default" theme's fallback modules without
 NvChad?), which submodules `setup()` turned on (buffer/tab navigation
-included, under `keymaps`), and the soft dependencies each statusline
-segment needs.
+included, under `keymaps`), the soft dependencies each statusline segment
+needs, and whether `ui.winbar` resolves for a content plugin to contribute
+its breadcrumb line to.
 
 The dependency section returns early only if lib.nvim itself is missing or
 incomplete -- everything below it needs lib.nvim, and a missing NvChad no

@@ -12,6 +12,7 @@ Central configuration loader with statusline variant selection.
     - [3. Host wiring](#3-host-wiring)
   - [Statusline variants](#statusline-variants)
   - [Writing your own variant](#writing-your-own-variant)
+  - [Runtime switching](#runtime-switching)
   - [API](#api)
   - [Assembly order](#assembly-order)
   - [Troubleshooting](#troubleshooting)
@@ -151,6 +152,38 @@ require("ui.config").setup({
 is a full worked example — it is the preset this repo used to ship as
 `custom`, moved here for exactly this reason.
 
+**Give it a name instead, if you want `:UI variant`/`:UI variants` to see
+it:**
+
+```lua
+require("ui.config.variants").register("personal", require("your_config.statusline"))
+require("ui.config").setup({ variant = "personal" })
+```
+
+`ui.config.variants` is the registry both the four shipped presets and any
+host-registered variant live in — `M.register(name, variant)` (a table, or a
+zero-arg function returning one for lazy loading), `M.list()` (what `:UI
+variant <Tab>` completes over), `M.resolve(name)`, `M.exists(name)`,
+`M.unregister(name)`. An anonymous table passed to `opts.variant` directly
+(the previous paragraph) skips this registry entirely — the only cost is
+that it has no name for `:UI status` to report.
+
+## Runtime switching
+
+Unlike before this plugin owned its own render entrypoint (roadmap step 4),
+the statusline variant is no longer a boot-time-only choice:
+
+```vim
+:UI variant lsp
+:UI variants
+```
+
+does `ui.config.setup({ variant = "lsp" })` then
+`ui.statusline.render.enable()` with the result — both steps, since
+assembling a config and pointing `vim.o.statusline` at it are separate.
+`ui.config.get_variant()` returns whichever name actually won, which can
+differ from `M.STATUSLINE_VARIANT` (the boot-time default) after a switch.
+
 ## API
 
 ### `ui.config.setup(user_opts?)`
@@ -167,7 +200,11 @@ Returns a table with `theme` and `ui` keys.
 
 ### `ui.config.get_variant()`
 
-Returns `M.STATUSLINE_VARIANT` as a string.
+Returns the name `M.setup()` actually resolved last time it ran — `nil`
+before the first call, and `nil` after a call whose `opts.variant` was an
+anonymous table. This is the live value; it can differ from
+`M.STATUSLINE_VARIANT` (the boot-time default) after `:UI variant` switches
+it.
 
 ### `ui.config.last()`
 

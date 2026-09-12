@@ -75,10 +75,13 @@ An override is merged onto a copy; the shipped defaults are not mutated.
 
 ## The statusline variants
 
-Four generic presets ship. Which one is assembled is the `STATUSLINE_VARIANT`
-constant in `lua/ui/config/init.lua`, readable through `ui.config.get_variant()`.
-It is a `setup()`-time choice rather than a runtime one — NvChad reads the
-assembled table once while booting.
+Four generic presets ship. Which one is assembled at boot is the
+`STATUSLINE_VARIANT` constant in `lua/ui/config/init.lua` — but unlike before
+step 4 (when NvChad read the assembled table once while booting through
+`chadrc` and that was the only chance), this is no longer the only way to
+pick one: `:UI variant {name}` (or `ui.config.setup({ variant = name })` +
+`ui.statusline.render.enable()`) switches it at runtime, because this plugin
+owns its own render entrypoint now.
 
 | Variant | What it is |
 | --- | --- |
@@ -88,8 +91,9 @@ assembled table once while booting.
 | `blocks` | `lsp`'s segments, drawn as gen_block chips |
 
 An unknown variant name falls back to `default` with a notification rather
-than throwing. `:checkhealth ui` reports the active variant and whether its
-module resolves, because the fallback is otherwise quiet.
+than throwing. `:checkhealth ui` reports the boot-time default, whether it
+is registered, and the actually active one separately — they can differ
+after a runtime switch.
 
 **This used to be six layouts, and the open question of whether that was the
 right number is resolved (2026-09-12).** `custom` was the only one with real
@@ -99,19 +103,33 @@ to `docs/examples/personal-statusline-example.lua` instead.
 `lspbased`/`custom_light` were the same segment set assembled two different
 ways (one literally delegated to the other); one file now, `lsp`.
 
+### `ui.config.variants` — naming a variant that is not one of the four
+
 A host with its own plugin-specific segments — the case this repo's `custom`
-preset used to cover — passes a fully-built variant table directly instead of
-naming one of the four presets above:
+preset used to cover — registers it under its own name instead of naming one
+of the four presets above:
 
 ```lua
-require("ui.config").setup({
-  variant = require("your_config.statusline"), -- lives in YOUR config, any shape
-})
+require("ui.config.variants").register(
+  "personal", -- whatever name you like -- shows up in :UI variant completion
+  require("your_config.statusline") -- lives in YOUR config, any shape
+)
+
+require("ui.config").setup({ variant = "personal" })
 ```
 
-`opts.variant`, when it is a table, is used as-is instead of resolving
-`STATUSLINE_VARIANT` against this repo's own `ui.config.statusline.*` files —
-see `docs/examples/personal-statusline-example.lua` for the full pattern.
+`M.register(name, variant)` accepts the built table directly, or a zero-arg
+function returning one (for lazy loading, the same way the four shipped
+presets register themselves). Once registered, `"personal"` is
+indistinguishable from a shipped preset to everything that reads the
+registry — `:UI variant personal`, its completion, `ui.config.setup({
+variant = "personal" })`.
+
+`opts.variant` still also accepts a table directly (used anonymously,
+bypassing the registry) — the only difference is an anonymous table has no
+name for `:UI status`/`ui.config.get_variant()` to report. See
+`docs/examples/personal-statusline-example.lua` for the full worked example,
+including the `register()` call.
 
 ---
 
