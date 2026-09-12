@@ -17,8 +17,10 @@
 --- renderer. Step 5 replaced `nvchad.tabufline` the same way (own
 --- `vim.t.bufs` bookkeeping, own `close_buffer`/`move_buf`) -- it is gone
 --- from this report's dependency list entirely, not merely soft, the same
---- as `nvconfig`/`nvchad.stl.utils` at step 4. `base46` remains a genuine
---- soft dependency for the theme (step 6).
+--- as `nvconfig`/`nvchad.stl.utils` at step 4. `base46` is gone the same way
+--- as of step 6: `ui.theme.palette` derives accent colors from the active
+--- colorscheme's own highlight groups, `ui.theme.transparency` is this
+--- plugin's own toggle, and theme switching is `:colorscheme`.
 
 local M = {}
 
@@ -45,10 +47,9 @@ local function has(mod)
   return (pcall(require, mod))
 end
 
---- The hard dependency: lib.nvim. NvChad is not one any more -- `base46` is
---- checked further down, as the soft dependency it has always been (theme
---- loading, step 6). `nvchad.tabufline` is gone from this report entirely
---- (step 5): this plugin's own code no longer reads it under any name.
+--- The hard dependency: lib.nvim. NvChad is not one any more, and neither is
+--- base46 as of step 6 -- `nvchad.tabufline` was the same story at step 5:
+--- this plugin's own code no longer reads any of them under any name.
 ---@return boolean ok # false stops the rest of the report
 local function check_dependencies()
   health.start("Dependencies")
@@ -102,25 +103,11 @@ local function check_dependencies()
     health.info("NvChad is not present -- this plugin's own code does not need it any more")
   end
 
-  -- `nvchad.tabufline` dropped from this list at step 5: buffer/tab
-  -- movement and the `vim.t.bufs` bookkeeping behind it are this plugin's
-  -- own code now (`ui.bindings.keymaps.tabufline.state`), not a NvChad
-  -- symbol to check for. `base46` remains -- theme loading, step 6.
-  --
-  -- Guarded at every call site: absent means no theme switching, not a
-  -- traceback.
-  for _, entry in ipairs({
-    { "base46", "theme loading and the transparency toggle" },
-    { "base46.themes", "the theme list `:UI theme` completes over" },
-  }) do
-    if has(entry[1]) then
-      health.ok(("%s -- %s"):format(entry[1], entry[2]))
-    else
-      health.warn(("%s is missing -- %s"):format(entry[1], entry[2]), {
-        "Guarded at its call sites: this degrades the feature, it does not throw",
-      })
-    end
-  end
+  -- `nvchad.tabufline` dropped from this list at step 5, `base46` at step 6:
+  -- buffer/tab movement, theme switching and transparency are this plugin's
+  -- own code now (`ui.bindings.keymaps.tabufline.state`,
+  -- `ui.bindings.usrcmds.themes`, `ui.theme.*`), not NvChad/base46 symbols to
+  -- check for.
 
   return true
 end
@@ -177,10 +164,10 @@ local function check_config()
     return
   end
   health.ok(
-    ("theme %q, transparency %s, toggle pair %s"):format(
-      tostring(defaults.base46.theme),
-      tostring(defaults.base46.transparency),
-      table.concat(defaults.base46.theme_toggle or {}, " / ")
+    ("active colorscheme %q, transparency default %s, toggle pair %s"):format(
+      tostring(vim.g.colors_name),
+      tostring(defaults.theme.transparency),
+      table.concat(defaults.theme.theme_toggle or {}, " / ")
     )
   )
 

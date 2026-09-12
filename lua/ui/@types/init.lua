@@ -28,15 +28,17 @@
 ---@field buffers? boolean
 ---@field tabs? boolean
 
---- Theme options handed through to base46 via `chadrc`.
----@class Ui.Base46
----@field theme string # Active theme name
+--- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which
+--- colorscheme to boot into" -- that is the host's own init.lua, independent
+--- of this plugin. Was `Ui.Base46`, handed through to base46 via `chadrc`;
+--- step 6 of the roadmap dropped the `theme` field along with base46 itself.
+---@class Ui.Theme
 ---@field transparency boolean
 ---@field theme_toggle string[] # The pair `:UI toggle` swaps between
 
 --- The shipped defaults, aggregated in `ui.config.DEFAULTS`.
 ---@class Ui.Defaults
----@field base46 Ui.Base46
+---@field theme Ui.Theme
 ---@field statusline { variant: Ui.StatuslineVariant }
 ---@field modules Ui.Modules
 

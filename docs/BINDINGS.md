@@ -24,17 +24,17 @@ theme list.
 
 | Command | Args | Does |
 | --- | --- | --- |
-| `:UI theme {name}` | completes over installed base46 themes | Switch to a theme and reload every highlight |
+| `:UI theme {name}` | completes over every colorscheme Neovim can see | `:colorscheme {name}` |
 | `:UI themes` | — | List the available themes, marking the active one |
-| `:UI toggle` | — | Swap between the two themes in `base46.theme_toggle` |
+| `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI status` | — | Current theme, transparency state, statusline variant |
 | `:UI help` | — | The subcommand list, in a float |
 
 **Completion is two-level:** the first argument completes over the six
 subcommands, the argument after `theme` over the theme names. The name list is
-read from `base46.themes` at the moment `<Tab>` is pressed, so a theme
-installed mid-session is offered.
+`vim.fn.getcompletion("", "color")` at the moment `<Tab>` is pressed, so a
+colorscheme installed mid-session is offered.
 
 **No range, no count.** Every subcommand acts on global state — the theme, the
 transparency flag — where a line range or a repeat count has no meaning.

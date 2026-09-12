@@ -1,126 +1,75 @@
-# UI Command Modul für NvChad
+# `:UI` command module
 
-Ein erweitertes Command-Modul für die Runtime-Konfiguration von NvChad's Base46 Themes und UI-Einstellungen.
+Runtime UI configuration: colorscheme switching and this plugin's own
+transparency toggle. Was Base46-specific through step 5 of `ROADMAP.md`; step
+6 replaced that with real `:colorscheme` switching. See
+`themes/README.md` for what exactly changed and why.
 
 ## Table of content
 
-- [UI Command Modul für NvChad](#ui-command-modul-fr-nvchad)
-  - [🚀 Features](#features)
-  - [📦 Installation](#installation)
-    - [Mit lazy.nvim](#mit-lazynvim)
-    - [Manuelle Installation](#manuelle-installation)
-  - [📖 Verwendung](#verwendung)
-    - [Theme wechseln](#theme-wechseln)
-    - [Alle Themes auflisten](#alle-themes-auflisten)
-    - [Transparenz umschalten](#transparenz-umschalten)
-    - [Theme-Toggle verwenden](#theme-toggle-verwenden)
-    - [Status anzeigen](#status-anzeigen)
-    - [Hilfe anzeigen](#hilfe-anzeigen)
-  - [⌨️ Empfohlene Keybindings](#empfohlene-keybindings)
-  - [🎨 Verfügbare Base46 Themes](#verfgbare-base46-themes)
-  - [🔧 Konfiguration](#konfiguration)
-    - [chadrc.lua Beispiel](#chadrclua-beispiel)
-  - [🐛 Troubleshooting](#troubleshooting)
-    - [Theme wird nicht gefunden](#theme-wird-nicht-gefunden)
-    - [Transparenz funktioniert nicht](#transparenz-funktioniert-nicht)
-    - [Autocompletion funktioniert nicht](#autocompletion-funktioniert-nicht)
-  - [📝 Changelog](#changelog)
-    - [Version 1.0.0](#version-100)
-  - [🤝 Contributing](#contributing)
-  - [📄 Lizenz](#lizenz)
-  - [💡 Tipps](#tipps)
-    - [Schneller Theme-Wechsel während der Arbeit](#schneller-theme-wechsel-whrend-der-arbeit)
-    - [Workflow-Empfehlung](#workflow-empfehlung)
-    - [Performance](#performance)
-  - [🎯 Zukünftige Features](#zuknftige-features)
+- [Usage](#usage)
+- [Recommended keybindings](#recommended-keybindings)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
 
----
+## Usage
 
-## 🚀 Features
-
-- **Theme-Switching**: Wechsle zwischen allen verfügbaren Base46 Themes
-- **Autocompletion**: Intelligente Tab-Completion für alle Commands und Theme-Namen
-- **Transparenz-Toggle**: Einfaches Ein-/Ausschalten der Terminal-Transparenz
-- **Theme-Toggle**: Schnelles Wechseln zwischen konfigurierten Lieblings-Themes
-- **Status-Übersicht**: Zeige aktuelle UI-Konfiguration an
-- **Deutsche Lokalisierung**: Alle Meldungen auf Deutsch
-
-## 📦 Installation
-
-### Mit lazy.nvim
-
-```lua
-{
-  "dein-nvchad-config",
-  config = function()
-    require("ui.command").setup()
-  end,
-}
-```
-
-### Manuelle Installation
-
-1. Platziere das Modul unter `lua/ui/command/init.lua`
-2. Füge in deiner `init.lua` hinzu:
-
-```lua
-require("ui.command").setup()
-```
-
-## 📖 Verwendung
-
-### Theme wechseln
+### Switch theme
 
 ```vim
-:UI theme tokyonight      " Wechsle zu tokyonight Theme
-:UI theme rosepine        " Wechsle zu rosepine Theme
-:UI theme <Tab>           " Zeige alle verfügbaren Themes (Autocompletion)
+:UI theme tokyonight      " switch to the tokyonight colorscheme
+:UI theme <Tab>           " complete over every colorscheme Neovim can see
 
-" Shortcut:
-:Theme tokyonight         " Direkter Theme-Wechsel
+:Theme tokyonight         " shortcut, same effect
 ```
 
-### Alle Themes auflisten
+`:UI theme` with no argument shows the active colorscheme
+(`vim.g.colors_name`) instead of switching.
+
+### List themes
 
 ```vim
 :UI themes
 ```
 
-Zeigt alle verfügbaren Base46 Themes mit Markierung (✓) für das aktuelle Theme.
+Lists every colorscheme `getcompletion("", "color")` finds — built-in and
+installed by any plugin manager — with `✓` marking the active one.
 
-### Transparenz umschalten
+### Toggle transparency
 
 ```vim
-:UI transparency          " Toggle Transparenz an/aus
-:UI transparency on       " Transparenz aktivieren
-:UI transparency off      " Transparenz deaktivieren
+:UI transparency          " toggle
+:UI transparency on       " enable
+:UI transparency off      " disable
 ```
 
-### Theme-Toggle verwenden
+Strips `bg` from the groups this plugin's own frame draws (editor body,
+statusline, tabline, winbar) — not full-UI transparency; see
+`ui.theme.transparency` for the exact group list and why it stops there.
 
-Wenn du in deiner `chadrc.lua` einen `theme_toggle` konfiguriert hast:
+### Toggle between two themes
+
+Configure the pair in `lua/ui/config/theme.lua`:
 
 ```lua
-M.base46 = {
-  theme = "tokyonight",
+return {
   theme_toggle = { "tokyonight", "rosepine" },
   transparency = false,
 }
 ```
 
-Dann kannst du schnell zwischen den Themes wechseln:
+Then:
 
 ```vim
-:UI toggle                " Wechsle zum nächsten Theme in der Liste
+:UI toggle                " switch to the other theme in the pair
 ```
 
-### Status anzeigen
+### Show status
 
 ```vim
 :UI status
 ```
 
-Zeigt die aktuelle UI-Konfiguration:
 ```
 ╭─ UI Status ─────────────────╮
 │ Theme:        tokyonight    │
@@ -129,134 +78,57 @@ Zeigt die aktuelle UI-Konfiguration:
 ╰─────────────────────────────╯
 ```
 
-### Hilfe anzeigen
+### Help
 
 ```vim
 :UI help
-:UI                       " Ohne Argument zeigt auch die Hilfe
+:UI                        " no argument also shows help
 ```
 
-## ⌨️ Empfohlene Keybindings
-
-Füge diese zu deiner Konfiguration hinzu:
+## Recommended keybindings
 
 ```lua
--- In deiner Keybindings-Datei
 vim.keymap.set("n", "<leader>tt", ":UI toggle<CR>", { desc = "Toggle Theme" })
 vim.keymap.set("n", "<leader>ts", ":UI transparency<CR>", { desc = "Toggle Transparency" })
 vim.keymap.set("n", "<leader>th", ":UI themes<CR>", { desc = "List Themes" })
 ```
 
-## 🎨 Verfügbare Base46 Themes
+## Configuration
 
-Das Modul unterstützt alle Base46 Themes, darunter:
-
-- `tokyonight`
-- `rosepine`
-- `catppuccin`
-- `everforest`
-- `gruvbox`
-- `nord`
-- `onedark`
-- `dracula`
-- `nightfox`
-- und viele mehr...
-
-Nutze `:UI themes` für die vollständige Liste.
-
-## 🔧 Konfiguration
-
-### chadrc.lua Beispiel
+`lua/ui/config/theme.lua`:
 
 ```lua
-local M = {}
-
-M.base46 = {
-  theme = "tokyonight",
+return {
   transparency = false,
-
-  -- Optional: Definiere Themes zum schnellen Wechseln
-  theme_toggle = { "tokyonight", "rosepine", "catppuccin" },
-
-  -- Optional: Theme-spezifische Overrides
-  hl_override = {
-    Comment = { italic = true },
-  },
+  theme_toggle = { "tokyonight", "rosepine" },
 }
-
-return M
 ```
 
-## 🐛 Troubleshooting
+There is no `theme` field (which colorscheme to boot into) and no
+`hl_override` — those were base46-specific. Pick a startup colorscheme the
+normal way, in the host's own `init.lua`.
 
-### Theme wird nicht gefunden
+## Troubleshooting
 
-Stelle sicher, dass das Theme in Base46 existiert:
+### Theme not found
 
 ```vim
-:UI themes              " Liste alle verfügbaren Themes
+:UI themes              " list every colorscheme Neovim can see
 ```
 
-### Transparenz funktioniert nicht
+If a theme you expect is missing, its plugin is not installed or not yet
+loaded (lazy-loaded colorscheme plugins that load on `VeryLazy` or an event
+appear only once loaded).
 
-1. Überprüfe, ob dein Terminal Transparenz unterstützt
-2. Stelle sicher, dass Base46 korrekt geladen ist
-3. Versuche manuell: `:lua require('base46').toggle_transparency()`
+### Transparency does nothing visible
 
-### Autocompletion funktioniert nicht
+Your terminal emulator itself needs to support transparency — this command
+only clears `bg` on Neovim's own highlight groups; the terminal renders
+whatever is behind the window.
 
-Stelle sicher, dass:
-1. Das Modul mit `.setup()` initialisiert wurde
-2. Du im Command-Modus `Tab` drückst
-3. Neovim mindestens Version 0.8+ ist
+### Completion doesn't work
 
-## 📝 Changelog
-
-### Version 1.0.0
-- Initiales Release
-- Theme-Switching mit Autocompletion
-- Transparenz-Toggle über Base46
-- Theme-Toggle zwischen konfigurierten Themes
-- Deutsche Lokalisierung
-- Status-Übersicht
-
-## 🤝 Contributing
-
-Verbesserungsvorschläge und Bug-Reports sind willkommen!
-
-## 📄 Lizenz
-
-MIT License - nutze es wie du möchtest!
-
-## 💡 Tipps
-
-### Schneller Theme-Wechsel während der Arbeit
-
-Nutze die `:Theme` Shortcut-Command:
-
-```vim
-:Theme <Tab>            " Zeige alle Themes
-:Theme tokyo<Tab>       " Autocomplete zu tokyonight
-```
-
-### Workflow-Empfehlung
-
-1. Teste verschiedene Themes mit `:UI theme <name>`
-2. Wähle deine 2-3 Favoriten aus
-3. Konfiguriere sie in `theme_toggle`
-4. Nutze `:UI toggle` für schnelles Wechseln
-
-### Performance
-
-- Theme-Wechsel sind instant (keine Neustart nötig)
-- Transparenz-Toggle ist ebenfalls sofort aktiv
-- Keine Performance-Einbußen durch das Modul
-
-## 🎯 Zukünftige Features
-
-- [ ] Theme-Previews in Floating Window
-- [ ] Theme-Export/Import
-- [ ] Custom Theme-Collections
-- [ ] Theme-Scheduler (basierend auf Tageszeit)
-
----
+1. `require("ui").setup({ all = true })` (or `{ usrcmds = true }`) must have
+   run.
+2. Tab-complete in command mode, after `:UI theme ` (with the trailing
+   space).

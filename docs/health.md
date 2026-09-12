@@ -4,10 +4,10 @@
 :checkhealth ui
 ```
 
-Five sections. As of roadmap step 5, only one thing in the first is fatal:
+Five sections. As of roadmap step 6, only one thing in the first is fatal:
 `lib.nvim` missing. NvChad's presence is information now, not a dependency
 check — steps 3-5 replaced everything this plugin's own code used to read
-out of it, one gap at a time.
+out of it, one gap at a time, and step 6 did the same for base46.
 
 ---
 
@@ -19,11 +19,11 @@ out of it, one gap at a time.
 | ✅ `all 10 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
 | ❌ `lib.nvim is not on the runtimepath` | Fatal — install `StefanBartl/lib.nvim`. Only failure that stops the report |
 | ℹ️ `NvChad is present` / `NvChad is not present` | Neither is an error. The host this plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer (step 7, not done) — this line just says whether that path exists on this machine, not whether this plugin's own code needs it (it doesn't) |
-| ✅ `base46` / `base46.themes` missing → ⚠️ | The one genuine soft dependency left: theme loading and the transparency toggle (step 6, undecided). Guarded at every call site — degrades, does not throw |
 
-`nvconfig`, `nvchad.stl.utils` and `nvchad.tabufline` are gone from this
-section entirely — not reclassified as soft, removed, because this plugin's
-own code no longer reads any of them under any name (steps 3-5).
+`nvconfig`, `nvchad.stl.utils`, `nvchad.tabufline`, `base46` and
+`base46.themes` are gone from this section entirely — not reclassified as
+soft, removed, because this plugin's own code no longer reads any of them
+under any name (steps 3-6).
 
 ---
 
@@ -31,11 +31,11 @@ own code no longer reads any of them under any name (steps 3-5).
 
 | Line | Means |
 | --- | --- |
-| ✅ `theme "x", transparency false, toggle pair a / b` | The shipped theme block |
+| ✅ `active colorscheme "x", transparency default false, toggle pair a / b` | `vim.g.colors_name` plus the shipped theme block |
 | ℹ️ `statusline variant: x` | Which of the six layouts is assembled |
 | ✅ `variant module ui.config.statusline.x resolves` | The variant name is a module path at heart; a typo in it degrades to `normal` with a notification nobody sees twice |
 | ❌ `variant "x" does not resolve` | It will silently fall back to `normal`. This line is why the check exists |
-| ✅ `ui.config.setup() assembles` | The table this plugin's own `ui.statusline.render` (or, until step 7, NvChad through `chadrc`) reads was produced, without touching a NvChad symbol |
+| ✅ `ui.config.setup() assembles` | The table this plugin's own `ui.statusline.render` (or, until step 7, NvChad through `chadrc`) reads was produced, without touching a NvChad or base46 symbol |
 
 ---
 

@@ -42,16 +42,21 @@ useful, and a config that already has its own buffer keymaps wants only
 
 ## `ui.config.setup()`
 
-Called from `chadrc.lua` in the host config, whose return value NvChad reads:
+Called from `chadrc.lua` in the reference host, which today still routes
+through NvChad (roadmap step 7 has not rewired it). NvChad's own `chadrc`
+mechanism never read a `theme` key — it read `base46`, for its own theme
+engine. Since step 6 removed base46, this example is the plugin's own API
+contract, not something NvChad understands; the actual host wiring for a
+NvChad-free host is step 7, not yet written:
 
 ```lua
--- lua/chadrc.lua
+-- lua/chadrc.lua (illustrative -- see note above)
 local ok, config = pcall(function()
   return require("ui.config").setup()
 end)
 
 return {
-  base46 = config.base46,
+  theme = config.theme,
   ui = { statusline = config.ui.statusline },
 }
 ```
@@ -60,7 +65,7 @@ It takes optional overrides for the theme block:
 
 ```lua
 require("ui.config").setup({
-  base46 = { theme = "rosepine", transparency = true },
+  theme = { theme_toggle = { "rosepine", "tokyonight" }, transparency = true },
 })
 ```
 
@@ -100,9 +105,9 @@ everything shipped: the theme block, the statusline variant, and the module
 flags `ui.setup` walks.
 
 These tables are **not** live configuration — nothing mutates them at
-runtime. `:UI theme` writes through base46 and NvChad's
-own state, not through here, which is also why there is no `reset` to build on
-top of them.
+runtime. `:UI theme` calls `:colorscheme` and reads `vim.g.colors_name` back,
+not through here, which is also why there is no `reset` to build on top of
+them.
 
 ---
 
@@ -112,4 +117,4 @@ top of them.
 | --- | --- |
 | Which segments a variant contains | A variant *is* its segment list. Making it composable is the difference between shipping presets and shipping a framework, and this ships presets |
 | The `:UI` command name | One verb is the project convention. A configurable name would break `:checkhealth`, the bindings docs and every reference at once |
-| The theme list | It is whatever base46 has installed, read live so a newly installed theme is offered without a restart |
+| The theme list | It is whatever colorscheme Neovim can see (`getcompletion("", "color")`), read live so a newly installed one is offered without a restart |

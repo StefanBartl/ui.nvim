@@ -51,7 +51,7 @@ local function get_gen_block()
 end
 
 return {
-  base46 = require("ui.config.base46"),
+  theme = require("ui.config.theme"),
   ui = {
     statusline = {
       theme = "default",

@@ -1,181 +1,98 @@
 # ui.nvim Configuration System
 
-Zentrales Konfigurationssystem für NvChad mit flexibler Statusline-Auswahl.
+Central configuration loader with statusline variant selection.
 
 ## Table of content
 
 - [ui.nvim Configuration System](#uinvim-configuration-system)
-  - [Struktur](#struktur)
-  - [Verwendung](#verwendung)
-    - [1. Statusline-Variante auswählen](#1-statusline-variante-auswhlen)
-    - [2. Base46-Settings anpassen](#2-base46-settings-anpassen)
-    - [3. chadrc.lua bleibt minimal](#3-chadrclua-bleibt-minimal)
-  - [Statusline-Varianten](#statusline-varianten)
-    - [normal](#normal)
-    - [base](#base)
-    - [lspbased](#lspbased)
-    - [custom](#custom)
-  - [Eigene Variante erstellen](#eigene-variante-erstellen)
+  - [Structure](#structure)
+  - [Usage](#usage)
+    - [1. Pick a statusline variant](#1-pick-a-statusline-variant)
+    - [2. Adjust theme settings](#2-adjust-theme-settings)
+    - [3. Host wiring](#3-host-wiring)
+  - [Statusline variants](#statusline-variants)
+  - [Writing your own variant](#writing-your-own-variant)
   - [API](#api)
-    - [ui.config.setup(user_opts?)](#uiconfigsetupuser_opts)
-    - [ui.config.get_variant()](#uiconfigget_variant)
-  - [Ablauf](#ablauf)
-  - [Migration](#migration)
-    - [Von alter chadrc.lua](#von-alter-chadrclua)
+  - [Assembly order](#assembly-order)
   - [Troubleshooting](#troubleshooting)
-    - [Statusline lädt nicht](#statusline-ldt-nicht)
-    - [Base46-Config wird ignoriert](#base46-config-wird-ignoriert)
-    - [Module fehlen](#module-fehlen)
-  - [Best Practices](#best-practices)
-    - [✅ DO](#do)
-    - [❌ DON'T](#dont)
-  - [Beispiele](#beispiele)
-    - [Minimale Config](#minimale-config)
-    - [Mit User-Overrides](#mit-user-overrides)
-    - [Custom Statusline](#custom-statusline)
-  - [Changelog](#changelog)
-    - [v1.0.0](#v100)
+  - [Examples](#examples)
 
 ---
 
-## Struktur
+## Structure
 
 ```
 lua/ui/config/
-├── init.lua              # Zentraler Config-Loader
-├── base46.lua            # Base46-Theme-Config (zentral)
-├── chadrc.lua            # Legacy chadrc-Kompatibilität (optional)
+├── init.lua              # Central config loader, M.setup()
+├── DEFAULTS.lua          # Everything this plugin ships as a default (NEW-07)
+├── theme.lua             # Transparency default + the :UI toggle pair
 └── statusline/
-    ├── normal.lua        # Default NvChad
-    ├── base.lua          # Minimal custom
+    ├── normal.lua        # NvChad's own statusline, unmodified
+    ├── base.lua          # Minimal: cursor, cwd, progress
     ├── lspbased.lua      # LSP-aware breadcrumbs
-    └── custom.lua        # Legacy custom breadcrumbs
+    ├── custom.lua        # Legacy custom breadcrumb implementation
+    ├── custom_light.lua  # "custom" assembled through a merge-based setup()
+    └── custom_minimal.lua # "custom" built on NvChad's gen_block pattern
 ```
 
-## Verwendung
+Note: theme *switching* (`:UI theme`/`:UI toggle`) lives under
+`ui.bindings.usrcmds.themes`, not here — this directory only assembles the
+statusline/theme *configuration table*, it does not act on it. See
+`lua/ui/bindings/usrcmds/themes/README.md` for that half.
 
-### 1. Statusline-Variante auswählen
+## Usage
+
+### 1. Pick a statusline variant
 
 In `lua/ui/config/init.lua`:
 
 ```lua
----@type "normal"|"base"|"lspbased"|"custom"
-M.STATUSLINE_VARIANT = "lspbased"  -- Hier ändern!
+---@type Ui.StatuslineVariant
+M.STATUSLINE_VARIANT = "lspbased"  -- change this
 ```
 
-### 2. Base46-Settings anpassen
+A setup-time choice, not a runtime one: this is read once when
+`ui.config.setup()` runs.
 
-In `lua/ui/config/base46.lua`:
+### 2. Adjust theme settings
+
+In `lua/ui/config/theme.lua`:
 
 ```lua
 return {
   transparency = false,
-  theme_toggle = { "vim_default", "rosepine" },
-  theme = "tokyonight",
+  theme_toggle = { "default", "tokyonight" },
 }
 ```
 
-**Nirgendwo anders!** Diese Datei ist die einzige Quelle für Base46-Config.
+This is *not* "which colorscheme to boot into" — this plugin does not apply a
+startup colorscheme. It is only what `:UI toggle` and `:UI transparency` read
+as their defaults. Picking a starting colorscheme is the host's own
+`init.lua`, the same as any Neovim config (`vim.cmd.colorscheme("name")`).
 
-### 3. chadrc.lua bleibt minimal
+### 3. Host wiring
 
 ```lua
+-- Currently still routed through NvChad's chadrc.lua (roadmap step 7 has not
+-- rewired the host yet):
 return require("ui.config").setup()
 ```
 
-Keine manuelle Base46-Konfiguration mehr in chadrc.lua!
+## Statusline variants
 
-## Statusline-Varianten
+| Variant | What it is |
+| --- | --- |
+| `normal` | NvChad's own statusline, unmodified |
+| `base` | Minimal: cursor, cwd, progress |
+| `lspbased` | LSP DocumentSymbols-based breadcrumbs, Treesitter fallback, mode-band-colored devicons and diagnostics |
+| `custom` | The older custom breadcrumb implementation |
+| `custom_light` | `custom`, assembled through a merge-based `setup()` |
+| `custom_minimal` | `custom`, built on NvChad's `gen_block` pattern |
 
-### normal
-
-Default NvChad Statusline ohne Anpassungen.
-
-```lua
-M.STATUSLINE_VARIANT = "normal"
-```
-
-**Features:**
-- Standard NvChad Order
-- Standard NvChad Modules
-- Keine Custom-Logik
-
----
-
-### base
-
-Minimale Custom-Statusline mit grundlegenden Features.
+## Writing your own variant
 
 ```lua
-M.STATUSLINE_VARIANT = "base"
-```
-
-**Features:**
-- Custom Cursor mit Row-Progress
-- CWD-Anzeige
-- Standard Diagnostics/LSP
-
-**Order:**
-```lua
-{ "mode", "git", "%=", "cwd", "%=", "diagnostics", "lsp", "cursor", "progress" }
-```
-
----
-
-### lspbased
-
-LSP-aware Statusline mit intelligenten Breadcrumbs.
-
-```lua
-M.STATUSLINE_VARIANT = "lspbased"
-```
-
-**Features:**
-- LSP DocumentSymbols-basierte Breadcrumbs
-- Treesitter Fallback
-- Path-Kompression mit Component-Awareness
-- Devicon-Integration mit Mode-Band-Coloring
-- Cursor Progress (konfigurierbarer Mode)
-
-**Order:**
-```lua
-{ "mode", "git", "%=", "breadcrumbs", "%=", "diagnostics", "lsp", "cursor", "progress", "cwd" }
-```
-
-**Module:**
-- `breadcrumbs`: LSP-first → Treesitter fallback
-- `diagnostics`: Re-wrapped mit Mode-Band
-- `lsp`: Re-wrapped mit Mode-Band
-- `cursor`: Mit Progress-Support
-- `progress`: Leer (in cursor integriert)
-
----
-
-### custom
-
-Deine Legacy Custom-Breadcrumbs-Implementation.
-
-```lua
-M.STATUSLINE_VARIANT = "custom"
-```
-
-**Features:**
-- Custom Breadcrumbs-Rendering
-- Legacy-Kompatibilität
-
-**Order:**
-```lua
-{ "mode", "git", "%=", "custom_breadcrumbs", "%=", "diagnostics", "lsp", "cursor" }
-```
-
----
-
-## Eigene Variante erstellen
-
-1. Neue Datei erstellen:
-
-```lua
--- lua/ui/config/statusline/myvariante.lua
+-- lua/ui/config/statusline/myvariant.lua
 local M = {}
 
 M.ui = {
@@ -189,240 +106,84 @@ M.ui = {
   },
 }
 
--- Optional: Setup-Funktion
-function M.setup(config)
-  -- Initialisierung
-end
+---@param config table
+function M.setup(config) end -- optional
 
 return M
 ```
 
-2. In `init.lua` registrieren:
-
-```lua
-M.STATUSLINE_VARIANT = "myvariante"
-```
-
----
+Then point `M.STATUSLINE_VARIANT` at `"myvariant"` in `init.lua`.
 
 ## API
 
-### ui.config.setup(user_opts?)
+### `ui.config.setup(user_opts?)`
 
-Lädt und assembliert die komplette Config.
+Assembles the complete config.
 
 ```lua
 local config = require("ui.config").setup({
-  base46 = {
-    theme = "onedark",  -- Optional: Override
-  }
+  theme = { theme_toggle = { "default", "onedark" } }, -- optional override
 })
 ```
 
-**Returns:** `table` – Komplette Config mit `base46` und `ui`
+Returns a table with `theme` and `ui` keys.
 
----
+### `ui.config.get_variant()`
 
-### ui.config.get_variant()
+Returns `M.STATUSLINE_VARIANT` as a string.
 
-Gibt die aktuelle Statusline-Variante zurück.
+### `ui.config.last()`
 
-```lua
-local variant = require("ui.config").get_variant()
--- "lspbased"
-```
+Returns the table `M.setup()` last returned, or `nil` before the first call.
+`ui.bindings.usrcmds.themes` reads this for the `:UI toggle` pair, so a
+`theme` override passed to `M.setup()` reaches that command.
 
-**Returns:** `string`
+## Assembly order
 
----
-
-## Ablauf
-
-1. **ui.nvim Setup**
-   ```lua
-   require("ui").setup({ all = true })
-   ```
-
-2. **Config Load**
-   ```lua
-   require("ui.config").setup()
-   ```
-
-3. **Base46 Load**
-   - Lädt `ui.config.base46`
-   - Merged mit optionalen User-Overrides
-
-4. **Statusline Load**
-   - Lädt gewählte Variante (z.B. `statusline.lspbased`)
-   - Ruft `setup()` auf wenn vorhanden
-
-5. **Assembly**
-   - Kombiniert Base46 + UI-Config
-   - Returned finale Config
-
----
-
-## Migration
-
-### Von alter chadrc.lua
-
-**Alt:**
-```lua
-local M = {}
-
-M.base46 = {
-  theme = "tokyonight",
-  transparency = false,
-}
-
-M.ui = {
-  statusline = {
-    -- custom order/modules
-  }
-}
-
-return M
-```
-
-**Neu:**
-
-1. `base46.lua` erstellen:
-```lua
-return {
-  theme = "tokyonight",
-  transparency = false,
-}
-```
-
-2. Custom Statusline nach `statusline/custom.lua` verschieben
-
-3. `chadrc.lua` vereinfachen:
-```lua
-return require("ui.config").setup()
-```
-
-4. Variante wählen in `config/init.lua`:
-```lua
-M.STATUSLINE_VARIANT = "custom"
-```
-
----
+1. `require("ui").setup({ all = true })` — turns on this plugin's submodules.
+2. `require("ui.config").setup()` — loads `ui.config.theme`, merges any
+   `user_opts.theme` override.
+3. Loads the selected statusline variant, runs its `setup()` if present.
+4. Removes diagnostic virtual-text backgrounds (`ui.highlights.diagnostics`).
+5. Caches the result (`ui.config.last()`) and returns it.
 
 ## Troubleshooting
 
-### Statusline lädt nicht
+### Statusline variant fails to load
 
-**Fehler:**
 ```
 [ui.config] Failed to load statusline variant 'xyz'
 ```
 
-**Lösung:**
-1. Prüfe ob `lua/ui/config/statusline/xyz.lua` existiert
-2. Prüfe Lua-Syntax in der Datei
-3. Schau in `:messages` für Details
+1. Check `lua/ui/config/statusline/xyz.lua` exists.
+2. Check its Lua syntax.
+3. `:checkhealth ui` reports whether the named variant module resolves.
 
----
+### Modules missing
 
-### Base46-Config wird ignoriert
-
-**Problem:**
-Theme-Änderungen in `base46.lua` haben keine Wirkung.
-
-**Lösung:**
-1. Prüfe ob `chadrc.lua` noch alte `M.base46 = {}` hat
-2. Lösche Cache: `:lua vim.fn.delete(vim.fn.stdpath('data')..'/base46', 'rf')`
-3. Neovim neustarten
-
----
-
-### Module fehlen
-
-**Fehler:**
 ```
 attempt to call field 'breadcrumbs' (a nil value)
 ```
 
-**Lösung:**
-1. Prüfe ob `modules = {}` Table existiert
-2. Prüfe ob `setup()` Funktion Module registriert
-3. Bei `lspbased`: Prüfe ob `chadrc.register_statusline_modules()` läuft
+1. Check the variant's `modules = {}` table.
+2. Check its `setup()` actually registers what `order` names.
 
----
+## Examples
 
-## Best Practices
-
-### ✅ DO
-
-- Base46-Config nur in `base46.lua` ändern
-- Statusline-Variante in `init.lua` wählen
-- Custom-Logik in eigene Statusline-Variante auslagern
-- `setup()` Funktion für komplexe Initialisierung
-
-### ❌ DON'T
-
-- Base46-Config in `chadrc.lua` duplizieren
-- Statusline-Module direkt in `chadrc.lua` definieren
-- Hardcoded Varianten-Checks in `chadrc.lua`
-- Globale States ohne Modul-Encapsulation
-
----
-
-## Beispiele
-
-### Minimale Config
+### Minimal
 
 ```lua
 -- config/init.lua
 M.STATUSLINE_VARIANT = "normal"
 
--- config/base46.lua
-return {
-  theme = "onedark",
-  transparency = true,
-}
-
--- chadrc.lua
-return require("ui.config").setup()
+-- config/theme.lua
+return { transparency = false, theme_toggle = { "default", "tokyonight" } }
 ```
 
----
-
-### Mit User-Overrides
+### With overrides
 
 ```lua
--- chadrc.lua
-return require("ui.config").setup({
-  base46 = {
-    theme = "gruvbox",  -- Override default
-  }
+require("ui.config").setup({
+  theme = { theme_toggle = { "default", "gruvbox" } },
 })
 ```
-
----
-
-### Custom Statusline
-
-```lua
--- config/statusline/minimal.lua
-local M = {}
-
-M.ui = {
-  statusline = {
-    order = { "mode", "%=", "cursor" },
-    modules = {
-      cursor = function()
-        return " %l:%c "
-      end,
-    },
-  },
-}
-
-return M
-
--- config/init.lua
-M.STATUSLINE_VARIANT = "minimal"
-```
-
----
-

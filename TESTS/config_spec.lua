@@ -14,15 +14,16 @@ describe("ui.config.DEFAULTS", function()
   local D = require("ui.config.DEFAULTS")
 
   it("carries the three groups", function()
-    assert.equals("table", type(D.base46))
+    assert.equals("table", type(D.theme))
     assert.equals("table", type(D.statusline))
     assert.equals("table", type(D.modules))
   end)
 
-  it("names a theme, a transparency flag and a toggle pair", function()
-    assert.is_string(D.base46.theme)
-    assert.is_boolean(D.base46.transparency)
-    assert.equals(2, #D.base46.theme_toggle)
+  it("names a transparency flag and a toggle pair", function()
+    -- No `theme` field any more (step 6): nothing here applies a startup
+    -- colorscheme, so there is nothing for such a field to feed.
+    assert.is_boolean(D.theme.transparency)
+    assert.equals(2, #D.theme.theme_toggle)
   end)
 
   it("agrees with the variant the code actually reads", function()
@@ -49,14 +50,19 @@ describe("ui.config", function()
     assert.equals("table", type(assembled))
   end)
 
-  it("accepts base46 overrides", function()
-    local assembled = cfg.setup({ base46 = { theme = "some_other_theme" } })
-    assert.equals("some_other_theme", assembled.base46.theme)
+  it("accepts theme overrides", function()
+    local assembled = cfg.setup({ theme = { theme_toggle = { "a", "b" } } })
+    assert.same({ "a", "b" }, assembled.theme.theme_toggle)
   end)
 
   it("does not let an override leak into the shipped defaults", function()
-    cfg.setup({ base46 = { theme = "leaked" } })
-    assert.is_not.equals("leaked", require("ui.config.DEFAULTS").base46.theme)
+    cfg.setup({ theme = { theme_toggle = { "leaked1", "leaked2" } } })
+    assert.is_not.same({ "leaked1", "leaked2" }, require("ui.config.DEFAULTS").theme.theme_toggle)
+  end)
+
+  it("records the assembled config for ui.config.last()", function()
+    local assembled = cfg.setup({ theme = { theme_toggle = { "x", "y" } } })
+    assert.same(assembled, cfg.last())
   end)
 
   it("falls back to 'normal' for an unknown variant instead of throwing", function()

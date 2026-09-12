@@ -35,24 +35,27 @@ tabline and theme assembly are frame.
     lib.nvim    required
     NvChad      not required by this plugin's own code (v2.5, if present)
 
-As of roadmap step 5, this plugin's own code no longer needs NvChad to load,
-assemble, render, OR move buffers and tabs: `ui.statusline.render` is the
-`vim.o.statusline` / `generate()` walk that used to be entirely
-`nvchad.init` + `nvchad.stl.utils.generate()` (step 4; step 3 had already
-ported the primitives and separator reads that walk itself uses), and
-`ui.bindings.keymaps.tabufline.state` is the `vim.t.bufs` bookkeeping and
-`close_buffer()`/`move_buf()` that used to be entirely
-`nvchad/tabufline/lazyload.lua` + `nvchad.tabufline` (step 5). Verified
-headless, NvChad absent from the runtimepath: all six statusline variants
-assemble and render end to end, and buffer/tab navigation works against real
-buffers and tabs.
+As of roadmap step 6, this plugin's own code no longer needs NvChad OR base46
+to load, assemble, render, move buffers and tabs, or switch themes:
+`ui.statusline.render` is the `vim.o.statusline` / `generate()` walk that
+used to be entirely `nvchad.init` + `nvchad.stl.utils.generate()` (step 4;
+step 3 had already ported the primitives and separator reads that walk
+itself uses), `ui.bindings.keymaps.tabufline.state` is the `vim.t.bufs`
+bookkeeping and `close_buffer()`/`move_buf()` that used to be entirely
+`nvchad/tabufline/lazyload.lua` + `nvchad.tabufline` (step 5), and
+`ui.theme.palette`/`ui.theme.transparency`/`ui.bindings.usrcmds.themes`
+replace base46 (step 6): accent colors come from the active colorscheme's
+own highlight groups, transparency is this plugin's own toggle, and theme
+switching is a real `:colorscheme` call. Verified headless, with neither
+NvChad nor base46 on the runtimepath: all six statusline variants assemble
+and render end to end, buffer/tab navigation works against real buffers and
+tabs, and theme/transparency switching works against a real colorscheme.
 
 What is NOT true yet: that a real install of this plugin renders without
 NvChad. Nothing outside this plugin's own tests calls
 `ui.statusline.render.enable()` -- the reference host this plugin was
 extracted from still wires `chadrc.lua` to NvChad's own renderer, and
-rewiring that host is roadmap step 7, not done. `base46`/`base46.themes`
-remain a genuine soft dependency for the theme (step 6).
+rewiring that host is roadmap step 7, not done.
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 `neotest`, `casedesk.nvim`.
@@ -63,14 +66,17 @@ Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 Two entry points, at different times.
 
 `ui.config.setup()` runs while NvChad boots, through `chadrc`, and answers
-"which theme, which layout": >lua
-    -- lua/chadrc.lua
+"which theme, which layout". NvChad's own `chadrc` never read a `theme` key
+(it read `base46`, for its own theme engine, gone since step 6) -- the
+example below is this plugin's own API contract; a NvChad-free host's actual
+wiring is roadmap step 7, not yet written: >lua
+    -- lua/chadrc.lua (illustrative)
     local ok, config = pcall(function()
       return require("ui.config").setup()
     end)
 
     return {
-      base46 = config.base46,
+      theme = config.theme,
       ui = { statusline = config.ui.statusline },
     }
 <
@@ -88,7 +94,7 @@ flags are explicit: >lua
 
 Theme overrides go to `ui.config.setup`, not here: >lua
     require("ui.config").setup({
-      base46 = { theme = "rosepine", transparency = true },
+      theme = { theme_toggle = { "rosepine", "tokyonight" }, transparency = true },
     })
 <
 ==============================================================================
@@ -96,14 +102,14 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 
                                                                        *:UI*
 :UI theme {name}
-    Switch to a theme and reload every highlight. {name} completes over the
-    installed base46 themes, read at the moment <Tab> is pressed.
+    Switch to a colorscheme (`:colorscheme {name}`). {name} completes over
+    every colorscheme Neovim can see, read at the moment <Tab> is pressed.
 
 :UI themes
     List available themes, marking the active one.
 
 :UI toggle
-    Swap between the two themes in `base46.theme_toggle`.
+    Swap between the two themes in `theme.theme_toggle`.
 
 :UI transparency
     Toggle background transparency.
@@ -163,9 +169,9 @@ resolves, because that fallback is otherwise quiet.
     :checkhealth ui
 <
 Five sections: dependencies (lib.nvim required; NvChad presence reported as
-information, not a dependency check, since step 4; `base46`/`base46.themes`
-still genuinely soft; `nvchad.tabufline` gone from this list entirely, step
-5), the assembled configuration, this plugin's own statusline render
+information, not a dependency check, since step 4; `nvchad.tabufline` gone
+from this list entirely at step 5, `base46`/`base46.themes` gone the same way
+at step 6), the assembled configuration, this plugin's own statusline render
 entrypoint (resolves? renders the "default" theme's fallback modules without
 NvChad?), which submodules `setup()` turned on (buffer/tab navigation
 included, under `keymaps`), and the soft dependencies each statusline

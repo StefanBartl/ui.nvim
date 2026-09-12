@@ -4,9 +4,10 @@
 --- Two groups, and they are read at different times, which is why they are
 --- named apart rather than merged into one flat table:
 ---
----   * `base46` — theme name, transparency, and the pair `:UI toggle` swaps
----     between. Read by `ui.config.setup`, whose return value NvChad consumes
----     through `chadrc`.
+---   * `theme` — transparency default and the pair `:UI toggle` swaps
+---     between. Read by `ui.config.setup`, and by `ui.bindings.usrcmds.themes`
+---     directly for the toggle pair (via `ui.config.last()` when a host
+---     override is active, this table otherwise).
 ---   * `statusline` — which of the six layouts is assembled. Read on the same
 ---     path, one step later.
 ---
@@ -15,13 +16,13 @@
 --- answer whether you read the code or the defaults.
 ---
 --- These tables are **not** the live configuration, unlike the sibling plugin's
---- registry: nothing mutates them at runtime. `:UI theme` writes through
---- base46 and NvChad's own state, not through here — which is also why there
---- is no `reset` to build on top.
+--- registry: nothing mutates them at runtime. `:UI theme` calls `:colorscheme`
+--- and reads `vim.g.colors_name` back, not through here — which is also why
+--- there is no `reset` to build on top.
 
 ---@type Ui.Defaults
 return {
-  base46 = require("ui.config.base46"),
+  theme = require("ui.config.theme"),
 
   statusline = {
     -- The variant `ui.config` assembles. `ui.config.STATUSLINE_VARIANT` is

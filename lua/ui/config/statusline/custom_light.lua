@@ -35,7 +35,7 @@ function M.setup(user_config)
   user_config = user_config or {}
 
   -- Get base defaults
-  local BASE_CFG = require("ui.config.base46")
+  local BASE_CFG = require("ui.config.theme")
 
   -- Deep merge: user config overrides base defaults
   local config = vim.tbl_deep_extend("force", BASE_CFG, user_config)
@@ -43,7 +43,7 @@ function M.setup(user_config)
   -- Ensure UI structure exists
   config.ui = config.ui or {}
   config.ui.statusline = config.ui.statusline or {}
-  config.base46 = require("ui.config.base46")
+  config.theme = require("ui.config.theme")
 
   -- Register statusline modules
   M.register_statusline_modules(config.ui.statusline)

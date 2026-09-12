@@ -3,14 +3,18 @@
 > code used to read from NvChad, step 4 (2026-09-08) gave it a statusline
 > render entrypoint of its own — `ui.statusline.render`, the
 > `vim.o.statusline` / `generate()` walk that used to be entirely
-> `nvchad.init` + `nvchad.stl.utils.generate()` — and step 5 (2026-09-08)
+> `nvchad.init` + `nvchad.stl.utils.generate()` — step 5 (2026-09-08)
 > replaced `nvchad.tabufline`: `vim.t.bufs` bookkeeping and buffer/tab
-> movement are `ui.bindings.keymaps.tabufline.state`'s own code now. Every
-> module, every one of the six shipped statusline layouts end to end, and
-> buffer/tab navigation now work with NvChad entirely absent from the
-> runtimepath (verified headless). Only `base46` remains — the theme
-> palette, step 6 — and the *host* this plugin was extracted from still
-> wires `chadrc.lua` to NvChad's own renderer (step 7, not done).
+> movement are `ui.bindings.keymaps.tabufline.state`'s own code now. Step 6
+> (2026-09-12) replaced `base46`: accent colors come from the active
+> colorscheme's own highlight groups (`ui.theme.palette`), transparency is
+> this plugin's own toggle (`ui.theme.transparency`), and theme switching is
+> a real `:colorscheme` call, no bundled theme engine at all. Every module,
+> every one of the six shipped statusline layouts end to end, buffer/tab
+> navigation, and theme/transparency handling now work with **neither NvChad
+> nor base46** on the runtimepath (verified headless). Only the *host* this
+> plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer
+> (step 7, not done) — that is the one remaining piece.
 
 # ui.nvim
 
@@ -85,7 +89,7 @@ see [The coupling to NvChad](#the-coupling-to-nvchad) for exactly how much.
 | --- | --- |
 | Neovim | **0.10+** |
 | [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
-| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (steps 4-5) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
+| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (steps 4-6) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
 
 Optional, each detected at runtime and blanking only its own segment:
 `nvim-web-devicons` (file icons), `neotest` (test-runner segment),
@@ -130,7 +134,9 @@ Step 3 (2026-09-08) ported `nvchad.stl.utils` into this plugin's own
 `separator_style` literal instead of reading `nvconfig`. Neither symbol is
 required by this plugin's code any more, and every statusline variant module
 loads and assembles with NvChad entirely absent from the runtimepath.
-`base46` and `base46.themes` are unchanged — step 6, the palette question.
+`base46`/`base46.themes` are gone too as of step 6 — see below. This table
+now describes history, not a current dependency: none of these five symbols
+appear in this plugin's own code any more, under any name.
 
 > **Step 3 alone did not mean this plugin rendered without NvChad, and the
 > "five symbols, 32 call sites" count above was never the whole coupling.**
@@ -179,6 +185,30 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 > `require("x")` with a single regex and never matched `pcall(require, "x")`,
 > which is the form most of this code uses — precisely because most of these
 > calls are already guarded. Three symbols were invisible to it.
+>
+> **Step 6 (2026-09-12) replaced `base46`, the last symbol on the list, and
+> decided the open palette question in the process.** Of the three options
+> weighed (depend on a colorscheme library, read the active colorscheme's own
+> highlight groups, ship a palette), the second won on every axis that
+> mattered — dependencies, security surface, and universality all point the
+> same way once diagnostic highlight groups are the anchor, the same
+> technique lualine's "auto" theme already relies on: `DiagnosticError` /
+> `DiagnosticHint` / `DiagnosticInfo` / `DiagnosticOk` / `Comment` are close
+> to universally defined, because built-in LSP diagnostics need them. The
+> third option survives only as `ui.theme.palette`'s fallback layer, for a
+> colorscheme that leaves one of those groups undefined.
+>
+> The only place this plugin ever read a *raw color value* out of base46 was
+> `filetree_cwd_mode`'s cwd-mode badge (`base46.get_theme_tb("base_30")`) —
+> everything else base46 touched was theme *switching*, not color data.
+> Switching is now a real `pcall(vim.cmd.colorscheme, name)` (`ui.bindings
+> .usrcmds.themes`), and the theme list is `getcompletion("", "color")` —
+> every colorscheme Neovim can see, not a fixed ~50-name NvChad set. One
+> deliberate scope cut alongside it: the old code persisted a theme choice by
+> string-replacing a line in `chadrc.lua` on disk. That is gone, on purpose —
+> choosing a startup colorscheme is the host's own `init.lua`, the same as
+> any Neovim config, not something a UI-frame plugin should be rewriting
+> files for.
 
 ---
 
@@ -186,7 +216,7 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 
 | Not | Because |
 | --- | --- |
-| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is an open decision, not yet made |
+| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. Accent colors come from the active colorscheme's own highlight groups (`ui.theme.palette`, step 6) |
 | A distribution | No plugin list, no opinionated bundle. One UI layer |
 | A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from six layouts that are already in daily use |
 | Where content highlighting goes | Out of scope here — see [Scope](#scope) |
@@ -195,8 +225,9 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 
 ## Status
 
-Alpha. The code is here and runs, and steps 3-5 of the decoupling are done —
-the theme palette (step 6) and the host wiring (step 7) are not.
+Alpha. The code is here and runs, and steps 3-6 of the decoupling are done —
+only the host wiring (step 7) is not. This plugin's own code needs neither
+NvChad nor base46 any more, for any of statusline, tabline, or theme.
 
 ```vim
 :checkhealth ui

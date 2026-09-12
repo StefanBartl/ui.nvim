@@ -13,23 +13,25 @@
 --- this function on every redraw regardless.
 
 local get_separators = require("ui.statusline.utils.get_separators")
+local palette = require("ui.theme.palette")
 
---- Accent color (a base46 `base_30` key) per cwd_mode name, for the
---- bg-filled capsule look — the same recipe NvChad's own base46 uses for
+--- Semantic accent key (see `ui.theme.palette`) per cwd_mode name, for the
+--- bg-filled capsule look — the same recipe NvChad's own base46 used for
 --- St_NormalMode/St_NormalModeSep (see nvchad-ui's stl/default.lua
---- `genModes_hl`). Deliberately keyed by MODE NAME rather than filetree's
---- `indicator.hl` group: the mode name is stable regardless of what hl group
---- the user points a mode at, so re-pointing `indicator.hl` in filetree's own
---- config can never silently lose this module's color.
----@type table<string, string>
+--- `genModes_hl`), now derived from the active colorscheme instead of a
+--- bundled theme table (step 6). Deliberately keyed by MODE NAME rather than
+--- filetree's `indicator.hl` group: the mode name is stable regardless of
+--- what hl group the user points a mode at, so re-pointing `indicator.hl` in
+--- filetree's own config can never silently lose this module's color.
+---@type table<string, Ui.Theme.SemanticKey>
 local DEFAULT_COLOR_BY_MODE = {
-  project = "purple",
-  nearest = "pink",
-  lock = "red",
-  manual = "light_grey",
-  tree_leads = "vibrant_green",
+  project = "project",
+  nearest = "nearest",
+  lock = "lock",
+  manual = "manual",
+  tree_leads = "tree_leads",
 }
-local FALLBACK_COLOR = "light_grey"
+local FALLBACK_COLOR = "manual"
 
 --- Badge/separator highlight groups, built lazily per color key and rebuilt
 --- on ColorScheme — there is no persistent bg-filled equivalent of
@@ -38,51 +40,31 @@ local FALLBACK_COLOR = "light_grey"
 ---@type table<string, true>
 local _hl_built = {}
 
----The color the second-stage separator fades into. Reads "ST_EmptySpace"'s
----own `fg` at runtime rather than assuming one hardcoded shade: the active
----statusline preset picks the actual color (grey in NvChad's "default" theme,
----black in "minimal" — see base46's integrations/statusline/*.lua), and this
----way the fade matches whichever one is actually wired up in
----`ui.statusline.theme`, without this module needing to know which.
----@return string? hex
-local function empty_space_fg()
-  local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = "ST_EmptySpace", link = false })
-  if ok and hl.fg then
-    return string.format("#%06x", hl.fg)
-  end
-  return nil
-end
-
----@param color_key string  A `base_30` key, e.g. "red", "purple".
----@return string? group   nil if the active theme doesn't expose base46 (e.g. between colorschemes).
-local function ensure_hl(color_key)
-  local group = "St_Cwd_" .. color_key
-  if _hl_built[group] then
-    return group
-  end
-
-  local ok, base46 = pcall(require, "base46")
-  if not ok then
-    return nil
-  end
-  local colors = base46.get_theme_tb("base_30")
-  local col = colors and colors[color_key]
-  if not col then
-    return nil
-  end
-
-  vim.api.nvim_set_hl(0, group, { fg = colors.black, bg = col, bold = true })
-  vim.api.nvim_set_hl(0, group .. "Sep", { fg = col, bg = empty_space_fg() or colors.grey })
-  _hl_built[group] = true
-  return group
-end
-
 require("lib.nvim.bindings.autocmd").create("ColorScheme", function()
   _hl_built = {}
 end, {
   group = require("lib.nvim.bindings.autocmd").group("UiCwdModeBadgeHl", true),
   desc = "Rebuild the filetree cwd-mode badge highlights for the new theme's palette",
 })
+
+---@param color_key string  A palette semantic key, or a literal "#rrggbb".
+---@return string group
+local function ensure_hl(color_key)
+  local is_hex = color_key:match("^#%x%x%x%x%x%x$") ~= nil
+  local group = "St_Cwd_" .. (is_hex and color_key:sub(2) or color_key)
+  if _hl_built[group] then
+    return group
+  end
+
+  ---@diagnostic disable-next-line: param-type-mismatch -- validated above
+  local accent = is_hex and color_key or palette.accent(color_key)
+  local fg = palette.contrast_fg(accent)
+
+  vim.api.nvim_set_hl(0, group, { fg = fg, bg = accent, bold = true })
+  vim.api.nvim_set_hl(0, group .. "Sep", { fg = accent, bg = palette.statusline_bg() })
+  _hl_built[group] = true
+  return group
+end
 
 ---@param opts { badge_style?: boolean, colors?: table<string, string> }?
 ---  badge_style: bg-filled capsule with a fading separator, like the vim
@@ -128,12 +110,9 @@ return function(opts)
   local color_key = (opts.colors and opts.colors[badge.mode])
     or DEFAULT_COLOR_BY_MODE[badge.mode]
     or FALLBACK_COLOR
+  -- ensure_hl always resolves now (palette.accent has its own fallback hex),
+  -- unlike the old base46 lookup, which returned nil between colorschemes.
   local group = ensure_hl(color_key)
-  if not group then
-    -- Between colorschemes, or a base46-less setup: fall back rather than
-    -- show nothing.
-    return " %#" .. hl .. "#" .. badge.text .. " "
-  end
 
   local sep = get_separators()
 

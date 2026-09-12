@@ -23,7 +23,7 @@ local casedesk = lazy.require("ui.statusline.modules.casedesk")
 local SEPARATOR_STYLE = "round" -- "arrow", "round", "block", "default"
 
 return {
-  base46 = require("ui.config.base46"),
+  theme = require("ui.config.theme"),
   ui = {
     statusline = {
       theme = "minimal", -- or "vscode_colored"

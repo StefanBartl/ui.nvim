@@ -1,10 +1,18 @@
 ---@module 'ui.config'
 --- Central configuration loader with statusline variant selection.
---- Loads base46 config once and applies selected statusline variant.
+--- Loads theme config once and applies selected statusline variant.
 
 local notify = require("lib.nvim.notify").create("[ui.config]")
 
 local M = {}
+
+--- The most recently assembled config, or nil before the first `M.setup()`
+--- call. `ui.bindings.usrcmds.themes` reads this (falling back to
+--- `ui.config.DEFAULTS`) for the `:UI toggle` pair, so a host override passed
+--- to `M.setup({ theme = { theme_toggle = {...} } })` reaches that command
+--- without step 7's host rewiring having to exist first.
+---@type table?
+local _last_config = nil
 
 -- ============================================================================
 -- STATUSLINE VARIANT SELECTION
@@ -60,17 +68,17 @@ local function load_statusline_config()
 end
 
 ---Setup complete configuration
----@param user_opts? table Optional user overrides for base46
+---@param user_opts? table Optional user overrides for theme
 ---@return table
 function M.setup(user_opts)
   user_opts = user_opts or {}
 
-  -- 1. Load base46 config (centralized)
-  local base46_config = require("ui.config.base46")
+  -- 1. Load theme config (centralized)
+  local theme_config = require("ui.config.theme")
 
-  -- 2. Allow user overrides for base46
-  if user_opts.base46 then
-    base46_config = vim.tbl_deep_extend("force", base46_config, user_opts.base46)
+  -- 2. Allow user overrides for theme
+  if user_opts.theme then
+    theme_config = vim.tbl_deep_extend("force", theme_config, user_opts.theme)
   end
 
   -- 3. Load selected statusline variant
@@ -78,7 +86,7 @@ function M.setup(user_opts)
 
   -- 4. Assemble final config
   local config = {
-    base46 = base46_config,
+    theme = theme_config,
     ui = statusline_config.ui or {},
   }
 
@@ -99,6 +107,7 @@ function M.setup(user_opts)
     notify.warn("[config] Diagnostic highlight setup failed: " .. tostring(diag_err))
   end
 
+  _last_config = config
   return config
 end
 
@@ -106,6 +115,12 @@ end
 ---@return string
 function M.get_variant()
   return M.STATUSLINE_VARIANT
+end
+
+---The most recently assembled config, or nil if `M.setup()` has not run yet.
+---@return table?
+function M.last()
+  return _last_config
 end
 
 return M

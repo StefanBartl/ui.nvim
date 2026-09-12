@@ -1,5 +1,5 @@
 ---@module 'ui.bindings.usrcmds'
----Provides :UI usercommand for runtime UI configuration (Base46, editor UI).
+---Provides :UI usercommand for runtime UI configuration (theme, transparency).
 
 local notify = require("lib.nvim.notify").create("[ui.bindings.usrcmds]")
 local usercmd = require("lib.nvim.bindings.usercmd")
@@ -289,7 +289,7 @@ function M.setup()
   usercmd.create("UI", dispatcher, {
     nargs = "*",
     complete = complete,
-    desc = "UI Kontrolle (Base46, Transparenz, Themes)",
+    desc = "UI Kontrolle (Theme, Transparenz)",
   })
 
   -- Optional: Create shorter aliases
