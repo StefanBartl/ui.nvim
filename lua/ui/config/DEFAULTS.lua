@@ -8,8 +8,8 @@
 ---     between. Read by `ui.config.setup`, and by `ui.bindings.usrcmds.themes`
 ---     directly for the toggle pair (via `ui.config.last()` when a host
 ---     override is active, this table otherwise).
----   * `statusline` — which of the six layouts is assembled. Read on the same
----     path, one step later.
+---   * `statusline` — which of the four shipped presets is assembled. Read
+---     on the same path, one step later.
 ---
 --- `modules` is the on/off list `ui.setup(opts)` walks. It is here rather than
 --- inline in `init.lua` so that "what does this plugin turn on" has the same
@@ -29,7 +29,7 @@ return {
     -- still the switch the code reads; this records the shipped value so a
     -- reader does not have to find that assignment to learn it.
     ---@type Ui.StatuslineVariant
-    variant = "normal",
+    variant = "default",
   },
 
   --- What `ui.setup(opts)` enables. `all = true` is the shorthand the host

@@ -65,7 +65,7 @@ describe("ui.config", function()
     assert.same(assembled, cfg.last())
   end)
 
-  it("falls back to 'normal' for an unknown variant instead of throwing", function()
+  it("falls back to 'default' for an unknown variant instead of throwing", function()
     local saved = cfg.STATUSLINE_VARIANT
     -- An invalid value is the point of this test, so the type error is too.
     ---@diagnostic disable-next-line: assign-type-mismatch
@@ -77,14 +77,12 @@ describe("ui.config", function()
     cfg.STATUSLINE_VARIANT = saved
   end)
 
-  it("has all six documented layouts on disk", function()
+  it("has all four documented presets on disk", function()
     for _, variant in ipairs({
-      "normal",
-      "base",
-      "lspbased",
-      "custom",
-      "custom_light",
-      "custom_minimal",
+      "default",
+      "minimal",
+      "lsp",
+      "blocks",
     }) do
       assert.is_true(
         pcall(require, "ui.config.statusline." .. variant),
@@ -92,6 +90,51 @@ describe("ui.config", function()
       )
     end
   end)
+end)
+
+describe("ui.config.setup bringing your own variant", function()
+  local cfg = require("ui.config")
+
+  it("uses opts.variant directly instead of resolving STATUSLINE_VARIANT", function()
+    local own_variant = {
+      ui = {
+        statusline = {
+          order = { "mode" },
+          modules = {
+            mode = function()
+              return "OWN"
+            end,
+          },
+        },
+      },
+    }
+
+    local assembled = cfg.setup({ variant = own_variant })
+    assert.same(own_variant.ui.statusline, assembled.ui.statusline)
+  end)
+
+  it(
+    "the documented personal-statusline example loads and assembles through this mechanism",
+    function()
+      -- The exact worked example docs/examples/personal-statusline-example.lua
+      -- points to -- proof the "bring your own variant" mechanism works
+      -- end to end, not just against a synthetic table.
+      local example_path = vim.fn.getcwd() .. "/docs/examples/personal-statusline-example.lua"
+      assert.equals(1, vim.fn.filereadable(example_path))
+
+      local ok_load, example = pcall(dofile, example_path)
+      assert.is_true(ok_load, tostring(example))
+
+      local ok_setup, assembled = pcall(cfg.setup, { variant = example })
+      assert.is_true(ok_setup, tostring(assembled))
+      assert.equals("table", type(assembled.ui.statusline.modules))
+
+      local render = require("ui.statusline.render")
+      local ok_render, out = pcall(render.generate, assembled.ui.statusline)
+      assert.is_true(ok_render, tostring(out))
+      assert.is_true(#out > 0)
+    end
+  )
 end)
 
 describe("ui.setup", function()

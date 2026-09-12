@@ -3,14 +3,24 @@
 --- Root types. (The `---@meta` above was `--@meta` until the extraction — one
 --- dash short, so LuaLS never treated this file as a definition file.)
 
---- The six statusline layouts `ui.config` can assemble.
+--- The four shipped, generic statusline presets `ui.config` can assemble by
+--- name. A fifth possibility -- a fully-built variant table, for a host's
+--- own plugin-specific segments -- is not a name in this alias; see
+--- `ui.config.setup`'s `opts.variant` and
+--- `docs/examples/personal-statusline-example.lua`.
+---
+--- Was six names (`normal`/`base`/`lspbased`/`custom`/`custom_light`/
+--- `custom_minimal`) until the 2026-09-12 preset consolidation: `custom` was
+--- the only one with genuine personal-plugin coupling (casedesk.nvim,
+--- filetree.nvim) and moved to the example above; `lspbased`/`custom_light`
+--- were the same segment set assembled two different ways and are one file
+--- now (`lsp`); the rest were renamed for clarity once "normal" could no
+--- longer mean "whatever NvChad's own default did."
 ---@alias Ui.StatuslineVariant
----| "normal"          # NvChad's own statusline, unmodified
----| "base"            # minimal: cursor, cwd, progress
----| "lspbased"        # LSP-aware breadcrumbs and enhanced modules
----| "custom"          # the older custom breadcrumb implementation
----| "custom_light"    # "custom" assembled through a merge-based setup()
----| "custom_minimal"  # "custom" built on NvChad's gen_block pattern
+---| "default"  # full-featured, closest to the historical NvChad default
+---| "minimal"  # cursor, cwd, progress -- nothing else
+---| "lsp"      # LSP-aware breadcrumbs and enhanced modules
+---| "blocks"   # "lsp"'s segments, drawn as gen_block chips
 
 --- What `ui.setup(opts)` turns on.
 ---

@@ -1,5 +1,12 @@
----@module 'ui.config.statusline.base'
---- Minimal custom statusline with cursor, cwd, and progress
+---@module 'ui.config.statusline.minimal'
+--- Minimal generic preset: cursor, cwd, and progress. Was "base".
+---
+--- Naming note: this is a preset NAME (`Ui.StatuslineVariant`), unrelated to
+--- the "minimal" fallback module-SET name some `Ui.Statusline.Config.theme`
+--- values reference (`ui.statusline.themes.*`, of which only "default" is
+--- actually ported -- see `ui.statusline.render`'s doc comment). Same word,
+--- two different, never-compared namespaces; this preset does not set
+--- `theme = "minimal"` anywhere, and does not need to.
 
 local M = {}
 

@@ -176,12 +176,12 @@ local function check_config()
   health.info(("statusline variant: %s"):format(tostring(variant)))
 
   -- The variant is a module path at heart, and a typo in it degrades to
-  -- "normal" with a notification nobody sees twice.
+  -- "default" with a notification nobody sees twice.
   if has("ui.config.statusline." .. tostring(variant)) then
     health.ok(("variant module ui.config.statusline.%s resolves"):format(tostring(variant)))
   else
     health.error(
-      ("variant %q does not resolve -- it will fall back to 'normal'"):format(tostring(variant))
+      ("variant %q does not resolve -- it will fall back to 'default'"):format(tostring(variant))
     )
   end
 

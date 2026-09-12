@@ -75,26 +75,43 @@ An override is merged onto a copy; the shipped defaults are not mutated.
 
 ## The statusline variants
 
-Six layouts ship. Which one is assembled is the `STATUSLINE_VARIANT` constant
-in `lua/ui/config/init.lua`, readable through `ui.config.get_variant()`. It is
-a `setup()`-time choice rather than a runtime one — NvChad reads the assembled
-table once while booting.
+Four generic presets ship. Which one is assembled is the `STATUSLINE_VARIANT`
+constant in `lua/ui/config/init.lua`, readable through `ui.config.get_variant()`.
+It is a `setup()`-time choice rather than a runtime one — NvChad reads the
+assembled table once while booting.
 
 | Variant | What it is |
 | --- | --- |
-| `normal` | NvChad's own statusline, unmodified. The shipped default |
-| `base` | Minimal: cursor position, working directory, progress |
-| `lspbased` | LSP-aware breadcrumbs plus the enhanced segments |
-| `custom` | The older custom breadcrumb implementation |
-| `custom_light` | `custom`, assembled through a merge-based `setup()` |
-| `custom_minimal` | `custom`, built on NvChad's `gen_block` pattern |
+| `default` | Full-featured, closest to the historical NvChad default. The shipped default |
+| `minimal` | cursor position, working directory, progress — nothing else |
+| `lsp` | LSP-aware breadcrumbs plus the enhanced segments |
+| `blocks` | `lsp`'s segments, drawn as gen_block chips |
 
-An unknown variant name falls back to `normal` with a notification rather than
-throwing. `:checkhealth ui` reports the active variant and whether its module
-resolves, because the fallback is otherwise quiet.
+An unknown variant name falls back to `default` with a notification rather
+than throwing. `:checkhealth ui` reports the active variant and whether its
+module resolves, because the fallback is otherwise quiet.
 
-Whether six layouts is the right number is an open question — several of
-them differ by a single segment.
+**This used to be six layouts, and the open question of whether that was the
+right number is resolved (2026-09-12).** `custom` was the only one with real
+personal-plugin coupling (`casedesk.nvim`, `filetree.nvim`) — not a preset by
+this repo's own standard (generic, useful without either plugin), so it moved
+to `docs/examples/personal-statusline-example.lua` instead.
+`lspbased`/`custom_light` were the same segment set assembled two different
+ways (one literally delegated to the other); one file now, `lsp`.
+
+A host with its own plugin-specific segments — the case this repo's `custom`
+preset used to cover — passes a fully-built variant table directly instead of
+naming one of the four presets above:
+
+```lua
+require("ui.config").setup({
+  variant = require("your_config.statusline"), -- lives in YOUR config, any shape
+})
+```
+
+`opts.variant`, when it is a table, is used as-is instead of resolving
+`STATUSLINE_VARIANT` against this repo's own `ui.config.statusline.*` files —
+see `docs/examples/personal-statusline-example.lua` for the full pattern.
 
 ---
 

@@ -169,12 +169,10 @@ describe("ui.statusline.render against every shipped variant", function()
   end)
 
   for _, variant in ipairs({
-    "normal",
-    "base",
-    "lspbased",
-    "custom",
-    "custom_light",
-    "custom_minimal",
+    "default",
+    "minimal",
+    "lsp",
+    "blocks",
   }) do
     it(("renders %q end to end"):format(variant), function()
       cfg.STATUSLINE_VARIANT = variant
@@ -182,6 +180,11 @@ describe("ui.statusline.render against every shipped variant", function()
       local ok, out = pcall(render.generate, assembled.ui.statusline)
       assert.is_true(ok, tostring(out))
       assert.is_string(out)
+      -- Not just "a string" -- an empty result here is what an assembly
+      -- that silently never populated `modules`/`order` would also produce.
+      -- (The preset-consolidation audit found exactly this shape of bug in
+      -- the old "custom_light" variant's merge-based setup() path.)
+      assert.is_true(#out > 0, ("%q rendered as an empty string"):format(variant))
     end)
   end
 end)

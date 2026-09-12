@@ -1,5 +1,26 @@
----@module 'ui.config.statusline.custom'
---- Statusline with properly integrated separators
+---@module 'examples.personal-statusline-example'
+--- Example of a fully custom statusline built on this plugin's own segment
+--- modules -- not a shipped preset. Was shipped as the "custom" preset until
+--- the 2026-09-12 preset consolidation; moved here because it fails the
+--- test a shipped preset has to pass: it assumes two specific personal
+--- plugins (`casedesk.nvim`, `filetree.nvim`) that most users of this
+--- public repo will not have installed. A preset is generic by definition;
+--- a config built around plugins only its own author uses is not a preset,
+--- it is a config -- this file is that config, kept as the template for
+--- "how do I wire my own segments" rather than pretending to be one of the
+--- four generic choices in `lua/ui/config/statusline/`.
+---
+--- To use this (or a copy of it, adjusted to your own segments): copy this
+--- file into your OWN Neovim config, then hand it to `ui.config.setup()`
+--- directly instead of naming one of the shipped presets --
+--- `ui.config.setup()` accepts a fully-built variant table via `opts.variant`
+--- for exactly this case:
+---
+---   require("ui.config").setup({
+---     variant = require("your_config.statusline"), -- this file, in your own config
+---   })
+---
+--- See docs/configuration.md, "Bringing your own variant".
 
 local lazy = require("lib.lua.lazy")
 local render_module = lazy.require("ui.statusline.cursor_ctl.renderer")
@@ -23,7 +44,6 @@ local casedesk = lazy.require("ui.statusline.modules.casedesk")
 local SEPARATOR_STYLE = "round" -- "arrow", "round", "block", "default"
 
 return {
-  theme = require("ui.config.theme"),
   ui = {
     statusline = {
       theme = "minimal", -- or "vscode_colored"
@@ -70,7 +90,7 @@ return {
           })
         end,
 
-        --- Mode (overrides the NvChad default, adds separators)
+        --- Mode (overrides the built-in default, adds separators)
         --- @return string
         mode = function()
           local utils = require("ui.statusline.utils.primitives")
@@ -158,12 +178,6 @@ return {
           end
 
           local content = table.concat(pieces, "")
-          -- Every other call site in this file passes SEPARATOR_STYLE; this
-          -- one didn't, so `get_separators()` indexed `primitives.separators
-          -- [nil]` and threw. Silent before step 4: NvChad's own
-          -- `nvchad.stl.utils.generate()` doesn't pcall a module call, and
-          -- the failure only surfaces with the cursor-progress mode active
-          -- (see ui.statusline.cursor_ctl) -- easy to never hit in normal use.
           local sep = get_separators(SEPARATOR_STYLE)
 
           -- Cursor as in the default theme: left + right separator

@@ -10,11 +10,28 @@
 > colorscheme's own highlight groups (`ui.theme.palette`), transparency is
 > this plugin's own toggle (`ui.theme.transparency`), and theme switching is
 > a real `:colorscheme` call, no bundled theme engine at all. Every module,
-> every one of the six shipped statusline layouts end to end, buffer/tab
+> every one of the shipped statusline layouts end to end, buffer/tab
 > navigation, and theme/transparency handling now work with **neither NvChad
 > nor base46** on the runtimepath (verified headless). Only the *host* this
 > plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer
 > (step 7, not done) — that is the one remaining piece.
+>
+> **2026-09-12, same day, two more changes after a full-repo audit.** Seven
+> bugs found and fixed (a swapped transparency on/off, a git-status guard
+> checking a field gitsigns never sets, a missing separator fallback, one
+> shared highlight group across every window's file icon, a config-update
+> function that dropped valid fields after a bad one, a path cache missing
+> part of its key, a tabufline close reading the wrong buffer's option) — see
+> the commit for the full list. And the statusline layouts went from six to
+> four: `custom` (the only one with real personal-plugin coupling —
+> `casedesk.nvim`, `filetree.nvim`) moved to
+> `docs/examples/personal-statusline-example.lua` instead of staying a
+> shipped preset, because a preset that assumes plugins only its own author
+> has is not a preset. `lspbased`/`custom_light` (the same segment set,
+> assembled two different ways) became one file, `lsp`. `ui.config.setup()`
+> gained `opts.variant`, a way to hand it a fully-built statusline table
+> directly — the mechanism a host now uses for exactly the kind of
+> plugin-specific statusline `custom` used to be.
 
 # ui.nvim
 
@@ -56,7 +73,7 @@ UI — which it does not do yet, because it is still standing on one.
 
 Start at [docs/README.md](docs/README.md), which says what is where.
 
-- [Configuration](docs/configuration.md) — both setup entry points and the six statusline variants.
+- [Configuration](docs/configuration.md) — both setup entry points and the four statusline presets.
 - [Bindings cheatsheet](docs/BINDINGS.md) — commands, keymaps and autocommands.
 - [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
 
@@ -218,7 +235,7 @@ appear in this plugin's own code any more, under any name.
 | --- | --- |
 | A colorscheme | It arranges and applies colours; it does not define a palette from scratch. Accent colors come from the active colorscheme's own highlight groups (`ui.theme.palette`, step 6) |
 | A distribution | No plugin list, no opinionated bundle. One UI layer |
-| A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from six layouts that are already in daily use |
+| A statusline framework | It ships presets, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from four generic layouts already in daily use, plus a documented way to bring your own (`opts.variant`, see `docs/examples/`) |
 | Where content highlighting goes | Out of scope here — see [Scope](#scope) |
 
 ---

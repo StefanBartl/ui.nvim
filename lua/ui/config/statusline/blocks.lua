@@ -1,5 +1,8 @@
----@module 'ui.config.statusline.custom_minimal'
---- Statusline using NvChad's gen_block pattern
+---@module 'ui.config.statusline.blocks'
+--- Generic preset using NvChad's gen_block chip-rendering pattern: the same
+--- segments as the "lsp" preset, drawn as filled chips instead of plain text.
+--- Was "custom_minimal" -- despite the old name, nothing here is
+--- personal/plugin-specific, it is a pure rendering-style variant.
 
 local lazy = require("lib.lua.lazy")
 local render_module = lazy.require("ui.statusline.cursor_ctl.renderer")
@@ -51,7 +54,6 @@ local function get_gen_block()
 end
 
 return {
-  theme = require("ui.config.theme"),
   ui = {
     statusline = {
       theme = "default",

@@ -17,16 +17,25 @@ local _last_config = nil
 -- ============================================================================
 -- STATUSLINE VARIANT SELECTION
 -- ============================================================================
--- Change this to switch between statusline variants:
--- "normal"         -> Default NvChad statusline (no customization)
--- "base"           -> Minimal custom statusline (cursor + cwd + progress)
--- "lspbased"       -> LSP-aware breadcrumbs + enhanced modules
--- "custom"         -> Legacy custom breadcrumbs implementation
--- "custom_light"   -> "custom" with a merge-based setup() path
--- "custom_minimal" -> "custom" built on NvChad's gen_block pattern
+-- Change this to switch between the shipped, generic presets:
+-- "default"  -> Full-featured, closest to the historical NvChad default
+-- "minimal"  -> cursor + cwd + progress, nothing else
+-- "lsp"      -> LSP-aware breadcrumbs + enhanced modules
+-- "blocks"   -> "lsp"'s segments, drawn as gen_block chips
+--
+-- A fifth option that is NOT a name in this list: pass a fully-built variant
+-- table directly via `M.setup({ variant = <table> })` instead of naming one
+-- of the four presets above -- see "Bringing your own variant" below. That is
+-- how a host with its own plugin-specific segments (a personal case-tracker,
+-- a personal filetree fork, ...) uses them without those segments becoming
+-- part of this repo's shipped preset list, which has to stay generic for
+-- every other user. `docs/examples/personal-statusline-example.lua` is a
+-- worked example: the preset this repo used to ship as "custom", before the
+-- 2026-09-12 preset consolidation drew this line.
 -- ============================================================================
 
---- Which of the six layouts `setup()` assembles.
+--- Which of the four shipped presets `setup()` assembles, when `opts.variant`
+--- is not given as a table (see `M.setup`).
 ---
 --- A setup-time choice, not a runtime one: NvChad reads the assembled table
 --- once while booting, through `chadrc`. Changing this after that has no
@@ -36,19 +45,30 @@ local _last_config = nil
 --- as well, and a spec asserts the two agree -- two places that can drift
 --- otherwise, since one is the switch and the other is the documentation.
 ---
---- An unknown name falls back to "normal" with a notification rather than
+--- An unknown name falls back to "default" with a notification rather than
 --- throwing; `:checkhealth ui` reports whether the named module resolves,
 --- because that fallback is otherwise quiet.
 ---@type Ui.StatuslineVariant
-M.STATUSLINE_VARIANT = "normal"
+M.STATUSLINE_VARIANT = "default"
 
 -- ============================================================================
 -- Config Assembly
 -- ============================================================================
 
----Load the selected statusline config
+--- Bringing your own variant: `opts.variant`, when it is a table, is used
+--- directly instead of resolving `M.STATUSLINE_VARIANT` against this repo's
+--- own `ui.config.statusline.*` modules. The table has the same shape as any
+--- file under `lua/ui/config/statusline/` -- `{ ui = { statusline = {...} },
+--- setup = function(config) ... end }` -- it just does not have to live
+--- inside this plugin to be usable. This is the mechanism
+--- `docs/examples/personal-statusline-example.lua` assumes.
+---@param opts table
 ---@return table
-local function load_statusline_config()
+local function load_statusline_config(opts)
+  if type(opts.variant) == "table" then
+    return opts.variant
+  end
+
   local variant = M.STATUSLINE_VARIANT
   local config_path = "ui.config.statusline." .. variant
 
@@ -56,19 +76,21 @@ local function load_statusline_config()
   if not ok then
     notify.warn(
       string.format(
-        "[ui.config] Failed to load statusline variant '%s': %s\nFalling back to 'normal'",
+        "[ui.config] Failed to load statusline variant '%s': %s\nFalling back to 'default'",
         variant,
         tostring(config)
       )
     )
-    return (require("ui.config.statusline.normal"))
+    return (require("ui.config.statusline.default"))
   end
 
   return config
 end
 
 ---Setup complete configuration
----@param user_opts? table Optional user overrides for theme
+---@param user_opts? table Optional user overrides for theme, plus an
+---  optional `variant` table to bring your own statusline preset (see
+---  "Bringing your own variant" above `load_statusline_config`).
 ---@return table
 function M.setup(user_opts)
   user_opts = user_opts or {}
@@ -81,8 +103,8 @@ function M.setup(user_opts)
     theme_config = vim.tbl_deep_extend("force", theme_config, user_opts.theme)
   end
 
-  -- 3. Load selected statusline variant
-  local statusline_config = load_statusline_config()
+  -- 3. Load selected statusline variant (shipped preset, or opts.variant)
+  local statusline_config = load_statusline_config(user_opts)
 
   -- 4. Assemble final config
   local config = {
