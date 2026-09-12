@@ -48,6 +48,20 @@
 > `ui.config.setup()` + `ui.statusline.render.enable()` — not just a
 > boot-time constant, because this plugin has owned its own render
 > entrypoint since step 4.
+>
+> **2026-09-12, fifth round: two visual bugs found on the first real restart
+> against a live host.** `ui.statusline.utils.primitives.separators`'
+> `"default"` and `"round"` styles (and, on closer look, `"arrow"`) turned
+> out to be empty strings — `git log -p` shows this table has been that way
+> since its very first commit in this repo, the original wkdnvchad
+> extraction, not a regression from anything done today. Every statusline
+> variant using anything but `"block"` has been rendering with no separator
+> caps at all since day one. Restored the standard Powerline codepoints
+> (U+E0B0/B2/B4/B6) as explicit byte escapes, so an editor/encoding pass
+> can't drop them again silently. Separately: `filetree.nvim`'s `cwd_mode`
+> has six modes, not five — the accent-color map was missing `"follow"`,
+> the inert default most sessions spend most of their time in, so it fell
+> through to a fallback color by accident rather than a documented choice.
 
 # ui.nvim
 
