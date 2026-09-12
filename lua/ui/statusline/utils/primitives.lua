@@ -10,7 +10,7 @@
 --- Ported, not wrapped -- none of this reads a NvChad symbol or a NvChad
 --- highlight group by name that this plugin does not already assume; it only
 --- used to be defined in a module NvChad happened to ship. `stbufnr` through
---- `separators` were ported at docs/ROADMAP.md step 3; `file`, `state` and
+--- `separators` were ported at roadmap step 3; `file`, `state` and
 --- `autocmds` at step 4, alongside the render entrypoint that is the first
 --- thing to actually call them.
 

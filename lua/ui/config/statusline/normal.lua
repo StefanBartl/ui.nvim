@@ -17,7 +17,7 @@ local M = {}
 
 -- NvChad's own nvconfig.lua default for `ui.statusline.separator_style`,
 -- which this variant never overrode -- now the explicit value instead of an
--- implicit fallback. See docs/ROADMAP.md, step 3.
+-- implicit fallback. See the roadmap, step 3.
 local SEPARATOR_STYLE = "default"
 
 -- Mirrors nvchad.stl.utils' `orders.default`, with two insertions. The `%=`

@@ -10,8 +10,7 @@
 > buffer/tab navigation now work with NvChad entirely absent from the
 > runtimepath (verified headless). Only `base46` remains — the theme
 > palette, step 6 — and the *host* this plugin was extracted from still
-> wires `chadrc.lua` to NvChad's own renderer (step 7, not done). See
-> [roadmap](docs/ROADMAP.md).
+> wires `chadrc.lua` to NvChad's own renderer (step 7, not done).
 
 # ui.nvim
 
@@ -53,7 +52,6 @@ UI — which it does not do yet, because it is still standing on one.
 
 Start at [docs/README.md](docs/README.md), which says what is where.
 
-- [Roadmap](docs/ROADMAP.md) — the measured NvChad coupling and what is left to do.
 - [Configuration](docs/configuration.md) — both setup entry points and the six statusline variants.
 - [Bindings cheatsheet](docs/BINDINGS.md) — commands, keymaps and autocommands.
 - [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
@@ -188,7 +186,7 @@ loads and assembles with NvChad entirely absent from the runtimepath.
 
 | Not | Because |
 | --- | --- |
-| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is [the open decision](docs/ROADMAP.md#open-decisions) |
+| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. What it reads a palette *from* is an open decision, not yet made |
 | A distribution | No plugin list, no opinionated bundle. One UI layer |
 | A statusline framework | It ships layouts, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from six layouts that are already in daily use |
 | Where content highlighting goes | Out of scope here — see [Scope](#scope) |
@@ -207,8 +205,6 @@ the theme palette (step 6) and the host wiring (step 7) are not.
 names every dependency, reports its own statusline render entrypoint as
 resolving and rendering standalone, and says whether NvChad is present as
 information rather than a fatal error — it stopped being one at step 4.
-[docs/ROADMAP.md](docs/ROADMAP.md) has the measured coupling, the order of
-work, and the four decisions still open.
 
 ---
 

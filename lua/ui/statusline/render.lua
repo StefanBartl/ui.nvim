@@ -4,7 +4,7 @@
 --- `nvchad/init.lua` set `vim.o.statusline = "%!v:lua.require('nvchad.stl.' ..
 --- theme .. '')()"`, and `nvchad/stl/<theme>.lua` called
 --- `nvchad.stl.utils.generate(order, modules)`. Neither exists in this
---- plugin's own code before step 4 of docs/ROADMAP.md -- `ui.config.setup()`
+--- plugin's own code before step 4 of the roadmap -- `ui.config.setup()`
 --- assembles the `{order, modules, theme, separator_style}` table, but
 --- nothing turns it into a rendered line without NvChad in between.
 ---

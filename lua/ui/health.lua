@@ -2,7 +2,7 @@
 --- `:checkhealth ui`.
 ---
 --- The first section used to say NvChad was a hard dependency of this
---- plugin. As of step 4 of the roadmap (`docs/ROADMAP.md`) that is no longer
+--- plugin. As of step 4 of the roadmap that is no longer
 --- true of this plugin's own code: `ui.statusline.render` is now the
 --- `vim.o.statusline` / `order`-`modules` walk that used to be entirely
 --- `nvchad.init` + `nvchad.stl.utils.generate()`, and `ui.config.setup()`'s

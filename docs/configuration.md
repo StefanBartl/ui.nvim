@@ -88,9 +88,8 @@ An unknown variant name falls back to `normal` with a notification rather than
 throwing. `:checkhealth ui` reports the active variant and whether its module
 resolves, because the fallback is otherwise quiet.
 
-Whether six layouts is the right number is an
-[open question](ROADMAP.md#open-decisions) — several of them differ by a
-single segment.
+Whether six layouts is the right number is an open question — several of
+them differ by a single segment.
 
 ---
 
@@ -111,6 +110,6 @@ top of them.
 
 | Thing | Why |
 | --- | --- |
-| Which segments a variant contains | A variant *is* its segment list. Making it composable is the difference between shipping presets and shipping a framework, and this ships presets — see [ROADMAP.md](ROADMAP.md#open-decisions) |
+| Which segments a variant contains | A variant *is* its segment list. Making it composable is the difference between shipping presets and shipping a framework, and this ships presets |
 | The `:UI` command name | One verb is the project convention. A configurable name would break `:checkhealth`, the bindings docs and every reference at once |
 | The theme list | It is whatever base46 has installed, read live so a newly installed theme is offered without a restart |

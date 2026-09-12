@@ -15,7 +15,7 @@ max_line_length = false
 -- this declaration every `describe`/`it`/`assert.has_no.errors` becomes an
 -- "accessing undefined variable" warning. Declaring it explicitly is better
 -- than relying on the implicit match anyway: it says where the globals come
--- from. See NEW-49 in wkdbook-Lua/Checklists/gates/NEW_PROJECT.md.
+-- from.
 files["TESTS/**/*.lua"] = {
   std = "luajit+busted",
 }

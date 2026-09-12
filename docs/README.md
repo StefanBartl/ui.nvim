@@ -4,7 +4,6 @@ What is where, and which question each page answers.
 
 | Page | Answers |
 | --- | --- |
-| [ROADMAP.md](ROADMAP.md) | The measured NvChad coupling, the order of work, and the decisions still open |
 | [configuration.md](configuration.md) | Both setup entry points, the six statusline variants, what is not configurable |
 | [BINDINGS.md](BINDINGS.md) | Every command, keymap and autocommand — including the ones that deliberately do not exist |
 | [health.md](health.md) | Every line `:checkhealth ui` can print, and what to do about it |

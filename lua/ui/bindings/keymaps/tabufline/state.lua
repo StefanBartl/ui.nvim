@@ -23,7 +23,7 @@
 ---
 --- What is intentionally NOT here: `vim.o.tabline` / a rendered tabline.
 --- That is `nvchad.tabufline.modules` in the original, and it is separate,
---- larger scope -- see docs/ROADMAP.md, "Planned scope, by area > Tabline".
+--- larger scope -- see "Planned scope, by area > Tabline" in the project roadmap.
 --- This module only keeps the LIST correct; nothing here draws one.
 
 local api = vim.api
