@@ -135,12 +135,23 @@ end
 
 --- Named separator glyph pairs, keyed the same way `separator_style` values
 --- already are across the statusline variants.
+---
+--- `default` and `round` were empty strings from this table's very first
+--- commit in this repo (2026-09-08, the wkdnvchad extraction itself) --
+--- confirmed via `git log -p`, so the loss predates every change made here
+--- since. Written as explicit `\xEE\x82\xBx` UTF-8 byte escapes rather than
+--- literal glyphs, specifically so an editor/clipboard/encoding pass can't
+--- silently drop them the same way again -- these are the standard
+--- Powerline private-use-area codepoints (U+E0B0/B2/B4/B6), the same ones
+--- lualine/vim-airline ship for these exact style names.
+--- `default` mirrors `round` -- NvChad's own shipped default statusline is
+--- the rounded-pill look, not the hard-angled one.
 ---@type table<string, {left: string, right: string}>
 M.separators = {
-  default = { left = "", right = "" },
-  round = { left = "", right = "" },
+  default = { left = "\xEE\x82\xB6", right = "\xEE\x82\xB4" }, --  /
+  round = { left = "\xEE\x82\xB6", right = "\xEE\x82\xB4" }, --  /
   block = { left = "█", right = "█" },
-  arrow = { left = "", right = "" },
+  arrow = { left = "\xEE\x82\xB2", right = "\xEE\x82\xB0" }, --  /
 }
 
 --- File icon and display name for the statusline's buffer. `nvim-web-devicons`

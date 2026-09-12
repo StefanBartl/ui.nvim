@@ -92,6 +92,7 @@ return {
           return filetree_cwd_mode({
             badge_style = true, -- bg-filled capsule + fading separator, like `mode`. false = plain colored text.
             -- colors = { lock = "orange" },  -- override the accent per cwd mode; see the module's DEFAULT_COLOR_BY_MODE.
+            separator_style = SEPARATOR_STYLE, -- match this variant's own separator style, not the module's default
           })
         end,
 

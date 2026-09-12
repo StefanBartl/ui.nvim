@@ -29,6 +29,14 @@ local DEFAULT_COLOR_BY_MODE = {
   nearest = "nearest",
   lock = "lock",
   manual = "manual",
+  -- "follow" is filetree.nvim's inert, no-policy default mode -- most
+  -- sessions spend most of their time in it, since it is what a tree starts
+  -- in unless something actively re-roots it. Mapped explicitly to "manual"
+  -- (same muted accent) rather than left to hit FALLBACK_COLOR below: it
+  -- used to fall through by accident, which is indistinguishable from a
+  -- deliberate choice until someone asks why the badge is that color at
+  -- all.
+  follow = "manual",
   tree_leads = "tree_leads",
 }
 local FALLBACK_COLOR = "manual"
@@ -66,11 +74,16 @@ local function ensure_hl(color_key)
   return group
 end
 
----@param opts { badge_style?: boolean, colors?: table<string, string> }?
+---@param opts { badge_style?: boolean, colors?: table<string, string>, separator_style?: string|{left: string, right: string} }?
 ---  badge_style: bg-filled capsule with a fading separator, like the vim
 ---               mode segment (default true). false = plain colored text,
 ---               using filetree's own `indicator.hl` group as-is.
 ---  colors:      override/extend DEFAULT_COLOR_BY_MODE, e.g. { lock = "orange" }.
+---  separator_style: passed to `get_separators()` -- pass the variant's own
+---                    `SEPARATOR_STYLE` so this badge's cap matches every
+---                    other segment's, instead of silently falling back to
+---                    "default" regardless of what the rest of the
+---                    statusline is using.
 ---@return string
 return function(opts)
   opts = opts or {}
@@ -114,7 +127,7 @@ return function(opts)
   -- unlike the old base46 lookup, which returned nil between colorschemes.
   local group = ensure_hl(color_key)
 
-  local sep = get_separators()
+  local sep = get_separators(opts.separator_style)
 
   return "%#"
     .. group
