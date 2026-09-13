@@ -30,11 +30,12 @@ local cfg = {
 -- Accessors
 -- ---------------------------------------------------------------------------
 
---- Get the full config table.
---- Returned table is mutable by design; treat as read-only by convention.
+--- Get a copy of the full config table.
+--- Mutating the returned table has no effect on this module's own state --
+--- use `M.set`/`M.update` to actually change it.
 ---@return Ui.UI.Stl.Modules.LSP.Cfg
 function M.get_cfg()
-  return cfg
+  return vim.deepcopy(cfg)
 end
 
 --- Get a single config field with exact type.
