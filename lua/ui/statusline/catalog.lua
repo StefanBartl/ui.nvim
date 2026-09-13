@@ -130,6 +130,13 @@ return {
     used_by = {},
   },
   {
+    key = "time_in_buffer",
+    summary = 'Elapsed time since this buffer was first entered this session, e.g. "12m".',
+    builtin = false,
+    source = "ui.statusline.modules.time_in_buffer",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
