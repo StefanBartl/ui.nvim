@@ -43,6 +43,6 @@ return function()
 
   -- Same "lazy" glyph lazy.nvim's own UI uses (see lua/config/lazy/init.lua's
   -- ui.icons.lazy), so this badge reads as "lazy.nvim's plugin count" at a
-  -- glance. Same highlight convention as neotest_module/plugin_progress.
+  -- glance. Same highlight convention as plugin_progress.
   return " %#St_LspProgress#󰂠 " .. cached_text .. " "
 end

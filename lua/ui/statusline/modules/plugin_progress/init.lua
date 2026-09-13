@@ -31,6 +31,6 @@ return function()
     return ""
   end
 
-  -- Same highlight convention as neotest_module: blue while running.
+  -- St_LspProgress: blue while running.
   return " %#St_LspProgress#󰥩 " .. table.concat(active, SEPARATOR) .. " "
 end
