@@ -13,6 +13,7 @@
 
 local api = vim.api
 local icon_cache = require("lib.lua.memo.lru").new(256)
+local notify = require("lib.nvim.notify").create("[ui.tabline.utils]")
 
 local M = {}
 
@@ -105,7 +106,16 @@ function M.close_buffer(bufnr)
   bufnr = bufnr or api.nvim_get_current_buf()
   M.flash(bufnr)
   vim.defer_fn(function()
-    require("ui.bindings.keymaps.tabufline.state").close_buffer(bufnr)
+    -- pcall'd like every other call site in this ecosystem (see
+    -- docs/BINDINGS.md's "a failure notifies and returns rather than
+    -- raising"): this runs 120ms after the synchronous half already
+    -- returned, so a bufnr that went invalid in the meantime (closed
+    -- elsewhere, double-clicked) must not surface as an unhandled error out
+    -- of a timer callback.
+    local ok, err = pcall(require("ui.bindings.keymaps.tabufline.state").close_buffer, bufnr)
+    if not ok then
+      notify.warn("close_buffer failed: " .. tostring(err))
+    end
   end, FLASH_MS)
 end
 
@@ -127,7 +137,15 @@ function M.close_all_bufs(include_cur_buf)
   end
 
   vim.defer_fn(function()
-    require("ui.bindings.keymaps.tabufline.state").close_all_bufs(include_cur_buf)
+    -- Same pcall guard as M.close_buffer above, same reason: this fires
+    -- 120ms after the caller's own pcall (the close_all keymap's `rhs`) has
+    -- already returned, so it is the only thing left standing between a
+    -- failure here and an unhandled error out of a timer callback.
+    local ok, err =
+      pcall(require("ui.bindings.keymaps.tabufline.state").close_all_bufs, include_cur_buf)
+    if not ok then
+      notify.warn("close_all_bufs failed: " .. tostring(err))
+    end
   end, FLASH_MS)
 end
 

@@ -89,3 +89,94 @@ describe("bug: display_path() mutated shared config as a side effect", function(
     assert.is_not.equals(with_tilde, without_tilde)
   end)
 end)
+
+describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
+  -- close_buffer()/close_all_bufs() defer the real state.close_buffer()/
+  -- state.close_all_bufs() call behind the click-flash (see their own doc
+  -- comments). The synchronous half was already pcall'd everywhere else in
+  -- this ecosystem (close_n_buffers, the close_all keymap's own `rhs`), but
+  -- the deferred callback itself was not -- a bufnr going invalid between
+  -- the flash and the 120ms-later close (closed elsewhere, double-clicked)
+  -- would raise, unhandled, out of a vim.defer_fn timer callback instead of
+  -- notifying like docs/BINDINGS.md's "a failure notifies and returns
+  -- rather than raising" promises.
+  local utils = require("ui.tabline.utils")
+  local state = require("ui.bindings.keymaps.tabufline.state")
+
+  it("close_buffer notifies instead of raising when the deferred close fails", function()
+    local original = state.close_buffer
+    state.close_buffer = function()
+      error("boom")
+    end
+
+    local notified = false
+    local original_notify = vim.notify
+    vim.notify = function(msg)
+      if msg:find("close_buffer failed", 1, true) then
+        notified = true
+      end
+    end
+
+    assert.has_no.errors(function()
+      utils.close_buffer(1)
+    end)
+    vim.wait(300, function()
+      return notified
+    end)
+
+    vim.notify = original_notify
+    state.close_buffer = original
+    assert.is_true(notified)
+  end)
+
+  it("close_all_bufs notifies instead of raising when the deferred close fails", function()
+    local original = state.close_all_bufs
+    state.close_all_bufs = function()
+      error("boom")
+    end
+
+    local notified = false
+    local original_notify = vim.notify
+    vim.notify = function(msg)
+      if msg:find("close_all_bufs failed", 1, true) then
+        notified = true
+      end
+    end
+
+    assert.has_no.errors(function()
+      utils.close_all_bufs()
+    end)
+    vim.wait(300, function()
+      return notified
+    end)
+
+    vim.notify = original_notify
+    state.close_all_bufs = original
+    assert.is_true(notified)
+  end)
+end)
+
+describe("bug: themes.default T.mode() drew its own separator glyph twice", function()
+  -- One `St_<Mode>ModeSep` group already carries the sep_r glyph AND fades
+  -- into ST_EmptySpace's background -- a second bare sep_r right after it
+  -- duplicated the same halfcircle (confirmed against git log -p, present
+  -- since the original wkdnvchad port). See themes/default.lua's own T.mode
+  -- doc comment for the fix; nothing here previously asserted the glyph
+  -- count, so a refactor could silently bring the duplicate back.
+  local themes_default = require("ui.statusline.themes.default")
+  local primitives = require("ui.statusline.utils.primitives")
+
+  it("emits the mode separator glyph exactly once", function()
+    local saved_winid = vim.g.statusline_winid
+    vim.g.statusline_winid = vim.api.nvim_get_current_win()
+
+    local T = themes_default.build("default")
+    local out = T.mode()
+
+    vim.g.statusline_winid = saved_winid
+
+    local sep_r = primitives.separators.default.right
+    local _, count = out:gsub(sep_r, sep_r)
+    assert.equals(1, count)
+  end)
+end)
