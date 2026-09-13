@@ -47,6 +47,8 @@ local plugin_progress = lazy.require("ui.statusline.modules.plugin_progress")
 local plugin_summary = lazy.require("ui.statusline.modules.plugin_summary")
 local filetree_cwd_mode = lazy.require("ui.statusline.modules.filetree_cwd_mode")
 local casedesk = lazy.require("ui.statusline.modules.casedesk")
+local undo_depth = lazy.require("ui.statusline.modules.undo_depth")
+local search_count = lazy.require("ui.statusline.modules.search_count")
 
 -- ============================================================================
 -- Modules
@@ -69,6 +71,8 @@ return {
         "%=",
         "diagnostics",
         "lsp",
+        "search_count",
+        "undo_depth",
         "plugin_progress",
         "plugin_summary",
         "casedesk",
@@ -77,6 +81,17 @@ return {
       },
 
       modules = {
+        -- "[current/total]" while hlsearch is active, empty otherwise.
+        search_count = function()
+          return search_count()
+        end,
+
+        -- "↺N" undo steps available, plus a branch glyph if the undo tree
+        -- has actually branched (an edit after an undo).
+        undo_depth = function()
+          return undo_depth()
+        end,
+
         plugin_progress = function()
           return plugin_progress()
         end,
