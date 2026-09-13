@@ -123,6 +123,13 @@ return {
     used_by = {},
   },
   {
+    key = "macro_counter",
+    summary = 'Live keystroke count for the macro currently recording, e.g. "@a \xC2\xB7 23".',
+    builtin = false,
+    source = "ui.statusline.modules.macro_counter",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
