@@ -78,6 +78,7 @@ modules = {
 | `undo_depth` | Undo steps available on the current branch, plus a glyph if the undo tree has branched | — | `ui.statusline.modules.undo_depth` |
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
+| `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -92,6 +93,12 @@ land in that slice (relative to the busiest one), colour by the worst
 severity present there. An empty slice renders in the same neutral colour
 `lsp_msg` uses, not a severity one — "nothing here" is not "low severity of
 something".
+
+`macro_counter` shows `vim.fn.reg_recording()`'s register plus a live
+keystroke count while it records — Neovim has no API to read a register's
+content mid-recording, so the count comes from a `vim.on_key()` hook
+bracketed by `RecordingEnter`/`RecordingLeave`, registered once at first
+render.
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:
