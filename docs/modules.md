@@ -80,6 +80,7 @@ modules = {
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
+| `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -104,6 +105,12 @@ render.
 `time_in_buffer` is per-session, not persisted across restarts or
 aggregated across sessions — a `sessions.nvim`-based cross-session total is
 a possible follow-up, not built here.
+
+`github_stats_badge` resolves the current buffer's repo from its `git
+remote get-url origin` (cached per directory) and only shows anything when
+that repo is one `github_stats.nvim.config.get_repos()` actually tracks —
+personal and low-utility by design, not something a generic statusline
+plugin could offer.
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:

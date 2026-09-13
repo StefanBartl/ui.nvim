@@ -137,6 +137,14 @@ return {
     used_by = {},
   },
   {
+    key = "github_stats_badge",
+    summary = 'This week\'s view count for the repo the buffer is in, e.g. "\xF0\x9F\x91\x81 42 diese Woche" -- only inside a repo github_stats.nvim tracks.',
+    requires = "github_stats.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.github_stats_badge",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
