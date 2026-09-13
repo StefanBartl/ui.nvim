@@ -321,7 +321,7 @@ describe("ui.tabline.utils.style_buf", function()
   end)
 end)
 
-describe("ui.tabline.modules.buffers rounded caps", function()
+describe("ui.tabline.modules.buffers boundary styles", function()
   local modules = require("ui.tabline.modules")
   local utils = require("ui.tabline.utils")
 
@@ -349,34 +349,124 @@ describe("ui.tabline.modules.buffers rounded caps", function()
     return select(2, s:gsub(cap, cap))
   end
 
-  it("squares both edges of a single-chip run -- nothing to round against", function()
+  describe('style = "rounded" (default)', function()
+    -- The first chip's left edge is square unconditionally -- it always sits
+    -- directly against the bar's own left edge. The LAST chip's right edge
+    -- is square only when the run is actually flush against the space
+    -- budget; otherwise "%=" alignment leaves genuine slack before
+    -- tabs/btns, and that edge stays rounded like any interior one.
+
+    it("a single chip with room to spare: square on the left, rounded on the right", function()
+      local saved = vim.t.bufs
+      local bufs = make_bufs(1)
+      vim.t.bufs = bufs
+
+      -- Plenty of columns for one chip -- nothing forces the run flush right.
+      local out = modules.buffers({ order = { "buffers" }, bufwidth = 20 })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      assert.equals(0, cap_count(out, utils.LEFT_CAP))
+      assert.equals(1, cap_count(out, utils.RIGHT_CAP))
+    end)
+
+    it("a single chip pinned exactly to the available width: square on both edges", function()
+      local saved = vim.t.bufs
+      local saved_cols = vim.o.columns
+      vim.o.columns = 100
+      local bufs = make_bufs(1)
+      vim.t.bufs = bufs
+
+      -- bufwidth (101) alone exceeds the entire budget (100) -- the run is
+      -- flush right from the very first chip.
+      local out = modules.buffers({ order = { "buffers" }, bufwidth = 101 })
+
+      vim.o.columns = saved_cols
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      assert.equals(0, cap_count(out, utils.LEFT_CAP))
+      assert.equals(0, cap_count(out, utils.RIGHT_CAP))
+    end)
+
+    it("four chips with room to spare: square only on the very first left edge", function()
+      local saved = vim.t.bufs
+      local bufs = make_bufs(4)
+      vim.t.bufs = bufs
+
+      local out = modules.buffers({ order = { "buffers" }, bufwidth = 20 })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      -- 3 internal boundaries (LEFT_CAP each) plus the last chip's own
+      -- right edge, which also rounds since nothing forces it flush.
+      assert.equals(3, cap_count(out, utils.LEFT_CAP))
+      assert.equals(4, cap_count(out, utils.RIGHT_CAP))
+    end)
+
+    it("more chips than fit: square on both the first left and the last right edge", function()
+      local saved = vim.t.bufs
+      local bufs = make_bufs(100)
+      vim.t.bufs = bufs
+
+      local out = modules.buffers({ order = { "buffers" }, bufwidth = 20 })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      local visible = cap_count(out, utils.LEFT_CAP) -- == visible chips - 1
+      assert.is_true(visible > 0, out)
+      assert.equals(visible, cap_count(out, utils.RIGHT_CAP))
+    end)
+  end)
+
+  describe('style = "square"', function()
+    it("adds no caps at all, regardless of how many chips or how much room", function()
+      local saved = vim.t.bufs
+      local bufs = make_bufs(4)
+      vim.t.bufs = bufs
+
+      local out = modules.buffers({ order = { "buffers" }, style = "square" })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      assert.equals(0, cap_count(out, utils.LEFT_CAP))
+      assert.equals(0, cap_count(out, utils.RIGHT_CAP))
+    end)
+  end)
+
+  describe('style = "divider"', function()
+    it("adds one plain divider per internal boundary, no caps", function()
+      local saved = vim.t.bufs
+      local bufs = make_bufs(4)
+      vim.t.bufs = bufs
+
+      local out = modules.buffers({ order = { "buffers" }, style = "divider" })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      assert.equals(3, cap_count(out, utils.DIVIDER))
+      assert.equals(0, cap_count(out, utils.LEFT_CAP))
+      assert.equals(0, cap_count(out, utils.RIGHT_CAP))
+    end)
+  end)
+
+  it("an unrecognized style falls back to rounded rather than crashing", function()
     local saved = vim.t.bufs
     local bufs = make_bufs(1)
     vim.t.bufs = bufs
 
-    local out = modules.buffers({ order = { "buffers" } })
+    local ok, out = pcall(modules.buffers, { order = { "buffers" }, style = "no_such_style" })
 
     vim.t.bufs = saved
     delete_bufs(bufs)
 
-    assert.equals(0, cap_count(out, utils.LEFT_CAP))
-    assert.equals(0, cap_count(out, utils.RIGHT_CAP))
-  end)
-
-  it("rounds every boundary between chips, square only at the run's two outer edges", function()
-    local saved = vim.t.bufs
-    local bufs = make_bufs(4)
-    vim.t.bufs = bufs
-
-    local out = modules.buffers({ order = { "buffers" } })
-
-    vim.t.bufs = saved
-    delete_bufs(bufs)
-
-    -- 4 chips -> 3 internal boundaries, one LEFT_CAP + one RIGHT_CAP each;
-    -- the first chip's left edge and the last chip's right edge stay square.
-    assert.equals(3, cap_count(out, utils.LEFT_CAP))
-    assert.equals(3, cap_count(out, utils.RIGHT_CAP))
+    assert.is_true(ok, tostring(out))
+    assert.is_string(out)
   end)
 end)
 

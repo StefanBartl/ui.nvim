@@ -25,6 +25,12 @@ local M = {}
 M.LEFT_CAP = "\xEE\x82\xB6" --
 M.RIGHT_CAP = "\xEE\x82\xB4" --
 
+-- The "divider" style's boundary glyph -- a plain vertical bar, no rounding.
+-- U+2502 BOX DRAWINGS LIGHT VERTICAL, not a Nerd Font private-use codepoint:
+-- unlike the caps above, this one only ever needs to exist in an ordinary
+-- Unicode font, so it gets no byte-escape treatment.
+M.DIVIDER = "│"
+
 -- Buffers currently mid-"flash" (a brief highlight swap on click, before
 -- `goto_buf` actually switches to it -- the same kind of momentary feedback
 -- `lib.nvim.contextmenu` gives on a selection) and the duration of one.
