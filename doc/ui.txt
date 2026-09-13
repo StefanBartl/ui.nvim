@@ -150,7 +150,11 @@ Registered by `ui.setup({ keymaps = true })`.
 
     <Tab>          next buffer
     <S-Tab>        previous buffer
-    <leader>bc     close the current buffer, keeping the window layout
+    <leader>bc     close the current buffer (or {count} of them), keeping
+                   the window layout -- an uncounted close flashes the chip
+                   first; {count} > 1 closes immediately, unflashed
+    <leader>bq     close every listed buffer in the current tab -- all
+                   flash together first, then close as one batch
 
     <leader>tr     move the current buffer right in the tabline
     <leader>tl     move it left

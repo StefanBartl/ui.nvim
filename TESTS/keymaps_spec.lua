@@ -32,6 +32,7 @@ local ALL_ACTIONS = {
   "next",
   "prev",
   "close",
+  "close_all",
   "move_right",
   "move_left",
   "move_to_tab",
@@ -46,6 +47,7 @@ describe("ui.bindings.keymaps.setup with no opts", function()
     assert.equals("<Tab>", find_registered("next").lhs)
     assert.equals("<S-Tab>", find_registered("prev").lhs)
     assert.equals("<leader>bc", find_registered("close").lhs)
+    assert.equals("<leader>bq", find_registered("close_all").lhs)
     assert.equals("<leader>tr", find_registered("move_right").lhs)
     assert.equals("<leader>tl", find_registered("move_left").lhs)
     assert.equals("<leader>tt", find_registered("move_to_tab").lhs)
