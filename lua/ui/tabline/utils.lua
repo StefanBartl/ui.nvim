@@ -91,13 +91,44 @@ function M.btn(str, hl, func, arg)
   return "%" .. tostring(arg) .. "@UiTb" .. func .. "@" .. str .. "%X"
 end
 
---- Close every buffer in the current tab -- the click target for the "close
---- all buffers" button. A thin wrapper so the Vimscript shim below has a
---- single, stable `luaeval()` target independent of where the state module
---- itself lives.
+--- Close `bufnr` (default: the current buffer), flashed first. Unlike
+--- `goto_buf` above, this flash is NOT click-only by design: a close is
+--- destructive and immediate, so the chip closing right as you click on it
+--- (or press the keymap) never actually renders the flash -- there is
+--- nothing left to redraw once the buffer is gone. Deferring the real close
+--- behind the flash fixes that for any single-buffer close, not just the
+--- tabline's own "x" button -- `ui.bindings.keymaps.tabufline.close_n_buffers`
+--- uses this too for a plain (uncounted) close.
+---@param bufnr? integer
 ---@return nil
-function M.close_all_bufs()
-  require("ui.bindings.keymaps.tabufline.state").close_all_bufs()
+function M.close_buffer(bufnr)
+  bufnr = bufnr or api.nvim_get_current_buf()
+  M.flash(bufnr)
+  vim.defer_fn(function()
+    require("ui.bindings.keymaps.tabufline.state").close_buffer(bufnr)
+  end, FLASH_MS)
+end
+
+--- Close every buffer in the current tab -- the click target for the "close
+--- all buffers" button, and `ui.bindings.keymaps`'s `close_all` action. Every
+--- listed buffer flashes together, once, before the whole batch closes --
+--- not `close_buffer()` called once per bufnr, which would stagger `#bufs`
+--- separate deferred closes instead of one.
+---@param include_cur_buf? boolean # default true, forwarded to state.close_all_bufs
+---@return nil
+function M.close_all_bufs(include_cur_buf)
+  -- Flashes every listed buffer, the current one included even when
+  -- `include_cur_buf == false` will spare it from the actual close below --
+  -- flashing a buffer that turns out to survive is harmless, and not
+  -- special-casing it here avoids duplicating state.close_all_bufs()'s own
+  -- exclusion logic just to decide what to flash.
+  for _, bufnr in ipairs(vim.t.bufs or {}) do
+    M.flash(bufnr)
+  end
+
+  vim.defer_fn(function()
+    require("ui.bindings.keymaps.tabufline.state").close_all_bufs(include_cur_buf)
+  end, FLASH_MS)
 end
 
 local registered = false
@@ -121,7 +152,7 @@ function M.register_click_handlers()
   ]])
   vim.cmd([[
     function! UiTbKillBuf(bufnr, clicks, button, mod)
-      call luaeval('require("ui.bindings.keymaps.tabufline.state").close_buffer(_A)', a:bufnr)
+      call luaeval('require("ui.tabline.utils").close_buffer(_A)', a:bufnr)
     endfunction
   ]])
   vim.cmd([[

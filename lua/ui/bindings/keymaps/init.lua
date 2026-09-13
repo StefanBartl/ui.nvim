@@ -54,6 +54,7 @@ function M.setup(opts)
       "next",
       "prev",
       "close",
+      "close_all",
       "move_right",
       "move_left",
       "move_to_tab",
@@ -91,6 +92,17 @@ function M.setup(opts)
           local ok2, err2 = pcall(custom_tabufline.close_n_buffers, get_count())
           if not ok2 then
             notify.warn("[ui.bindings.keymaps] Buffer close failed: " .. tostring(err2))
+          end
+        end,
+      },
+      close_all = {
+        default = "<leader>bq",
+        mode = "n",
+        desc = "close every listed buffer in the current tab, flashed first",
+        rhs = function()
+          local ok2, err2 = pcall(require("ui.tabline.utils").close_all_bufs)
+          if not ok2 then
+            notify.warn("[ui.bindings.keymaps] Close-all failed: " .. tostring(err2))
           end
         end,
       },

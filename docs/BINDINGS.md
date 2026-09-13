@@ -68,8 +68,9 @@ since `all` was this module's own bespoke flag, not something
 left-hand side below is a shipped default, not fixed, and every action binds
 by default -- nothing here needs to be turned on: `ui.setup({ keymaps = {
 next = "<C-Right>", close = false } })` renames `next` and drops `close`
-entirely, leaving every other action (`prev`, `move_right`, `move_left`,
-`move_to_tab`, `toggle_theme`, `theme_picker`) at its default. `keymaps =
+entirely, leaving every other action (`prev`, `close_all`, `move_right`,
+`move_left`, `move_to_tab`, `toggle_theme`, `theme_picker`) at its default.
+`keymaps =
 false` (or
 `ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
 switch, the same shape `my.nvim`'s own keymaps use.
@@ -80,7 +81,8 @@ switch, the same shape `my.nvim`'s own keymaps use.
 | --- | --- | --- | --- |
 | `<Tab>` | `next` | `n` | Next buffer |
 | `<S-Tab>` | `prev` | `n` | Previous buffer |
-| `<leader>bc` | `close` | `n` | Close the current buffer, keeping the window layout |
+| `<leader>bc` | `close` | `n` | Close the current buffer (or `{count}` of them), keeping the window layout. An uncounted close (`1<leader>bc`, i.e. the plain keypress) briefly flashes the chip before closing; `{count}>1` closes immediately, unflashed |
+| `<leader>bq` | `close_all` | `n` | Close every listed buffer in the current tab -- all flash together first, then close as one batch |
 
 ### Tabs
 

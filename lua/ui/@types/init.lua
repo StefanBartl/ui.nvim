@@ -41,13 +41,14 @@
 --- binds every action at its shipped default, `false` binds none, and any
 --- key present here overrides just that one action -- `{ next =
 --- "<C-Right>", close = false }` remaps `next` and drops `close`, leaving
---- `prev`/`move_right`/`move_left`/`move_to_tab`/`toggle_theme`/
+--- `prev`/`close_all`/`move_right`/`move_left`/`move_to_tab`/`toggle_theme`/
 --- `theme_picker` at their defaults. Same shape `my.nvim`'s own
 --- `bindings/keymaps.lua` uses.
 ---@class Ui.Keymaps.Keys
 ---@field next? Ui.Keymaps.Lhs # default "<Tab>" -- next buffer
 ---@field prev? Ui.Keymaps.Lhs # default "<S-Tab>" -- previous buffer
 ---@field close? Ui.Keymaps.Lhs # default "<leader>bc" -- close buffer(s), count-aware
+---@field close_all? Ui.Keymaps.Lhs # default "<leader>bq" -- close every listed buffer in the current tab, flashed first
 ---@field move_right? Ui.Keymaps.Lhs # default "<leader>tr" -- move buffer right in vim.t.bufs
 ---@field move_left? Ui.Keymaps.Lhs # default "<leader>tl" -- move buffer left in vim.t.bufs
 ---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab

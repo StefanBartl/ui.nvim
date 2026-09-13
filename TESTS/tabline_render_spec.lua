@@ -528,3 +528,136 @@ describe("ui.tabline.utils click-flash", function()
     pcall(vim.api.nvim_buf_delete, buf, { force = true })
   end)
 end)
+
+--- Regression for "the x-close button doesn't flash -- probably because it
+--- closes immediately": unlike goto_buf, close-flash is intentionally not
+--- click-only (see ui.tabline.utils.close_buffer's own doc comment) --
+--- verified here on the plain function, and separately via close_n_buffers
+--- below for the keymap path.
+describe("ui.tabline.utils.close_buffer", function()
+  local utils = require("ui.tabline.utils")
+
+  -- Idempotent (see TESTS/tabufline_state_spec.lua).
+  require("ui.bindings.keymaps.tabufline.state").setup()
+
+  -- `:bdelete` unloads and unlists a buffer but does not wipe it --
+  -- `nvim_buf_is_valid` stays true until `:bwipeout` (the buffer number can
+  -- still be resurrected). `nvim_buf_is_loaded` is the correct "did the
+  -- close actually happen" check here, same as Neovim's own behavior any
+  -- `:bd` caller has to work with.
+
+  it("flashes the target immediately, closes it only after the flash", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    utils.close_buffer(buf)
+
+    assert.is_true(utils.is_flashing(buf))
+    assert.is_true(vim.api.nvim_buf_is_loaded(buf))
+
+    vim.wait(300, function()
+      return not vim.api.nvim_buf_is_loaded(buf)
+    end)
+
+    assert.is_false(vim.api.nvim_buf_is_loaded(buf))
+    vim.t.bufs = saved
+  end)
+
+  it("defaults to the current buffer when called with no argument", function()
+    local original = vim.api.nvim_get_current_buf()
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(buf)
+    local saved = vim.t.bufs
+    vim.t.bufs = { original, buf }
+
+    utils.close_buffer()
+
+    assert.is_true(utils.is_flashing(buf))
+
+    vim.wait(300, function()
+      return not vim.api.nvim_buf_is_loaded(buf)
+    end)
+    assert.is_false(vim.api.nvim_buf_is_loaded(buf))
+    vim.t.bufs = saved
+  end)
+end)
+
+describe("ui.tabline.utils.close_all_bufs", function()
+  local utils = require("ui.tabline.utils")
+
+  -- Idempotent (see TESTS/tabufline_state_spec.lua) -- state.close_all_bufs()
+  -- closes each listed buffer through close_buffer(), which switches to a
+  -- neighbour read from vim.t.bufs before deleting; without the BufDelete
+  -- autocmd this registers keeping that list current between the two closes
+  -- below, the second one's neighbour-switch would resurrect the first
+  -- buffer this test already closed.
+  require("ui.bindings.keymaps.tabufline.state").setup()
+
+  it("flashes every listed buffer together, then closes the whole batch once", function()
+    local a = vim.api.nvim_create_buf(true, false)
+    local b = vim.api.nvim_create_buf(true, false)
+    local saved = vim.t.bufs
+    vim.t.bufs = { a, b }
+
+    utils.close_all_bufs()
+
+    assert.is_true(utils.is_flashing(a))
+    assert.is_true(utils.is_flashing(b))
+    assert.is_true(vim.api.nvim_buf_is_loaded(a))
+    assert.is_true(vim.api.nvim_buf_is_loaded(b))
+
+    vim.wait(300, function()
+      return not vim.api.nvim_buf_is_loaded(a) and not vim.api.nvim_buf_is_loaded(b)
+    end)
+
+    assert.is_false(vim.api.nvim_buf_is_loaded(a))
+    assert.is_false(vim.api.nvim_buf_is_loaded(b))
+    vim.t.bufs = saved
+  end)
+end)
+
+describe("ui.bindings.keymaps.tabufline.close_n_buffers", function()
+  local tabufline = require("ui.bindings.keymaps.tabufline")
+  local utils = require("ui.tabline.utils")
+
+  -- Idempotent (see TESTS/tabufline_state_spec.lua) -- guarantees the
+  -- BufDelete/BufEnter autocmds that keep vim.t.bufs current are active
+  -- regardless of whether this file runs standalone or as part of the full
+  -- suite; the n > 1 path below depends on vim.t.bufs staying accurate
+  -- between its own successive closes.
+  require("ui.bindings.keymaps.tabufline.state").setup()
+
+  it("n == 1 flashes before closing (the plain-keypress path)", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(buf)
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    tabufline.close_n_buffers(1)
+
+    assert.is_true(utils.is_flashing(buf))
+    assert.is_true(vim.api.nvim_buf_is_loaded(buf))
+
+    vim.wait(300, function()
+      return not vim.api.nvim_buf_is_loaded(buf)
+    end)
+    assert.is_false(vim.api.nvim_buf_is_loaded(buf))
+    vim.t.bufs = saved
+  end)
+
+  it("n > 1 closes immediately, unflashed (the counted-keypress path)", function()
+    local a = vim.api.nvim_create_buf(true, false)
+    local b = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(a)
+    local saved = vim.t.bufs
+    vim.t.bufs = { a, b }
+
+    tabufline.close_n_buffers(2)
+
+    -- No wait needed: the n > 1 path is the original synchronous loop.
+    assert.is_false(vim.api.nvim_buf_is_loaded(a))
+    assert.is_false(vim.api.nvim_buf_is_loaded(b))
+    vim.t.bufs = saved
+  end)
+end)

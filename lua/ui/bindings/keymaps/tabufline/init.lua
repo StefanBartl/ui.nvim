@@ -135,11 +135,30 @@ function M.move_prev_n(n)
 end
 
 --- Close the current buffer, and repeat `count` times.
+---
+--- `n == 1` (a plain, uncounted `<leader>bc`, by far the common case) goes
+--- through `ui.tabline.utils.close_buffer()` -- flashed, then deferred --
+--- so the keymap gets the same close-flash feedback the tabline's own "x"
+--- button does. `n > 1` stays exactly as before, `state.close_buffer()`
+--- called synchronously in a loop: each iteration depends on the previous
+--- one having already landed on a new current buffer (`close_buffer()`'s own
+--- `vim.cmd("b" .. neighbour)` before it deletes), which a deferred close
+--- would break -- all `n` calls would fire against the same still-current
+--- buffer before any of them actually closed it.
 ---@param n integer
 ---@return boolean
 function M.close_n_buffers(n)
   if type(n) ~= "number" or n < 1 then
     return false
+  end
+
+  if n == 1 then
+    local ok, err = pcall(require("ui.tabline.utils").close_buffer)
+    if not ok then
+      notify.warn("[ui.tabufline] close_buffer failed: " .. tostring(err))
+      return false
+    end
+    return true
   end
 
   local success = true
