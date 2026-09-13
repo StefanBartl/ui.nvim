@@ -124,12 +124,3 @@ build one from, not a module itself:
 
 `docs/examples/personal-statusline-example.lua` is a full example built
 entirely from these plus the table above — copy it as a starting point.
-
----
-
-## What is deliberately not here
-
-`ui.statusline.modules.neotest_module` is not catalogued. It has a real,
-documented bug (calls a function never `require`d) and is not referenced by
-any shipped preset — a catalog entry would be an offer to use something that
-does not work.

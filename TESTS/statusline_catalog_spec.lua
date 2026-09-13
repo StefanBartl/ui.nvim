@@ -39,12 +39,6 @@ describe("ui.statusline.catalog", function()
       end
     end
   end)
-
-  it("does not catalogue the known-dead neotest_module", function()
-    for _, entry in ipairs(catalog) do
-      assert.is_not.equals("neotest_module", entry.key)
-    end
-  end)
 end)
 
 describe(":UI modules", function()

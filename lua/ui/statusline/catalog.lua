@@ -5,11 +5,6 @@
 --- modules` and `docs/modules.md` read from, so the two can't drift apart.
 --- Writing a module by hand stays exactly as possible as before; this only
 --- makes "which ones already exist" answerable without reading source.
----
---- Deliberately excludes `ui.statusline.modules.neotest_module` -- already
---- documented elsewhere as dead code with a real bug (calls a function that
---- was never `require`d), unreferenced by any shipped preset. A catalog
---- entry would be an offer to use something that does not work.
 
 ---@class Ui.Statusline.CatalogEntry
 ---@field key string # the `order`/`modules` key this segment renders under
