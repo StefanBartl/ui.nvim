@@ -120,11 +120,29 @@ describe("ui.bindings.keymaps.setup tabs", function()
   end)
 end)
 
+describe("ui.bindings.keymaps.setup theme", function()
+  it("binds the default <leader>ut when theme = true", function()
+    keymaps.setup({ theme = true })
+
+    local entry = find_registered("toggle_theme")
+    assert.is_not_nil(entry)
+    assert.equals("<leader>ut", entry.lhs)
+  end)
+end)
+
 describe("ui.bindings.keymaps.setup all", function()
-  it("binds every action across both surfaces", function()
+  it("binds every action across all three surfaces", function()
     keymaps.setup({ all = true })
 
-    for _, name in ipairs({ "next", "prev", "close", "move_right", "move_left", "move_to_tab" }) do
+    for _, name in ipairs({
+      "next",
+      "prev",
+      "close",
+      "move_right",
+      "move_left",
+      "move_to_tab",
+      "toggle_theme",
+    }) do
       assert.is_not_nil(find_registered(name), name .. " should be registered")
     end
   end)

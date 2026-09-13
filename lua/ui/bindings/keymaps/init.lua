@@ -1,20 +1,27 @@
 ---@module 'ui.bindings.keymaps'
---- Buffer/tab navigation, through `lib.nvim.bindings.keymap.register()` --
---- the ecosystem's own mechanism for "a plugin ships named, overridable
---- actions" (see that module's own doc comment), not a bespoke one. Two
---- registrations under the plugin name `"ui.nvim"`, one per surface
---- (`opts.surface = "buffers"`/`"tabs"`) so `:checkhealth`/a generated
---- bindings page can tell the two groups apart the way `ui.setup`'s own
---- `buffers`/`tabs` toggles already do.
+--- Buffer/tab navigation and the theme-toggle keymap, through
+--- `lib.nvim.bindings.keymap.register()` -- the ecosystem's own mechanism
+--- for "a plugin ships named, overridable actions" (see that module's own
+--- doc comment), not a bespoke one. Three registrations under the plugin
+--- name `"ui.nvim"`, one per surface (`opts.surface =
+--- "buffers"`/`"tabs"`/`"theme"`) so `:checkhealth`/a generated bindings
+--- page can tell the groups apart the way `ui.setup`'s own
+--- `buffers`/`tabs`/`theme` toggles already do.
 ---
 --- `opts.keys` is the override table `register()`'s `user` parameter expects:
 --- `{ next = "<C-Right>", close = false }` remaps `next` and drops `close`,
 --- leaving every other default untouched. An unknown name in it (a typo, or
 --- a tabs-surface name reaching the buffers registration) is reported by
 --- `register()` itself, not silently ignored -- which is why the table is
---- filtered per surface below rather than handed to both calls whole: an
---- override meant for the *other* surface would otherwise warn as unknown on
---- this one.
+--- filtered per surface below rather than handed to all three calls whole:
+--- an override meant for a *different* surface would otherwise warn as
+--- unknown on this one.
+---
+--- `toggle_theme` moved here 2026-09-13 from a host-side keymap file
+--- (`bindings/mappings/nvchad.lua`, a leftover name from before this plugin
+--- had its own `:UI theme`/`:UI toggle` commands to bind a key to) -- the
+--- key itself is this plugin's own concern now, configurable the same way
+--- as every other action here, not a fixed `<leader>nvt` a host hand-wired.
 
 local notify = require("lib.nvim.notify").create("[ui.bindings.keymaps]")
 
@@ -43,6 +50,9 @@ local BUFFER_ACTIONS = { next = true, prev = true, close = true }
 
 ---@type table<string, true>
 local TAB_ACTIONS = { move_right = true, move_left = true, move_to_tab = true }
+
+---@type table<string, true>
+local THEME_ACTIONS = { toggle_theme = true }
 
 ---@param keys Ui.Keymaps.Keys|nil
 ---@param allowed table<string, true>
@@ -162,6 +172,30 @@ local function attach_tabs(keys)
 end
 
 -- ---------------------------------------------------------------------------
+-- Theme
+-- ---------------------------------------------------------------------------
+---@param keys Ui.Keymaps.Keys|nil
+---@return nil
+local function attach_theme(keys)
+  keymap.register("ui.nvim", {
+    order = { "toggle_theme" },
+    actions = {
+      toggle_theme = {
+        default = "<leader>ut",
+        mode = "n",
+        desc = "toggle between the two configured themes",
+        rhs = function()
+          local ok, err = pcall(require("ui.bindings.usrcmds.themes").toggle_theme)
+          if not ok then
+            notify.warn("[ui.bindings.keymaps] Theme toggle failed: " .. tostring(err))
+          end
+        end,
+      },
+    },
+  }, filter_keys(keys, THEME_ACTIONS), { surface = "theme" })
+end
+
+-- ---------------------------------------------------------------------------
 -- Public API
 -- ---------------------------------------------------------------------------
 ---@param opts Ui.Keymaps.Modules
@@ -180,6 +214,13 @@ function M.setup(opts)
     local ok, err = pcall(attach_tabs, opts.keys)
     if not ok then
       notify.error("[ui.bindings.keymaps] Tab mappings failed: " .. tostring(err))
+    end
+  end
+
+  if opts.all or opts.theme then
+    local ok, err = pcall(attach_theme, opts.keys)
+    if not ok then
+      notify.error("[ui.bindings.keymaps] Theme mapping failed: " .. tostring(err))
     end
   end
 end

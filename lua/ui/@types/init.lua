@@ -48,12 +48,14 @@
 ---@field move_right? Ui.Keymaps.Lhs # default "<leader>tr" -- move buffer right in vim.t.bufs
 ---@field move_left? Ui.Keymaps.Lhs # default "<leader>tl" -- move buffer left in vim.t.bufs
 ---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab
+---@field toggle_theme? Ui.Keymaps.Lhs # default "<leader>ut" -- toggle between the two configured themes
 
 --- What `ui.bindings.keymaps.setup(opts)` turns on.
 ---@class Ui.Keymaps.Modules
 ---@field all? boolean
 ---@field buffers? boolean
 ---@field tabs? boolean
+---@field theme? boolean
 ---@field keys? Ui.Keymaps.Keys # per-action left-hand-side overrides; see its own doc comment
 
 --- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which

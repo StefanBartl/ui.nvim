@@ -61,11 +61,12 @@ transparency flag — where a line range or a repeat count has no meaning.
 Registered by `ui.bindings.keymaps.setup({ all = true })`, which `ui.setup`
 calls when `all` or `keymaps` is set. The left-hand sides below are shipped
 defaults, not fixed: `ui.setup({ keymaps = { buffers = true, tabs = true,
-keys = { next = "<C-Right>", close = false } } })` renames `next` and drops
-`close` entirely, leaving every other default binding untouched -- override
-only what you want different, same shape `ui.config.setup`'s own
-`theme`/`tabline` tables use. `keymaps = true` (or `all = true`) is still the
-one-line "everything, defaults" shorthand this table assumes.
+theme = true, keys = { next = "<C-Right>", close = false } } })` renames
+`next` and drops `close` entirely, leaving every other default binding
+untouched -- override only what you want different, same shape
+`ui.config.setup`'s own `theme`/`tabline` tables use. `keymaps = true` (or
+`all = true`) is still the one-line "everything, defaults" shorthand this
+table assumes.
 
 ### Buffers
 
@@ -82,6 +83,12 @@ one-line "everything, defaults" shorthand this table assumes.
 | `<leader>tr` | `move_right` | `n` | Move the current buffer one position right in the tabline |
 | `<leader>tl` | `move_left` | `n` | Move it one position left |
 | `<leader>tt` | `move_to_tab` | `n` | Move the current buffer into a new tab |
+
+### Theme
+
+| Key | `opts.keys` name | Mode | Does |
+| --- | --- | --- | --- |
+| `<leader>ut` | `toggle_theme` | `n` | Toggle between the two themes in `theme.theme_toggle` -- same as `:UI toggle` |
 
 Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of
