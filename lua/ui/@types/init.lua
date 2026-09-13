@@ -85,7 +85,9 @@
 ---@class Ui.Tabline.Config
 ---@field order string[] # walked in order; ui.tabline.modules' four keys by default
 ---@field modules? table<string, fun(cfg: Ui.Tabline.Config): string> # per-key override; a key absent here falls back to the built-in module of the same name
----@field bufwidth? integer # target buffer-chip width in columns; default 21
+---@field bufwidth? integer # exact buffer-chip width in columns; unset (default) computes one from the available space and buffer count instead
+---@field bufwidth_min? integer # lower clamp for the auto-computed width; default 12. Ignored when `bufwidth` is set
+---@field bufwidth_max? integer # upper clamp for the auto-computed width; default 24. Ignored when `bufwidth` is set
 ---@field tree_offset_ft? string # filetype the "tree_offset" module reserves space for; default "filetree" (filetree.nvim)
 
 return {}

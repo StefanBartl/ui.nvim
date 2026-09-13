@@ -188,6 +188,98 @@ describe("ui.tabline.modules", function()
 
     assert.is_true(calls <= 1, ("expected at most 1 call, got %d"):format(calls))
   end)
+
+  --- Regression for the "only ~7 of 10 open buffers ever show, with visible
+  --- leftover space in the bar" report: a fixed 21-wide chip wastes whatever
+  --- remainder doesn't divide evenly, even when every buffer would fit at a
+  --- narrower width. `bufwidth` left unset now computes one from the
+  --- available space instead (clamped to [12, 24]).
+  describe("auto chip width (cfg.bufwidth unset)", function()
+    local saved_cols
+
+    before_each(function()
+      saved_cols = vim.o.columns
+    end)
+
+    after_each(function()
+      vim.o.columns = saved_cols
+    end)
+
+    ---@param n integer
+    ---@return integer[]
+    local function make_bufs(n)
+      local bufs = {}
+      for _ = 1, n do
+        bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
+      end
+      return bufs
+    end
+
+    ---@param bufs integer[]
+    local function delete_bufs(bufs)
+      for _, b in ipairs(bufs) do
+        pcall(vim.api.nvim_buf_delete, b, { force = true })
+      end
+    end
+
+    ---@param out string
+    ---@return integer
+    local function chip_count(out)
+      return select(2, out:gsub("UiTbGoToBuf", ""))
+    end
+
+    it(
+      "fits every buffer when they fit at the minimum width, unlike a fixed 21-wide chip",
+      function()
+        vim.o.columns = 300 -- 15 * 21 = 315 would NOT fit; 15 * 12 = 180 does
+        local saved = vim.t.bufs
+        local bufs = make_bufs(15)
+        vim.t.bufs = bufs
+
+        local out = modules.buffers({ order = { "buffers" } })
+
+        vim.t.bufs = saved
+        delete_bufs(bufs)
+
+        assert.equals(15, chip_count(out))
+      end
+    )
+
+    it(
+      "still overflows (drops chips from the front) once even the minimum width doesn't fit",
+      function()
+        vim.o.columns = 300 -- 100 * 12 = 1200, nowhere near 300
+        local saved = vim.t.bufs
+        local bufs = make_bufs(100)
+        vim.t.bufs = bufs
+
+        local out = modules.buffers({ order = { "buffers" } })
+
+        vim.t.bufs = saved
+        delete_bufs(bufs)
+
+        assert.is_true(chip_count(out) < 100)
+      end
+    )
+
+    it("an explicit cfg.bufwidth still pins an exact width, auto-computation off", function()
+      vim.o.columns = 300
+      local saved = vim.t.bufs
+      local bufs = make_bufs(3)
+      vim.t.bufs = bufs
+
+      -- 3 buffers at a pinned width of 101 each (303 total) don't fit in 300
+      -- columns -- at least one must be dropped, proving the pinned value
+      -- (not the auto min/max clamp, which would fit all 3 at width 24) drove
+      -- the overflow decision.
+      local out = modules.buffers({ order = { "buffers" }, bufwidth = 101 })
+
+      vim.t.bufs = saved
+      delete_bufs(bufs)
+
+      assert.is_true(chip_count(out) < 3)
+    end)
+  end)
 end)
 
 describe("ui.tabline.utils.style_buf", function()

@@ -73,6 +73,62 @@ function M.accent(key)
   return FALLBACK_HEX[key] or "#a0a8b7"
 end
 
+---@alias Ui.Theme.ModeKey
+---| "Normal"
+---| "NTerminal"
+---| "Visual"
+---| "Insert"
+---| "Terminal"
+---| "Replace"
+---| "Select"
+---| "Command"
+---| "Confirm"
+
+--- Anchor group per vim-mode suffix -- the second element of each entry in
+--- `ui.statusline.utils.primitives.modes`. Same recipe as `ANCHORS` above,
+--- kept as a separate table because a statusline mode chip and a filetree
+--- cwd-mode badge are unrelated semantics that happen to both want "one
+--- accent color read from the active colorscheme".
+---@type table<Ui.Theme.ModeKey, {group: string, field: "fg"|"bg"}[]>
+local MODE_ANCHORS = {
+  Normal = { { group = "DiagnosticOk", field = "fg" }, { group = "String", field = "fg" } },
+  Insert = { { group = "DiagnosticInfo", field = "fg" }, { group = "Function", field = "fg" } },
+  Visual = { { group = "DiagnosticHint", field = "fg" }, { group = "Keyword", field = "fg" } },
+  Select = { { group = "DiagnosticHint", field = "fg" }, { group = "Keyword", field = "fg" } },
+  Replace = { { group = "DiagnosticError", field = "fg" }, { group = "ErrorMsg", field = "fg" } },
+  Command = { { group = "DiagnosticWarn", field = "fg" }, { group = "WarningMsg", field = "fg" } },
+  Confirm = { { group = "DiagnosticWarn", field = "fg" }, { group = "WarningMsg", field = "fg" } },
+  Terminal = { { group = "Special", field = "fg" }, { group = "Comment", field = "fg" } },
+  NTerminal = { { group = "Special", field = "fg" }, { group = "Comment", field = "fg" } },
+}
+
+---@type table<Ui.Theme.ModeKey, string>
+local MODE_FALLBACK_HEX = {
+  Normal = "#7fd88f",
+  Insert = "#7aa2f7",
+  Visual = "#bb9af7",
+  Select = "#bb9af7",
+  Replace = "#e06c75",
+  Command = "#e0af68",
+  Confirm = "#e0af68",
+  Terminal = "#4fd6be",
+  NTerminal = "#4fd6be",
+}
+
+---The accent color for a statusline mode chip, e.g. "Insert" -> a blue-ish
+---hex. Same always-a-hex contract as `M.accent`.
+---@param mode_key Ui.Theme.ModeKey
+---@return string hex
+function M.mode_accent(mode_key)
+  for _, anchor in ipairs(MODE_ANCHORS[mode_key] or {}) do
+    local hex = read_hl(anchor.group, anchor.field)
+    if hex then
+      return hex
+    end
+  end
+  return MODE_FALLBACK_HEX[mode_key] or "#a0a8b7"
+end
+
 --- Relative luminance (simplified sRGB) of a "#rrggbb" hex, 0..1.
 ---@param hex string
 ---@return number

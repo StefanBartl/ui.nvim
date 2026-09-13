@@ -109,6 +109,7 @@ UI — which it does not do yet, because it is still standing on one.
 - [The coupling to NvChad](#the-coupling-to-nvchad)
 - [What it is not](#what-it-is-not)
 - [Status](#status)
+- [Credits](#credits)
 - [License](#license)
 
 ---
@@ -307,6 +308,19 @@ anything outside statusline/tabline/theme, and does not now either -- see
 names every dependency, reports its own statusline render entrypoint as
 resolving and rendering standalone, and says whether NvChad is present as
 information rather than a fatal error — it stopped being one at step 4.
+
+---
+
+## Credits
+
+This plugin's statusline/tabline/theme layer started as a port out of
+[NvChad](https://nvchad.com) — the layout, the preset shapes, and a good deal
+of the original implementation this repository's own code has since replaced
+symbol by symbol (see [The coupling to NvChad](#the-coupling-to-nvchad) for
+the full history) all trace back to it. No NvChad code or symbol remains a
+runtime dependency as of step 7, but the debt is real and worth naming: this
+plugin would not look the way it does, or exist at all, without NvChad having
+shown what a statusline/tabline/theme layer for Neovim could be first.
 
 ---
 

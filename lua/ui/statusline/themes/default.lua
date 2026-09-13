@@ -46,8 +46,15 @@ function M.build(separator_style)
     local entry = modes[m] or { m, "Normal" }
 
     local current_mode = "%#St_" .. entry[2] .. "Mode#  " .. entry[1]
-    local mode_sep1 = "%#St_" .. entry[2] .. "ModeSep#" .. sep_r
-    return current_mode .. mode_sep1 .. "%#ST_EmptySpace#" .. sep_r
+    -- One separator, not two -- `St_<Mode>ModeSep` already fades the chip's
+    -- accent color into `ST_EmptySpace`'s background; a second `sep_r` right
+    -- after it drew the same glyph twice (a duplicated-halfcircle artifact,
+    -- not a deliberate double-cap effect -- confirmed against `git log -p`,
+    -- unchanged since the original wkdnvchad port). `%#ST_EmptySpace#` still
+    -- opens here with no glyph, purely to reset the highlight group for
+    -- whatever the next module in `order` renders.
+    local mode_sep = "%#St_" .. entry[2] .. "ModeSep#" .. sep_r
+    return current_mode .. mode_sep .. "%#ST_EmptySpace#"
   end
 
   T.file = function()

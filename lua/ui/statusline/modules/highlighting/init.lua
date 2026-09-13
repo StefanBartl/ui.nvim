@@ -49,7 +49,7 @@ end
 function M.mode_band_group()
   local ok_mode, mode_info = pcall(vim.api.nvim_get_mode)
   if not ok_mode or not mode_info or not mode_info.mode then
-    return "St_Normalmode" -- Fallback
+    return "St_NormalMode" -- Fallback
   end
 
   local m = mode_info.mode
@@ -64,7 +64,12 @@ function M.mode_band_group()
 
   local utils = require("ui.statusline.utils.primitives")
   local name = (utils.modes[m] and utils.modes[m][2]) or "Normal"
-  mode_band_cache = "St_" .. name .. "mode"
+  -- "St_" .. name .. "Mode" (capital M) -- matches the group name
+  -- `ui.statusline.themes.default`'s `T.mode()` and `ui.statusline.highlights`
+  -- actually build. Was "St_" .. name .. "mode" (lowercase), a second, never-
+  -- defined name for the same concept -- breadcrumbs colored via this
+  -- function never matched the mode chip's own color because of it.
+  mode_band_cache = "St_" .. name .. "Mode"
 
   return mode_band_cache
 end

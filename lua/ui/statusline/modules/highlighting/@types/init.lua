@@ -18,8 +18,9 @@
 ---
 ---@field mode_band_group fun(): string
 --- Resolves the current mode-band highlight group from the
---- current Vim mode. Return format: "St_<Name>mode"
---- (e.g. "St_Normalmode", "St_Insertmode").
+--- current Vim mode. Return format: "St_<Name>Mode"
+--- (e.g. "St_NormalMode", "St_InsertMode") -- matches the
+--- groups `ui.statusline.highlights` builds.
 
 -- Type Usage:
 -- ---@type Ui.UI.Stl.Modules.Highlighting
