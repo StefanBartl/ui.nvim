@@ -75,6 +75,24 @@ M.modes = {
   ["!"] = { "SHELL", "Terminal" },
 }
 
+-- Icon glyphs `M.git`/`M.lsp`/`M.diagnostics` need, as explicit `\xEE`/`\xEF`
+-- UTF-8 byte escapes rather than literal glyphs -- same reason, and the same
+-- fix, as `M.separators` below already documents for itself: these were
+-- bare ASCII spaces here (no glyph at all, not even a corrupted one) while
+-- `nvchad/stl/utils.lua` -- the file this module was ported from -- still
+-- has every one of them intact, byte for byte. That silent loss is what
+-- produced the reported "counter with no icon" (a git-changed count showing
+-- as a bare "1"): not a bug in the highlight-group fix that shipped
+-- alongside the double-separator fix, just never independently verified
+-- against a diff of the original file until now.
+local ICON_GIT_ADDED = "\xEF\x81\x95"
+local ICON_GIT_CHANGED = "\xEF\x91\x99"
+local ICON_GIT_REMOVED = "\xEF\x85\x86"
+local ICON_GIT_BRANCH = "\xEE\xA9\xA8"
+local ICON_LSP_CLIENT = "\xEF\x82\x85"
+local ICON_LSP_ERROR = "\xEF\x81\x97"
+local ICON_LSP_WARN = "\xEF\x81\xB1"
+
 --- Branch name plus added/changed/removed counts from gitsigns' buffer-local
 --- state. Empty when gitsigns has not attached (no head) or has not produced
 --- a status dict yet.
@@ -86,12 +104,16 @@ M.git = function()
     return ""
   end
 
-  local added = (git_status.added and git_status.added ~= 0) and ("  " .. git_status.added) or ""
-  local changed = (git_status.changed and git_status.changed ~= 0) and ("  " .. git_status.changed)
+  local added = (git_status.added and git_status.added ~= 0)
+      and (" " .. ICON_GIT_ADDED .. " " .. git_status.added)
     or ""
-  local removed = (git_status.removed and git_status.removed ~= 0) and ("  " .. git_status.removed)
+  local changed = (git_status.changed and git_status.changed ~= 0)
+      and (" " .. ICON_GIT_CHANGED .. " " .. git_status.changed)
     or ""
-  local branch_name = " " .. git_status.head
+  local removed = (git_status.removed and git_status.removed ~= 0)
+      and (" " .. ICON_GIT_REMOVED .. " " .. git_status.removed)
+    or ""
+  local branch_name = ICON_GIT_BRANCH .. " " .. git_status.head
 
   return " " .. branch_name .. added .. changed .. removed
 end
@@ -103,7 +125,8 @@ M.lsp = function()
   if rawget(vim, "lsp") then
     for _, client in ipairs(vim.lsp.get_clients()) do
       if client.attached_buffers[M.stbufnr()] then
-        return (vim.o.columns > 100 and "   LSP ~ " .. client.name .. " ") or "   LSP "
+        local label = " " .. ICON_LSP_CLIENT .. "  LSP "
+        return (vim.o.columns > 100 and (label .. "~ " .. client.name .. " ")) or label
       end
     end
   end
@@ -125,8 +148,8 @@ M.diagnostics = function()
   local hints_n = #vim.diagnostic.get(buf, { severity = vim.diagnostic.severity.HINT })
   local info_n = #vim.diagnostic.get(buf, { severity = vim.diagnostic.severity.INFO })
 
-  local err = (err_n > 0) and ("%#St_lspError#" .. " " .. err_n .. " ") or ""
-  local warn = (warn_n > 0) and ("%#St_lspWarning#" .. " " .. warn_n .. " ") or ""
+  local err = (err_n > 0) and ("%#St_lspError#" .. ICON_LSP_ERROR .. " " .. err_n .. " ") or ""
+  local warn = (warn_n > 0) and ("%#St_lspWarning#" .. ICON_LSP_WARN .. " " .. warn_n .. " ") or ""
   local hints = (hints_n > 0) and ("%#St_lspHints#" .. "󰛩 " .. hints_n .. " ") or ""
   local info = (info_n > 0) and ("%#St_lspInfo#" .. "󰋼 " .. info_n .. " ") or ""
 

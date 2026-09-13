@@ -180,3 +180,78 @@ describe("bug: themes.default T.mode() drew its own separator glyph twice", func
     assert.equals(1, count)
   end)
 end)
+
+describe("bug: statusline git/diagnostics/lsp counters silently lost their icon glyphs", function()
+  -- primitives.git()/diagnostics()/lsp() were ported from
+  -- nvchad/stl/utils.lua with every icon glyph reduced to a bare ASCII
+  -- space -- confirmed byte-for-byte against that original file, which
+  -- still has every one of them intact. This is what actually produced the
+  -- reported "counter with no icon" (a gitsigns "changed" count rendering
+  -- as a bare "1"), not the St_* highlight-group gap that shipped in the
+  -- same round -- that fix was necessary but not sufficient, and the "1
+  -- ohne Icon" report was never independently re-checked against it.
+  local primitives = require("ui.statusline.utils.primitives")
+
+  -- `vim.lsp` is a lazily-materialized submodule (Neovim's own `vim.__index`
+  -- populates it on first read) -- `rawget(vim, "lsp")`, what M.lsp()/
+  -- M.diagnostics() gate on below, only sees it once something has actually
+  -- read `vim.lsp` at least once. A real session always has by the time any
+  -- diagnostic or client exists (attaching one necessarily touches
+  -- `vim.lsp` itself); a bare test process has not, unless something forces
+  -- it first -- this line is that force, not a workaround for a bug.
+  local _ = vim.lsp
+
+  it("git() renders the added/changed/removed/branch icons, not bare spaces", function()
+    local buf = primitives.stbufnr()
+    local saved_head = vim.b[buf].gitsigns_head
+    local saved_status = vim.b[buf].gitsigns_status_dict
+
+    vim.b[buf].gitsigns_head = "main"
+    vim.b[buf].gitsigns_status_dict = { head = "main", added = 1, changed = 2, removed = 3 }
+
+    local out = primitives.git()
+
+    vim.b[buf].gitsigns_head = saved_head
+    vim.b[buf].gitsigns_status_dict = saved_status
+
+    -- Each icon is a multi-byte UTF-8 sequence starting 0xEF/0xEE -- the
+    -- regression left bare ASCII spaces, none of which contain these bytes.
+    assert.is_true(out:find("\xEF\x81\x95", 1, true) ~= nil, out) -- added
+    assert.is_true(out:find("\xEF\x91\x99", 1, true) ~= nil, out) -- changed
+    assert.is_true(out:find("\xEF\x85\x86", 1, true) ~= nil, out) -- removed
+    assert.is_true(out:find("\xEE\xA9\xA8", 1, true) ~= nil, out) -- branch
+  end)
+
+  it("diagnostics() renders the error/warning icons, not bare spaces", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(buf)
+    local ns = vim.api.nvim_create_namespace("ui_primitives_icon_regression_test")
+
+    vim.diagnostic.set(ns, buf, {
+      { lnum = 0, col = 0, message = "fake error", severity = vim.diagnostic.severity.ERROR },
+      { lnum = 0, col = 0, message = "fake warning", severity = vim.diagnostic.severity.WARN },
+    })
+
+    local out = primitives.diagnostics()
+
+    vim.diagnostic.reset(ns, buf)
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+    assert.is_true(out:find("\xEF\x81\x97", 1, true) ~= nil, out) -- error
+    assert.is_true(out:find("\xEF\x81\xB1", 1, true) ~= nil, out) -- warning
+  end)
+
+  it("lsp() renders the attached client's icon, not a bare space", function()
+    local original = vim.lsp.get_clients
+    vim.lsp.get_clients = function()
+      return {
+        { name = "fake-lsp", attached_buffers = { [vim.api.nvim_get_current_buf()] = true } },
+      }
+    end
+
+    local out = primitives.lsp()
+    vim.lsp.get_clients = original
+
+    assert.is_true(out:find("\xEF\x82\x85", 1, true) ~= nil, out)
+  end)
+end)
