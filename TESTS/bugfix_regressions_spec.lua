@@ -255,3 +255,33 @@ describe("bug: statusline git/diagnostics/lsp counters silently lost their icon 
     assert.is_true(out:find("\xEF\x82\x85", 1, true) ~= nil, out)
   end)
 end)
+
+describe("bug: git()'s branch name was not %-escaped for 'statusline'", function()
+  -- `%` is a valid git ref character (a branch named e.g. "50%-done" is
+  -- legal), and `git_status.head` was concatenated straight into the
+  -- rendered string -- the same bug class `ui.tabline.utils`' own
+  -- `stl_escape` and `ui.statusline.modules.formatters.stl_escape` already
+  -- guard against for buffer names and LSP/Treesitter symbol text. Found
+  -- while building the statusline click layer, never independently fixed
+  -- for this call site before.
+  local primitives = require("ui.statusline.utils.primitives")
+
+  it("escapes a literal % in the branch name so it cannot be read as a directive", function()
+    local buf = primitives.stbufnr()
+    local saved_head = vim.b[buf].gitsigns_head
+    local saved_status = vim.b[buf].gitsigns_status_dict
+
+    vim.b[buf].gitsigns_head = "feature/50%-done"
+    vim.b[buf].gitsigns_status_dict = { head = "feature/50%-done" }
+
+    local out = primitives.git()
+
+    vim.b[buf].gitsigns_head = saved_head
+    vim.b[buf].gitsigns_status_dict = saved_status
+
+    -- Escaped: one literal "%" becomes two ("%%"), plain-string search so
+    -- neither side of this assertion is itself read as a Lua pattern.
+    assert.is_true(out:find("50%%-done", 1, true) ~= nil, out)
+    assert.is_nil(out:find("50%-done", 1, true))
+  end)
+end)
