@@ -2,8 +2,9 @@
 --- Entry point of ui.nvim: the statusline, tabline and theme layer.
 ---
 --- `M.setup(opts)` turns on this plugin's own submodules selectively rather
---- than loading everything unconditionally -- `{ all = true }` is what a host
---- normally passes.
+--- than loading everything unconditionally -- `{ all = true }` turns both on
+--- with every default; `{ keymaps = true, usrcmds = true }` does the same
+--- without the shorthand.
 ---
 --- What it deliberately does NOT do is assemble the configuration. That is
 --- `ui.config.setup()`, whose return value NvChad consumes through `chadrc`,
@@ -17,25 +18,20 @@ local M = {}
 
 --- Enable the selected submodules.
 ---
---- `opts.keymaps` is either `true` (every default keymap, same as before) or
---- a `Ui.Keymaps.Modules` table for per-group (`buffers`/`tabs`) or per-key
---- (`keys.next = false`, `keys.close = "<leader>x"`, ...) control -- see that
---- type's own doc comment.
+--- `opts.keymaps` turns the keymaps submodule on at all -- pass `true` (or
+--- rely on `opts.all`) for every shipped keymap at its default, or a
+--- `Ui.Keymaps.Keys` table (`{ next = "<C-Right>", close = false }`) to
+--- remap or drop individual ones; either form is handed straight to
+--- `ui.bindings.keymaps.setup()`, which is the thing that actually knows
+--- what "default" means for each action -- see that module's own doc
+--- comment.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
   opts = opts or {}
 
   if opts.all or opts.keymaps then
-    local keymaps_opts = opts.keymaps
-    if keymaps_opts == true or opts.all then
-      keymaps_opts = vim.tbl_deep_extend(
-        "force",
-        { all = true },
-        type(keymaps_opts) == "table" and keymaps_opts or {}
-      )
-    end
-    require("ui.bindings.keymaps").setup(keymaps_opts)
+    require("ui.bindings.keymaps").setup(opts.keymaps)
   end
 
   if opts.all or opts.usrcmds then

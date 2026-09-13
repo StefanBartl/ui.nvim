@@ -58,19 +58,23 @@ transparency flag — where a line range or a repeat count has no meaning.
 
 ## Keymaps
 
-Registered by `ui.bindings.keymaps.setup({ all = true })`, which `ui.setup`
-calls when `all` or `keymaps` is set. The left-hand sides below are shipped
-defaults, not fixed: `ui.setup({ keymaps = { buffers = true, tabs = true,
-theme = true, keys = { next = "<C-Right>", close = false } } })` renames
-`next` and drops `close` entirely, leaving every other default binding
-untouched -- override only what you want different, same shape
-`ui.config.setup`'s own `theme`/`tabline` tables use. `keymaps = true` (or
-`all = true`) is still the one-line "everything, defaults" shorthand this
-table assumes.
+Registered by `ui.bindings.keymaps.setup()`, which `ui.setup` calls when
+`all` or `keymaps` is set, with `opts.keymaps` handed straight through as
+`ui.bindings.keymaps.setup(opts.keymaps)`'s own parameter -- no `{ all =
+true }` needed; that would in fact warn now ("no such keymap action: all"),
+since `all` was this module's own bespoke flag, not something
+`keymap.register()` itself knows. Every
+left-hand side below is a shipped default, not fixed, and every action binds
+by default -- nothing here needs to be turned on: `ui.setup({ keymaps = {
+next = "<C-Right>", close = false } })` renames `next` and drops `close`
+entirely, leaving every other action (`prev`, `move_right`, `move_left`,
+`move_to_tab`, `toggle_theme`) at its default. `keymaps = false` (or
+`ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
+switch, the same shape `my.nvim`'s own keymaps use.
 
 ### Buffers
 
-| Key | `opts.keys` name | Mode | Does |
+| Key | `opts.keymaps` name | Mode | Does |
 | --- | --- | --- | --- |
 | `<Tab>` | `next` | `n` | Next buffer |
 | `<S-Tab>` | `prev` | `n` | Previous buffer |
@@ -78,7 +82,7 @@ table assumes.
 
 ### Tabs
 
-| Key | `opts.keys` name | Mode | Does |
+| Key | `opts.keymaps` name | Mode | Does |
 | --- | --- | --- | --- |
 | `<leader>tr` | `move_right` | `n` | Move the current buffer one position right in the tabline |
 | `<leader>tl` | `move_left` | `n` | Move it one position left |
@@ -86,7 +90,7 @@ table assumes.
 
 ### Theme
 
-| Key | `opts.keys` name | Mode | Does |
+| Key | `opts.keymaps` name | Mode | Does |
 | --- | --- | --- | --- |
 | `<leader>ut` | `toggle_theme` | `n` | Toggle between the two themes in `theme.theme_toggle` -- same as `:UI toggle` |
 

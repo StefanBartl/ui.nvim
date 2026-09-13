@@ -29,18 +29,20 @@
 --- `usrcmd` before the extraction, when the directories were.
 ---@class Ui.Modules
 ---@field all? boolean # Shorthand for every flag below
----@field keymaps? boolean|Ui.Keymaps.Modules # `true` for every default keymap (`ui.bindings.keymaps.setup({all=true})`), or a table for per-group/per-key control
+---@field keymaps? boolean|Ui.Keymaps.Keys # turns the keymaps submodule on; `true` (or omitted, under `all`) for every default, a table to remap/drop individual actions -- see `Ui.Keymaps.Keys`
 ---@field usrcmds? boolean # The `:UI` command and theme management
 
---- One keymap action's left-hand side, or `false` to not bind it at all
---- while leaving the rest of its group on.
+--- One keymap action's left-hand side, or `false` to not bind it at all.
 ---@alias Ui.Keymaps.Lhs string|false
 
---- Per-action key overrides for `ui.bindings.keymaps.setup(opts)`. Any key
---- left out keeps `ui.bindings.keymaps`'s own shipped default (`<Tab>`,
---- `<leader>tr`, ...) -- a host overrides only the ones it wants different,
---- same "override what you need" shape `ui.config.setup`'s `theme`/`tabline`
---- merges already use.
+--- `ui.bindings.keymaps.setup(opts)`'s own parameter -- `lib.nvim.bindings
+--- .keymap.register()`'s `user` table, unwrapped (no extra `all`/group
+--- flags on top, no nested `keys` field): absent (`nil`, `{}`, or `true`)
+--- binds every action at its shipped default, `false` binds none, and any
+--- key present here overrides just that one action -- `{ next =
+--- "<C-Right>", close = false }` remaps `next` and drops `close`, leaving
+--- `prev`/`move_right`/`move_left`/`move_to_tab`/`toggle_theme` at their
+--- defaults. Same shape `my.nvim`'s own `bindings/keymaps.lua` uses.
 ---@class Ui.Keymaps.Keys
 ---@field next? Ui.Keymaps.Lhs # default "<Tab>" -- next buffer
 ---@field prev? Ui.Keymaps.Lhs # default "<S-Tab>" -- previous buffer
@@ -49,14 +51,6 @@
 ---@field move_left? Ui.Keymaps.Lhs # default "<leader>tl" -- move buffer left in vim.t.bufs
 ---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab
 ---@field toggle_theme? Ui.Keymaps.Lhs # default "<leader>ut" -- toggle between the two configured themes
-
---- What `ui.bindings.keymaps.setup(opts)` turns on.
----@class Ui.Keymaps.Modules
----@field all? boolean
----@field buffers? boolean
----@field tabs? boolean
----@field theme? boolean
----@field keys? Ui.Keymaps.Keys # per-action left-hand-side overrides; see its own doc comment
 
 --- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which
 --- colorscheme to boot into" -- that is the host's own init.lua, independent
