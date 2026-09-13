@@ -11,10 +11,14 @@ local function esc_percent(s)
   return out
 end
 
---- Compute an 8-level bar index from a 0..100 percentage.
+--- Compute an 8-level bar glyph from a 0..100 percentage. Public: any module
+--- that wants the same density-bar look (a single glyph standing in for "how
+--- full is this 0..100 value") reuses this rather than a second copy of the
+--- same eight-glyph table and step math -- `ui.statusline.modules
+--- .diagnostics_sparkline` is the first of those.
 --- @param pct integer
 --- @return string
-local function pct_bar(pct)
+function M.pct_bar(pct)
   if pct < 0 then
     pct = 0
   elseif pct > 100 then
@@ -44,7 +48,7 @@ function M.pct_token(pct, prefix)
   if not pct then
     return esc_percent("  --%  ")
   end
-  local bar = pct_bar(pct)
+  local bar = M.pct_bar(pct)
   local txt = string.format(" %s%3d%% %s ", (prefix and (prefix .. "") or ""), pct, bar)
   return esc_percent(txt)
 end

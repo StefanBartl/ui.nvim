@@ -77,11 +77,21 @@ modules = {
 | `filetree_cwd_mode` | filetree.nvim's cwd-mode badge (`PROJECT`/`LOCK`/`MANUAL`/…), as a filled capsule | filetree.nvim | `ui.statusline.modules.filetree_cwd_mode` |
 | `undo_depth` | Undo steps available on the current branch, plus a glyph if the undo tree has branched | — | `ui.statusline.modules.undo_depth` |
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
+| `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
 plugin isn't installed — none of these throw or need a guard in your own
 config.
+
+`diagnostics_sparkline` is a drop-in alternative to the plain `diagnostics`
+segment above, not a companion to it — pick one or the other. The buffer is
+split into 20 equal-line slices; each renders `ui.statusline.cursor_ctl
+.renderer.pct_bar()`'s usual 8-level bar, height by how many diagnostics
+land in that slice (relative to the busiest one), colour by the worst
+severity present there. An empty slice renders in the same neutral colour
+`lsp_msg` uses, not a severity one — "nothing here" is not "low severity of
+something".
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:
@@ -172,7 +182,7 @@ build one from, not a module itself:
 | `ui.statusline.utils.primitives` | Raw building blocks the "default" theme wraps with highlights: `git()`, `lsp()`, `diagnostics()`, `file()`, `lsp_msg()`, `is_activewin()`, `modes` (the mode-name/highlight-suffix table) |
 | `ui.statusline.utils.get_separators` | Resolves a `separator_style` name (or `{left, right}` table) to the actual glyph pair |
 | `ui.statusline.utils.clickable` | `wrap(segment_fn, handlers)` — makes any segment respond to left/right/middle clicks. See [Clickable modules](#clickable-modules) above |
-| `ui.statusline.cursor_ctl` | Row/column scroll-progress rendering — what several presets' own `cursor` override uses |
+| `ui.statusline.cursor_ctl` | Row/column scroll-progress rendering — what several presets' own `cursor` override uses. `cursor_ctl.renderer.pct_bar(pct)` (an 8-level density glyph from a 0..100 value) is reusable on its own — `diagnostics_sparkline` above is the first module to do that |
 | `ui.statusline.modules.highlighting` | `mode_band_group()` (the current mode's highlight group, for colouring anything by mode), `hl_open()`/`hl_wrap()`/`stl_strip_hl()` |
 
 `docs/examples/personal-statusline-example.lua` is a full example built
