@@ -69,7 +69,6 @@ local MODE_SUFFIXES = {
 function M.apply()
   local empty_bg = palette.statusline_bg()
   local fg = read("StatusLine", "fg") or read("Normal", "fg") or "#c0caf5"
-  local muted_fg = read("Comment", "fg") or fg
   local set = api.nvim_set_hl
 
   set(0, "ST_EmptySpace", { bg = empty_bg })
@@ -85,17 +84,23 @@ function M.apply()
     set(0, "St_" .. suffix .. "ModeText", { fg = accent, bg = empty_bg, bold = true })
   end
 
-  -- Plain-text segments: no fill, same foreground the statusline itself
-  -- uses. Their `*_sep`/`*sep` companions fade to invisible against
-  -- `empty_bg` rather than drawing a visible cap -- there is no chip
-  -- background on either side of them to cap between.
+  -- Plain-text segments: no fill, the SAME foreground throughout -- the
+  -- statusline's own `fg`, not a dimmer "Comment"-derived one some of these
+  -- used to read. Mixing the two read as an inconsistent, half-legible
+  -- statusline (some segments brighter than others for no reason tied to
+  -- meaning), which is what this line-up fixes; the mode chip is the one
+  -- deliberate exception, kept on its own contrast colour below because it
+  -- sits on a filled accent background, not on the plain statusline one.
+  -- Their `*_sep`/`*sep` companions fade to invisible against `empty_bg`
+  -- rather than drawing a visible cap -- there is no chip background on
+  -- either side of them to cap between.
   set(0, "St_file", { fg = fg, bg = "NONE" })
   set(0, "St_file_sep", { fg = empty_bg, bg = empty_bg })
-  set(0, "St_gitIcons", { fg = muted_fg, bg = "NONE" })
-  set(0, "St_LspMsg", { fg = muted_fg, bg = "NONE" })
-  set(0, "St_Lsp", { fg = muted_fg, bg = "NONE" })
-  set(0, "St_cwd_icon", { fg = muted_fg, bg = "NONE" })
-  set(0, "St_cwd_text", { fg = muted_fg, bg = "NONE" })
+  set(0, "St_gitIcons", { fg = fg, bg = "NONE" })
+  set(0, "St_LspMsg", { fg = fg, bg = "NONE" })
+  set(0, "St_Lsp", { fg = fg, bg = "NONE" })
+  set(0, "St_cwd_icon", { fg = fg, bg = "NONE" })
+  set(0, "St_cwd_text", { fg = fg, bg = "NONE" })
   set(0, "St_cwd_sep", { fg = empty_bg, bg = empty_bg })
   set(0, "St_pos_sep", { fg = empty_bg, bg = empty_bg })
   set(0, "St_pos_icon", { fg = fg, bg = "NONE" })
@@ -121,7 +126,7 @@ function M.apply()
   set(0, "St_Pos_sep", { fg = pos_accent, bg = empty_bg })
 
   -- `plugin_progress`'s transient status line (used by the "default" preset).
-  set(0, "St_LspProgress", { fg = muted_fg, bg = "NONE" })
+  set(0, "St_LspProgress", { fg = fg, bg = "NONE" })
 end
 
 local ensured = false
