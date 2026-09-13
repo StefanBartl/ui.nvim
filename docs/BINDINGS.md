@@ -59,23 +59,29 @@ transparency flag — where a line range or a repeat count has no meaning.
 ## Keymaps
 
 Registered by `ui.bindings.keymaps.setup({ all = true })`, which `ui.setup`
-calls when `all` or `keymaps` is set.
+calls when `all` or `keymaps` is set. The left-hand sides below are shipped
+defaults, not fixed: `ui.setup({ keymaps = { buffers = true, tabs = true,
+keys = { next = "<C-Right>", close = false } } })` renames `next` and drops
+`close` entirely, leaving every other default binding untouched -- override
+only what you want different, same shape `ui.config.setup`'s own
+`theme`/`tabline` tables use. `keymaps = true` (or `all = true`) is still the
+one-line "everything, defaults" shorthand this table assumes.
 
 ### Buffers
 
-| Key | Mode | Does |
-| --- | --- | --- |
-| `<Tab>` | `n` | Next buffer |
-| `<S-Tab>` | `n` | Previous buffer |
-| `<leader>bc` | `n` | Close the current buffer, keeping the window layout |
+| Key | `opts.keys` name | Mode | Does |
+| --- | --- | --- | --- |
+| `<Tab>` | `next` | `n` | Next buffer |
+| `<S-Tab>` | `prev` | `n` | Previous buffer |
+| `<leader>bc` | `close` | `n` | Close the current buffer, keeping the window layout |
 
 ### Tabs
 
-| Key | Mode | Does |
-| --- | --- | --- |
-| `<leader>tr` | `n` | Move the current buffer one position right in the tabline |
-| `<leader>tl` | `n` | Move it one position left |
-| `<leader>tt` | `n` | Move the current buffer into a new tab |
+| Key | `opts.keys` name | Mode | Does |
+| --- | --- | --- | --- |
+| `<leader>tr` | `move_right` | `n` | Move the current buffer one position right in the tabline |
+| `<leader>tl` | `move_left` | `n` | Move it one position left |
+| `<leader>tt` | `move_to_tab` | `n` | Move the current buffer into a new tab |
 
 Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of
@@ -103,6 +109,9 @@ the segment that owns the data.
 | `UiLspSymbolsCache` | `statusline/modules/lsp/symbols` | Document symbols |
 | `UiCwdModeBadgeHl` | `statusline/modules/filetree_cwd_mode` | Rebuilds the badge highlights on `ColorScheme` |
 | `LspBreadcrumbsAsync` | `statusline/modules/lsp` | Drives the asynchronous breadcrumb request |
+| `ui_tabline_highlights` | `tabline/highlights` | Re-derives the `UiTb*` groups from `TabLine`/`TabLineFill`/`TabLineSel` on `ColorScheme` |
+| `ui_tabline_utils_cache` | `tabline/utils` | Clears the devicon-color and built-highlight-group caches on `ColorScheme` |
+| `ui_tabufline_state` | `bindings/keymaps/tabufline/state` | Maintains `vim.t.bufs` (`BufAdd`/`BufEnter`/`tabnew`/`BufDelete`/quickfix `FileType`) |
 
 ---
 

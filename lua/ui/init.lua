@@ -16,13 +16,26 @@
 local M = {}
 
 --- Enable the selected submodules.
+---
+--- `opts.keymaps` is either `true` (every default keymap, same as before) or
+--- a `Ui.Keymaps.Modules` table for per-group (`buffers`/`tabs`) or per-key
+--- (`keys.next = false`, `keys.close = "<leader>x"`, ...) control -- see that
+--- type's own doc comment.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
   opts = opts or {}
 
   if opts.all or opts.keymaps then
-    require("ui.bindings.keymaps").setup({ all = true })
+    local keymaps_opts = opts.keymaps
+    if keymaps_opts == true or opts.all then
+      keymaps_opts = vim.tbl_deep_extend(
+        "force",
+        { all = true },
+        type(keymaps_opts) == "table" and keymaps_opts or {}
+      )
+    end
+    require("ui.bindings.keymaps").setup(keymaps_opts)
   end
 
   if opts.all or opts.usrcmds then

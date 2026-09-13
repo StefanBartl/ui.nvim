@@ -29,14 +29,32 @@
 --- `usrcmd` before the extraction, when the directories were.
 ---@class Ui.Modules
 ---@field all? boolean # Shorthand for every flag below
----@field keymaps? boolean # Buffer/tab navigation and tabline mappings
+---@field keymaps? boolean|Ui.Keymaps.Modules # `true` for every default keymap (`ui.bindings.keymaps.setup({all=true})`), or a table for per-group/per-key control
 ---@field usrcmds? boolean # The `:UI` command and theme management
+
+--- One keymap action's left-hand side, or `false` to not bind it at all
+--- while leaving the rest of its group on.
+---@alias Ui.Keymaps.Lhs string|false
+
+--- Per-action key overrides for `ui.bindings.keymaps.setup(opts)`. Any key
+--- left out keeps `ui.bindings.keymaps`'s own shipped default (`<Tab>`,
+--- `<leader>tr`, ...) -- a host overrides only the ones it wants different,
+--- same "override what you need" shape `ui.config.setup`'s `theme`/`tabline`
+--- merges already use.
+---@class Ui.Keymaps.Keys
+---@field next? Ui.Keymaps.Lhs # default "<Tab>" -- next buffer
+---@field prev? Ui.Keymaps.Lhs # default "<S-Tab>" -- previous buffer
+---@field close? Ui.Keymaps.Lhs # default "<leader>bc" -- close buffer(s), count-aware
+---@field move_right? Ui.Keymaps.Lhs # default "<leader>tr" -- move buffer right in vim.t.bufs
+---@field move_left? Ui.Keymaps.Lhs # default "<leader>tl" -- move buffer left in vim.t.bufs
+---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab
 
 --- What `ui.bindings.keymaps.setup(opts)` turns on.
 ---@class Ui.Keymaps.Modules
 ---@field all? boolean
 ---@field buffers? boolean
 ---@field tabs? boolean
+---@field keys? Ui.Keymaps.Keys # per-action left-hand-side overrides; see its own doc comment
 
 --- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which
 --- colorscheme to boot into" -- that is the host's own init.lua, independent
