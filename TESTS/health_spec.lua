@@ -97,6 +97,7 @@ describe("ui.health", function()
       "Dependencies",
       "Configuration",
       "Statusline render entrypoint",
+      "Tabline render entrypoint",
       "Modules",
       "Statusline segments",
       "Winbar",
@@ -107,6 +108,12 @@ describe("ui.health", function()
     local calls = capture()
     assert.is_true(has(calls, "ok", "ui.statusline.render resolves"))
     assert.is_true(has(calls, "ok", "renders the 'default' theme's fallback modules"))
+  end)
+
+  it("reports its own tabline entrypoint as resolving and rendering", function()
+    local calls = capture()
+    assert.is_true(has(calls, "ok", "ui.tabline.render resolves"))
+    assert.is_true(has(calls, "ok", "renders the shipped tabline config"))
   end)
 
   it("does not reset the actually active variant back to the boot default", function()

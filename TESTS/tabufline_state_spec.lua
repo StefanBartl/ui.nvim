@@ -135,4 +135,41 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       a = nil
     end)
   end)
+
+  describe("goto_buf", function()
+    it("switches the current buffer directly", function()
+      vim.api.nvim_set_current_buf(a)
+      state.goto_buf(c)
+      assert.equals(c, vim.api.nvim_get_current_buf())
+    end)
+
+    it("does not throw when the current window is winfixbuf-locked", function()
+      vim.api.nvim_set_current_buf(a)
+      vim.wo.winfixbuf = true
+      assert.has_no.errors(function()
+        state.goto_buf(b)
+      end)
+      vim.wo.winfixbuf = false
+    end)
+  end)
+
+  describe("close_all_bufs", function()
+    it("closes every listed buffer in the tab, current one included", function()
+      state.close_all_bufs()
+      local remaining = vim.t.bufs or {}
+      assert.is_false(vim.tbl_contains(remaining, a))
+      assert.is_false(vim.tbl_contains(remaining, b))
+      assert.is_false(vim.tbl_contains(remaining, c))
+      a, b, c = nil, nil, nil
+    end)
+
+    it("keeps the current buffer when include_cur_buf is false", function()
+      vim.api.nvim_set_current_buf(b)
+      state.close_all_bufs(false)
+      assert.is_true(vim.tbl_contains(vim.t.bufs, b))
+      assert.is_false(vim.tbl_contains(vim.t.bufs, a))
+      assert.is_false(vim.tbl_contains(vim.t.bufs, c))
+      a, c = nil, nil
+    end)
+  end)
 end)

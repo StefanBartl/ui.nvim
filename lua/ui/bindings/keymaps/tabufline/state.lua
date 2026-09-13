@@ -175,6 +175,52 @@ function M.close_buffer(bufnr)
   vim.cmd("redrawtabline")
 end
 
+--- Switch to `bufnr` directly (as opposed to `next()`/`prev()`'s relative
+--- move). If the current window is `winfixbuf`-locked, hop to the nearest
+--- window that both lists buffers and is not itself locked first -- the
+--- tabline's click handler and `winfixbuf` would otherwise silently fight
+--- over what the window shows. Ported from `nvchad.tabufline.goto_buf`.
+---@param bufnr integer
+---@return nil
+function M.goto_buf(bufnr)
+  local cur_win = api.nvim_get_current_win()
+  local fixedbuf = api.nvim_get_option_value("winfixbuf", { win = cur_win })
+
+  if fixedbuf then
+    for _, win in ipairs(api.nvim_list_wins()) do
+      local buflisted = api.nvim_get_option_value("buflisted", { buf = api.nvim_win_get_buf(win) })
+      local win_fixedbuf = api.nvim_get_option_value("winfixbuf", { win = win })
+      if buflisted and not win_fixedbuf then
+        api.nvim_set_current_win(win)
+        break
+      end
+    end
+  end
+
+  api.nvim_set_current_buf(bufnr)
+end
+
+--- Close every listed buffer in the current tab via `close_buffer()`
+--- (respecting its terminal/floating/fallback handling per buffer), current
+--- buffer included unless `include_cur_buf` is explicitly `false`. Ported
+--- from `nvchad.tabufline.closeAllBufs`.
+---@param include_cur_buf? boolean # default true
+---@return nil
+function M.close_all_bufs(include_cur_buf)
+  local bufs = vim.t.bufs or {}
+
+  if include_cur_buf == false then
+    local idx = buf_index(api.nvim_get_current_buf(), bufs)
+    if idx then
+      table.remove(bufs, idx)
+    end
+  end
+
+  for _, bufnr in ipairs(bufs) do
+    M.close_buffer(bufnr)
+  end
+end
+
 --- Swap the current buffer with the neighbour `n` slots over in
 --- `vim.t.bufs` (wrapping at either end), and persist the reordered list.
 --- Ported from `nvchad.tabufline.move_buf`.

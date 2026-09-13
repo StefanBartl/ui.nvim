@@ -98,7 +98,10 @@ local function check_dependencies()
   -- present or not is reported below, but as information, not as a
   -- dependency check.
   if has("nvchad.init") then
-    health.info("NvChad is present -- the host's chadrc.lua still routes rendering through it")
+    health.info(
+      "NvChad is present -- this plugin's own code does not need it, but the host may still be "
+        .. "using NvChad's own tabline/dashboard/LSP-signature/colorify (see its own docs for which)"
+    )
   else
     health.info("NvChad is not present -- this plugin's own code does not need it any more")
   end
@@ -150,6 +153,38 @@ local function check_render_entrypoint()
       "enable() has not been called -- vim.o.statusline is whatever the host last set "
         .. "(NvChad, through chadrc.lua, until roadmap step 7 rewires the host)"
     )
+  end
+end
+
+--- This plugin's own tabline render entrypoint: does it resolve, and does
+--- calling it produce a string without NvChad on the runtimepath. Mirrors
+--- `check_render_entrypoint()` above, one option later.
+---@return nil
+local function check_tabline_entrypoint()
+  health.start("Tabline render entrypoint")
+
+  local ok_render, render = pcall(require, "ui.tabline.render")
+  if not ok_render or type(render) ~= "table" then
+    health.error("ui.tabline.render did not load: " .. tostring(render))
+    return
+  end
+  if type(render.generate) ~= "function" or type(render.enable) ~= "function" then
+    health.error("ui.tabline.render is missing generate()/enable()")
+    return
+  end
+  health.ok("ui.tabline.render resolves (generate/enable/render/disable)")
+
+  local ok_gen, rendered = pcall(render.generate, require("ui.config.tabline"))
+  if ok_gen and type(rendered) == "string" then
+    health.ok("generate() renders the shipped tabline config without NvChad")
+  else
+    health.error("generate() failed against the shipped tabline config: " .. tostring(rendered))
+  end
+
+  if render.current() ~= nil then
+    health.info("a config is currently enable()d -- vim.o.tabline is owned by this plugin")
+  else
+    health.info("enable() has not been called -- vim.o.tabline is whatever the host last set")
   end
 end
 
@@ -284,6 +319,7 @@ function M.check()
   end
   check_config()
   check_render_entrypoint()
+  check_tabline_entrypoint()
   check_modules()
   check_segments()
   check_winbar()

@@ -10,6 +10,9 @@
 ---     override is active, this table otherwise).
 ---   * `statusline` — which of the four shipped presets is assembled. Read
 ---     on the same path, one step later.
+---   * `tabline` — the buffer/tab bar's `order`/`modules`/`bufwidth`/
+---     `tree_offset_ft`. One shipped config, not a choice of presets like
+---     `statusline` -- see `ui.config.tabline`'s own doc comment.
 ---
 --- `modules` is the on/off list `ui.setup(opts)` walks. It is here rather than
 --- inline in `init.lua` so that "what does this plugin turn on" has the same
@@ -31,6 +34,9 @@ return {
     ---@type Ui.StatuslineVariant
     variant = "default",
   },
+
+  ---@type Ui.Tabline.Config
+  tabline = require("ui.config.tabline"),
 
   --- What `ui.setup(opts)` enables. `all = true` is the shorthand the host
   --- uses; the individual flags exist so one half can be left out.

@@ -50,6 +50,7 @@
 ---@class Ui.Defaults
 ---@field theme Ui.Theme
 ---@field statusline { variant: Ui.StatuslineVariant }
+---@field tabline Ui.Tabline.Config
 ---@field modules Ui.Modules
 
 --- The assembled shape `ui.statusline.render.generate()`/`enable()` consume
@@ -59,5 +60,16 @@
 ---@field modules? table<string, string|fun(): string> # per-key override; a key absent here falls back to `theme`'s module set
 ---@field theme? string # fallback module-set name (see ui.statusline.themes.*); default "default"
 ---@field separator_style? string|{left: string, right: string} # passed to the theme's `build()`
+
+--- The assembled shape `ui.tabline.render.generate()`/`enable()` consume --
+--- the `ui.tabline` half of what `ui.config.setup()` returns. One shipped
+--- config (`ui.config.tabline`), not a named-preset choice like
+--- `Ui.StatuslineVariant` -- override `order`/`modules` directly via
+--- `ui.config.setup({ tabline = {...} })` instead of naming a variant.
+---@class Ui.Tabline.Config
+---@field order string[] # walked in order; ui.tabline.modules' four keys by default
+---@field modules? table<string, fun(cfg: Ui.Tabline.Config): string> # per-key override; a key absent here falls back to the built-in module of the same name
+---@field bufwidth? integer # target buffer-chip width in columns; default 21
+---@field tree_offset_ft? string # filetype the "tree_offset" module reserves space for; default "filetree" (filetree.nvim)
 
 return {}

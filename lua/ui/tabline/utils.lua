@@ -1,0 +1,240 @@
+---@module 'ui.tabline.utils'
+--- `%#HL#` text wrapping, the `%@Func@...%X` click-handler wrapping Neovim's
+--- `'tabline'` option protocol uses, and `style_buf()` -- one rendered
+--- buffer chip (devicon, name, modified/close indicator).
+---
+--- Neovim's tabline click protocol calls a global Vimscript function by
+--- name, not a Lua one directly, so `register_click_handlers()` defines a
+--- handful of thin `UiTb*`-prefixed shims once, at first use, that bridge
+--- straight back into this module and `ui.bindings.keymaps.tabufline.state`.
+--- Distinct names from NvChad's own `TbGoToBuf`/`TbKillBuf`/... so both can
+--- be on the runtimepath at once without one clobbering the other's global
+--- function while NvChad is still installed.
+
+local api = vim.api
+local icon_cache = require("lib.lua.memo.lru").new(256)
+
+local M = {}
+
+---@param str string|nil
+---@param hl string|nil # suffix only -- "BufOn" becomes group "UiTbBufOn"
+---@return string
+function M.txt(str, hl)
+  str = str or ""
+  return hl and ("%#UiTb" .. hl .. "#" .. str) or str
+end
+
+---@param str string
+---@param hl string|nil
+---@param func string # suffix only -- "GoToBuf" becomes global function "UiTbGoToBuf"
+---@param arg string|integer|nil # the click handler's `minwid` (e.g. a bufnr or tab number)
+---@return string
+function M.btn(str, hl, func, arg)
+  str = hl and M.txt(str, hl) or str
+  arg = arg or ""
+  return "%" .. tostring(arg) .. "@UiTb" .. func .. "@" .. str .. "%X"
+end
+
+--- Close every buffer in the current tab -- the click target for the "close
+--- all buffers" button. A thin wrapper so the Vimscript shim below has a
+--- single, stable `luaeval()` target independent of where the state module
+--- itself lives.
+---@return nil
+function M.close_all_bufs()
+  require("ui.bindings.keymaps.tabufline.state").close_all_bufs()
+end
+
+local registered = false
+
+--- Define the `UiTb*` global Vimscript functions the click handlers above
+--- reference, once. Idempotent, and cheap enough (`vim.cmd` on ~7 one-line
+--- function bodies) to call unconditionally from `M.style_buf`/the tabs and
+--- buttons modules rather than threading a "did this run yet" flag through
+--- every call site.
+---@return nil
+function M.register_click_handlers()
+  if registered then
+    return
+  end
+  registered = true
+
+  vim.cmd([[
+    function! UiTbGoToBuf(bufnr, clicks, button, mod)
+      call luaeval('require("ui.bindings.keymaps.tabufline.state").goto_buf(_A)', a:bufnr)
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbKillBuf(bufnr, clicks, button, mod)
+      call luaeval('require("ui.bindings.keymaps.tabufline.state").close_buffer(_A)', a:bufnr)
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbNewTab(arg, clicks, button, mod)
+      tabnew
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbGotoTab(tabnr, clicks, button, mod)
+      execute a:tabnr .. 'tabnext'
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbCloseAllBufs(arg, clicks, button, mod)
+      call luaeval('require("ui.tabline.utils").close_all_bufs()')
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbToggleTheme(arg, clicks, button, mod)
+      call luaeval('require("ui.bindings.usrcmds.themes").toggle_theme()')
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbToggleTabs(arg, clicks, button, mod)
+      let g:ui_tb_tabs_toggled = !get(g:, 'ui_tb_tabs_toggled', 0)
+      redrawtabline
+    endfunction
+  ]])
+end
+
+---@param path string
+---@return string name
+local function filename(path)
+  return path:match("([^/\\]+)[/\\]*$") or path
+end
+
+---@param group string
+---@return integer|nil
+local function read_bg(group)
+  local ok, hl = pcall(api.nvim_get_hl, 0, { name = group, link = false })
+  if not ok or not hl then
+    return nil
+  end
+  return hl.bg
+end
+
+-- One highlight group per (fg, is_current) combination actually seen, not a
+-- freshly `nvim_set_hl`'d group on every single buffer render -- same fix as
+-- `ui.statusline.modules.file_icons.devicons`'s `hl_built` cache, same
+-- reason: an unconditional `nvim_set_hl` call per buffer per tabline redraw
+-- is pure waste once a color has already been built once.
+---@type table<string, true>
+local hl_built = {}
+
+---@param fg string|nil
+---@param is_current boolean
+---@return string
+local function ensure_icon_hl(fg, is_current)
+  local bg_group = is_current and "UiTbBufOn" or "UiTbBufOff"
+  local name = "UiTbIcon_" .. (fg and fg:gsub("#", "") or "none") .. "_" .. bg_group
+  if hl_built[name] then
+    return name
+  end
+
+  local bg = read_bg(bg_group)
+  local ok = pcall(api.nvim_set_hl, 0, name, { fg = fg, bg = bg })
+  if ok then
+    hl_built[name] = true
+  end
+  return name
+end
+
+---@param bufnr integer
+---@return string icon, string|nil color
+local function devicon_for_buf(bufnr)
+  local ok_name, path = pcall(api.nvim_buf_get_name, bufnr)
+  path = ok_name and path or ""
+  local name = path == "" and "" or filename(path)
+
+  local cache_key = name
+  local cached = icon_cache:get(cache_key)
+  if cached then
+    return cached.icon, cached.color
+  end
+
+  local ok, devicons = pcall(require, "nvim-web-devicons")
+  if not ok then
+    local result = { icon = "󰈚", color = nil }
+    icon_cache:put(cache_key, result)
+    return result.icon, result.color
+  end
+
+  local icon, color = devicons.get_icon_color(name, name:match("^.+%.(.+)$"), { default = true })
+  local result = { icon = icon or "󰈚", color = color }
+  icon_cache:put(cache_key, result)
+  return result.icon, result.color
+end
+
+--- `name` deduplicated against every other buffer's tail filename in
+--- `vim.t.bufs` -- two open `init.lua`s become `plugins/init.lua` and
+--- `lsp/init.lua` instead of two indistinguishable "init.lua" chips. Ported
+--- from `nvchad.tabufline.utils.gen_unique_name`.
+---@param name string
+---@param index integer # this buffer's position in `vim.t.bufs`
+---@return string|nil # nil when `name` is already unique
+local function gen_unique_name(name, index)
+  local bufs = vim.t.bufs or {}
+  for i, nr in ipairs(bufs) do
+    if i ~= index and api.nvim_buf_is_valid(nr) and filename(api.nvim_buf_get_name(nr)) == name then
+      return vim.fn.fnamemodify(api.nvim_buf_get_name(bufs[index]), ":h:t") .. "/" .. name
+    end
+  end
+  return nil
+end
+
+--- Render one buffer chip: devicon, (deduplicated, truncated) name, and a
+--- modified-dot or close button depending on focus/modified state. Ported
+--- from `nvchad.tabufline.utils.style_buf`.
+---@param bufnr integer
+---@param index integer # this buffer's 1-based position in `vim.t.bufs`
+---@param width integer # target chip width in columns; `bufwidth` in the tabline config
+---@return string
+function M.style_buf(bufnr, index, width)
+  M.register_click_handlers()
+
+  local is_current = api.nvim_get_current_buf() == bufnr
+  local hl_suffix = is_current and "On" or "Off"
+
+  local icon, fg = devicon_for_buf(bufnr)
+  local icon_hl = ensure_icon_hl(fg, is_current)
+
+  local ok_name, raw_path = pcall(api.nvim_buf_get_name, bufnr)
+  local name = (ok_name and raw_path ~= "") and filename(raw_path) or "[No Name]"
+  if name ~= "[No Name]" then
+    name = gen_unique_name(name, index) or name
+  end
+
+  local max_name_len = math.max(1, width - 5)
+  if #name > max_name_len then
+    name = name:sub(1, math.max(1, max_name_len - 2)) .. ".."
+  end
+
+  local pad = math.max(1, math.floor((width - #name - 5) / 2))
+  local body = string.rep(" ", pad - 1)
+    .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(name, "Buf" .. hl_suffix))
+    .. string.rep(" ", pad - 1)
+
+  local modified = api.nvim_get_option_value("modified", { buf = bufnr })
+  local close_or_dot
+  if is_current then
+    close_or_dot = modified and M.txt("  ", "BufOnModified")
+      or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "BufOnClose")
+  else
+    close_or_dot = modified and M.txt("  ", "BufOffModified")
+      or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "BufOffClose")
+  end
+
+  local chip = M.btn(body, nil, "GoToBuf", bufnr) .. close_or_dot
+  return M.txt(chip, "Buf" .. hl_suffix)
+end
+
+-- Clear both caches on a colorscheme change: devicon colors are absolute
+-- hex, and the UiTbBufOn/Off groups they were built against just changed.
+require("lib.nvim.bindings.autocmd").create("ColorScheme", function()
+  icon_cache = require("lib.lua.memo.lru").new(256)
+  hl_built = {}
+end, {
+  group = require("lib.nvim.bindings.autocmd").group("ui_tabline_utils_cache", true),
+  desc = "ui.tabline: clear the icon/highlight caches on colorscheme change",
+})
+
+return M

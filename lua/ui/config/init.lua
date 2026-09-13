@@ -124,10 +124,18 @@ function M.setup(user_opts)
   -- 3. Load selected statusline variant (shipped preset, or opts.variant)
   local statusline_config = load_statusline_config(user_opts)
 
+  -- 3b. Tabline: one shipped config, not a variant choice -- deep-merge any
+  -- host override over the defaults rather than resolving through a
+  -- registry the way statusline names do.
+  local tabline_config = require("ui.config.DEFAULTS").tabline
+  if user_opts.tabline then
+    tabline_config = vim.tbl_deep_extend("force", tabline_config, user_opts.tabline)
+  end
+
   -- 4. Assemble final config
   local config = {
     theme = theme_config,
-    ui = statusline_config.ui or {},
+    ui = vim.tbl_deep_extend("force", { tabline = tabline_config }, statusline_config.ui or {}),
   }
 
   -- 5. Run variant-specific setup if present
