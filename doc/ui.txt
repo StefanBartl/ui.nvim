@@ -108,6 +108,12 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI themes
     List available themes, marking the active one.
 
+:UI picker
+    Open a floating theme picker (via lib.nvim's `ui.kit.select`): the
+    highlighted theme applies live as the cursor moves over the list, `<CR>`
+    keeps it, `<Esc>`/`q`/closing the float any other way restores whatever
+    theme was active before the picker opened.
+
 :UI toggle
     Swap between the two themes in `theme.theme_toggle`.
 

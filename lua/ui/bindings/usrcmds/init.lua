@@ -7,6 +7,7 @@ local usercmd = require("lib.nvim.bindings.usercmd")
 local M = {}
 
 local theme = require("ui.bindings.usrcmds.themes")
+local theme_picker = require("ui.bindings.usrcmds.themes.picker")
 
 -----------------------------------------------------------------------
 -- Helpers
@@ -225,6 +226,12 @@ local function ui_variants(_args)
   notify.info(table.concat(lines, "\n"))
 end
 
+---Open the visual theme picker
+---@param _args string[] # Unused: this subcommand takes no argument
+local function ui_picker(_args)
+  theme_picker.open()
+end
+
 ---Toggle between configured themes
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_toggle(_args)
@@ -253,6 +260,8 @@ local function ui_help(_args)
 │  :UI theme                  Aktuelles Theme zeigen   │
 │  :UI theme <name>           Theme setzen             │
 │  :UI themes                 Alle Themes auflisten    │
+│  :UI picker                 Visuellen Theme-Picker   │
+│                             öffnen (Live-Vorschau)   │
 │  :UI toggle                 Zwischen Themes wechseln │
 │                                                      │
 │  :UI variant                Aktuelle Variante zeigen │
@@ -291,6 +300,7 @@ local function dispatcher(opts)
     themes = ui_themes,
     variant = ui_variant,
     variants = ui_variants,
+    picker = ui_picker,
     toggle = ui_toggle,
     status = ui_status,
     help = ui_help,
@@ -340,6 +350,7 @@ local function complete(arglead, cmdline, _cursorpos)
       "themes",
       "variant",
       "variants",
+      "picker",
       "toggle",
       "status",
       "help",

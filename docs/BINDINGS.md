@@ -26,6 +26,7 @@ theme list.
 | --- | --- | --- |
 | `:UI theme {name}` | completes over every colorscheme Neovim can see | `:colorscheme {name}` |
 | `:UI themes` | — | List the available themes, marking the active one |
+| `:UI picker` | — | Open a floating theme picker (`lib.nvim.ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
@@ -33,7 +34,7 @@ theme list.
 | `:UI status` | — | Current theme, transparency state, statusline variant |
 | `:UI help` | — | The subcommand list, in a float |
 
-**Completion is two-level:** the first argument completes over the eight
+**Completion is two-level:** the first argument completes over the nine
 subcommands, the argument after `theme`/`variant` over the theme list / the
 variant registry respectively. The theme list is
 `vim.fn.getcompletion("", "color")` at the moment `<Tab>` is pressed, so a

@@ -76,6 +76,7 @@ local function check_dependencies()
     "lib.nvim.debounce.buffer",
     "lib.nvim.notify",
     "lib.nvim.ui.hl",
+    "lib.nvim.ui.kit.select",
   }
   local missing = {}
   for _, mod in ipairs(lib_modules) do
