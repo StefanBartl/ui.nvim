@@ -101,6 +101,7 @@ function M.buffers(cfg)
   end
 
   local chips = {}
+  local chip_bufs = {} -- parallel to `chips`, kept in sync across the drop below
   local seen_current = false
   local cur = api.nvim_get_current_buf()
 
@@ -110,10 +111,27 @@ function M.buffers(cfg)
         break
       end
       table.remove(chips, 1)
+      table.remove(chip_bufs, 1)
     end
 
     seen_current = seen_current or (cur == bufnr)
     chips[#chips + 1] = utils.style_buf(bufnr, i, bufwidth)
+    chip_bufs[#chip_bufs + 1] = bufnr
+  end
+
+  -- Round the outer corners of every chip against its neighbour, but square
+  -- off the two true edges of the visible run (the bar's own left edge, and
+  -- wherever "tabs"/"btns" pick up on the right) -- rounding those would cut
+  -- a rounded notch out of a straight screen/monitor edge instead of framing
+  -- a chip. A run of one chip is square on both sides.
+  for i, bufnr in ipairs(chip_bufs) do
+    local cap_hl = "%#" .. ((bufnr == cur) and "UiTbBufOnCap" or "UiTbBufOffCap") .. "#"
+    if i < #chip_bufs then
+      chips[i] = chips[i] .. cap_hl .. utils.RIGHT_CAP
+    end
+    if i > 1 then
+      chips[i] = cap_hl .. utils.LEFT_CAP .. chips[i]
+    end
   end
 
   return table.concat(chips) .. "%#UiTbFill#%="

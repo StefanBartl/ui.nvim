@@ -300,4 +300,141 @@ describe("ui.tabline.utils.style_buf", function()
     assert.is_true(chip:find("50%%done", 1, true) ~= nil, chip)
     assert.is_nil(chip:find("50%done", 1, true))
   end)
+
+  --- Regression for "the icon sits flush against the edge once the chip
+  --- narrows" -- pad-1 used to reach 0 at the narrowest allowed width.
+  it("always leaves at least one space before the icon, even at MIN_BUFWIDTH", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, "x.md")
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    local chip = utils.style_buf(buf, 1, 12) -- 12 == MIN_BUFWIDTH
+
+    vim.t.bufs = saved
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+    -- At least one literal space directly before the icon's own highlight
+    -- group opens -- independent of nvim-web-devicons being present, and of
+    -- which glyph it picks.
+    assert.is_true(chip:find("%s%%#UiTbIcon_") ~= nil, chip)
+  end)
+end)
+
+describe("ui.tabline.modules.buffers rounded caps", function()
+  local modules = require("ui.tabline.modules")
+  local utils = require("ui.tabline.utils")
+
+  ---@param n integer
+  ---@return integer[]
+  local function make_bufs(n)
+    local bufs = {}
+    for _ = 1, n do
+      bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
+    end
+    return bufs
+  end
+
+  ---@param bufs integer[]
+  local function delete_bufs(bufs)
+    for _, b in ipairs(bufs) do
+      pcall(vim.api.nvim_buf_delete, b, { force = true })
+    end
+  end
+
+  ---@param s string
+  ---@param cap string
+  ---@return integer
+  local function cap_count(s, cap)
+    return select(2, s:gsub(cap, cap))
+  end
+
+  it("squares both edges of a single-chip run -- nothing to round against", function()
+    local saved = vim.t.bufs
+    local bufs = make_bufs(1)
+    vim.t.bufs = bufs
+
+    local out = modules.buffers({ order = { "buffers" } })
+
+    vim.t.bufs = saved
+    delete_bufs(bufs)
+
+    assert.equals(0, cap_count(out, utils.LEFT_CAP))
+    assert.equals(0, cap_count(out, utils.RIGHT_CAP))
+  end)
+
+  it("rounds every boundary between chips, square only at the run's two outer edges", function()
+    local saved = vim.t.bufs
+    local bufs = make_bufs(4)
+    vim.t.bufs = bufs
+
+    local out = modules.buffers({ order = { "buffers" } })
+
+    vim.t.bufs = saved
+    delete_bufs(bufs)
+
+    -- 4 chips -> 3 internal boundaries, one LEFT_CAP + one RIGHT_CAP each;
+    -- the first chip's left edge and the last chip's right edge stay square.
+    assert.equals(3, cap_count(out, utils.LEFT_CAP))
+    assert.equals(3, cap_count(out, utils.RIGHT_CAP))
+  end)
+end)
+
+describe("ui.tabline.utils click-flash", function()
+  local utils = require("ui.tabline.utils")
+
+  it("is_flashing is false for a buffer that was never flashed", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    assert.is_false(utils.is_flashing(buf))
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end)
+
+  it("flash() marks a buffer as flashing, then clears it after its timeout", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+
+    utils.flash(buf)
+    assert.is_true(utils.is_flashing(buf))
+
+    vim.wait(300, function()
+      return not utils.is_flashing(buf)
+    end)
+    assert.is_false(utils.is_flashing(buf))
+
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end)
+
+  it("style_buf renders the flash group for a mid-flash buffer", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    utils.flash(buf)
+    local chip = utils.style_buf(buf, 1, 21)
+
+    vim.wait(300, function()
+      return not utils.is_flashing(buf)
+    end)
+    vim.t.bufs = saved
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+    assert.is_true(chip:find("BufFlash", 1, true) ~= nil, chip)
+  end)
+
+  it("goto_buf flashes the target and still switches to it", function()
+    local original = vim.api.nvim_get_current_buf()
+    local buf = vim.api.nvim_create_buf(true, false)
+    local saved = vim.t.bufs
+    vim.t.bufs = { original, buf }
+
+    utils.goto_buf(buf)
+
+    assert.equals(buf, vim.api.nvim_get_current_buf())
+    assert.is_true(utils.is_flashing(buf))
+
+    vim.wait(300, function()
+      return not utils.is_flashing(buf)
+    end)
+    vim.t.bufs = saved
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end)
 end)
