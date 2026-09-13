@@ -116,6 +116,13 @@ return {
     used_by = {},
   },
   {
+    key = "diagnostics_sparkline",
+    summary = "A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many.",
+    builtin = false,
+    source = "ui.statusline.modules.diagnostics_sparkline",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
