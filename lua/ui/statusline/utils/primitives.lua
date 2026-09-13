@@ -93,9 +93,24 @@ local ICON_LSP_CLIENT = "\xEF\x82\x85"
 local ICON_LSP_ERROR = "\xEF\x81\x97"
 local ICON_LSP_WARN = "\xEF\x81\xB1"
 
+--- Escape a literal `%` so embedding a value into `'statusline'` cannot be
+--- misread as one of its own `%`-directives (`%#Group#`, `%=`, `%N@Func@`,
+--- ...). Same fix, same reasoning, as `ui.tabline.utils`' own `stl_escape`
+--- (filesystem-controlled buffer names) and `ui.statusline.modules
+--- .formatters.stl_escape` (LSP/Treesitter symbol text) -- a small local copy
+--- rather than requiring either of those higher-level modules from this one,
+--- which is meant to stay a dependency-free base layer.
+---@param s string
+---@return string
+local function stl_escape(s)
+  return (s:gsub("%%", "%%%%"))
+end
+
 --- Branch name plus added/changed/removed counts from gitsigns' buffer-local
 --- state. Empty when gitsigns has not attached (no head) or has not produced
---- a status dict yet.
+--- a status dict yet. The branch name is git-controlled, not this plugin's --
+--- `%` is a valid git ref character, so it needs the same escape as any other
+--- externally-sourced text this plugin renders into the statusline.
 ---@return string
 M.git = function()
   local buf = M.stbufnr()
@@ -113,7 +128,7 @@ M.git = function()
   local removed = (git_status.removed and git_status.removed ~= 0)
       and (" " .. ICON_GIT_REMOVED .. " " .. git_status.removed)
     or ""
-  local branch_name = ICON_GIT_BRANCH .. " " .. git_status.head
+  local branch_name = ICON_GIT_BRANCH .. " " .. stl_escape(git_status.head)
 
   return " " .. branch_name .. added .. changed .. removed
 end
