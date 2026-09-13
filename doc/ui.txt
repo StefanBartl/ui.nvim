@@ -12,7 +12,8 @@ CONTENTS                                                     *ui-contents*
     4. Commands ............................ |ui-commands|
     5. Keymaps ............................. |ui-keymaps|
     6. Statusline variants ................. |ui-variants|
-    7. Health .............................. |ui-health|
+    7. Tabline styles ....................... |ui-tabline-styles|
+    8. Health .............................. |ui-health|
 
 ==============================================================================
 1. INTRODUCTION                                          *ui-introduction*
@@ -129,13 +130,23 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI variants
     List registered variants, marking the active one.
 
+:UI tabline-style {name}
+    Switch the active tabline chip-boundary look at runtime. {name}
+    completes over the tabline-style registry (see |ui-tabline-styles|
+    below): the three shipped looks, plus anything a host registered under
+    its own name.
+
+:UI tabline-styles
+    List registered tabline styles, marking the active one.
+
 :UI modules
     List every catalogued statusline segment (built into the "default"
     theme, or a standalone module), what each shows, what it needs, and
     which shipped presets already use it. Same data as docs/modules.md.
 
 :UI status
-    Current theme, transparency state and statusline variant.
+    Current theme, transparency state, statusline variant and tabline
+    style.
 
 :UI help
     The subcommand list, in a float.
@@ -208,7 +219,35 @@ a name to register: >lua
 <
 
 ==============================================================================
-7. HEALTH                                                     *ui-health*
+7. TABLINE STYLES                                     *ui-tabline-styles*
+
+Unlike a statusline variant (a whole {order, modules} table), the tabline
+has one shipped config -- `cfg.style` is a single field of it, picking the
+chip-boundary look between buffer chips:
+
+    rounded   (default) a cap on every internal boundary; square only where
+              the visible run actually meets an edge
+    square    nothing added; chips sit flush against each other
+    divider   one plain vertical bar per internal boundary, no rounding
+
+An unrecognized or unset name falls back to `rounded` rather than throwing.
+
+`ui.tabline.styles` is the registry both the three shipped looks and any
+host-registered style live in -- what `:UI tabline-style`'s completion
+reads, and what `cfg.style` resolves through on every redraw: >lua
+    local styles = require("ui.tabline.styles")
+    styles.register("my_style", function(chips, chip_bufs, cur, flush_right)
+      -- mutate `chips` in place; see ui.tabline.styles's own doc comment
+      -- for what each parameter is
+    end)
+    require("ui.config").setup({ tabline = { style = "my_style" } })
+<
+`:UI tabline-style {name}` switches it at runtime without a full
+`ui.config.setup()` round-trip: it mutates `cfg.style` on the already-`
+enable()`d tabline config directly, then `:redrawtabline` makes it visible.
+
+==============================================================================
+8. HEALTH                                                     *ui-health*
 
 >vim
     :checkhealth ui

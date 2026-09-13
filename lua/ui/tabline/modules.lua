@@ -66,27 +66,16 @@ function M.tree_offset(cfg)
   return "%#UiTbTreeOffset#" .. string.rep(" ", width) .. "%#UiTbFill#"
 end
 
----@type table<string, true>
-local VALID_STYLES = { rounded = true, square = true, divider = true }
+local styles = require("ui.tabline.styles")
 
---- Decorate chip boundaries per `style`, mutating `chips` in place:
----   "rounded" (default) -- a cap on every internal boundary. The first
----     chip's left edge is always square -- it sits directly against the
----     bar's own left edge (or `tree_offset`'s fill), never with slack in
----     between. The last chip's right edge is square only when `flush_right`
----     says the visible run actually reaches the space budget (buffers had
----     to be dropped to fit, or the auto-computed width used every column) --
----     otherwise `"%="` alignment leaves genuine empty space before
----     `tabs`/`btns`, and squaring an edge that isn't touching anything
----     reads as a cut corner rather than a frame. A single-chip run follows
----     the same two rules independently -- square on the left always, square
----     on the right only if flush.
----   "square" -- nothing added; chips sit flush, the look before this style
----     switch existed.
----   "divider" -- one plain vertical bar per internal boundary, no rounding.
---- An unrecognized style name falls back to "rounded" rather than silently
---- rendering unstyled -- same degrade-not-crash contract `get_separators()`
---- already uses for the statusline's own `separator_style`.
+--- Decorate chip boundaries per `cfg.style`, mutating `chips` in place --
+--- resolved through `ui.tabline.styles`'s registry (the three shipped
+--- looks -- "rounded" default, "square", "divider" -- plus whatever a host
+--- registered under its own name). An unrecognized or unset name falls
+--- back to "rounded" rather than silently rendering unstyled -- same
+--- degrade-not-crash contract `get_separators()` already uses for the
+--- statusline's own `separator_style`. See `ui.tabline.styles`'s own doc
+--- comment for what each shipped look actually does.
 ---@param chips string[]
 ---@param chip_bufs integer[] # parallel to `chips`
 ---@param cur integer # current buffer, for the rounded style's per-chip cap color
@@ -94,30 +83,8 @@ local VALID_STYLES = { rounded = true, square = true, divider = true }
 ---@param flush_right boolean # whether the visible run actually reaches the right edge of its budget
 ---@return nil
 local function apply_boundaries(chips, chip_bufs, cur, style, flush_right)
-  style = VALID_STYLES[style] and style or "rounded"
-
-  if style == "square" then
-    return
-  end
-
-  if style == "divider" then
-    local divider = "%#UiTbDivider#" .. utils.DIVIDER
-    for i = 1, #chips - 1 do
-      chips[i] = chips[i] .. divider
-    end
-    return
-  end
-
-  for i, bufnr in ipairs(chip_bufs) do
-    local cap_hl = "%#" .. ((bufnr == cur) and "UiTbBufOnCap" or "UiTbBufOffCap") .. "#"
-    local is_last = i == #chip_bufs
-    if not (is_last and flush_right) then
-      chips[i] = chips[i] .. cap_hl .. utils.RIGHT_CAP
-    end
-    if i > 1 then
-      chips[i] = cap_hl .. utils.LEFT_CAP .. chips[i]
-    end
-  end
+  local style_fn = styles.resolve(style) or styles.resolve("rounded")
+  style_fn(chips, chip_bufs, cur, flush_right)
 end
 
 --- The buffer chip list. Drops chips from the front once the list would

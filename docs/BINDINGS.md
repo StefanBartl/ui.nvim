@@ -31,17 +31,21 @@ theme list.
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
-| `:UI status` | — | Current theme, transparency state, statusline variant |
+| `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
+| `:UI tabline-styles` | — | List the registered tabline styles (`rounded`/`square`/`divider` plus anything a host registered), marking the active one |
+| `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
 | `:UI help` | — | The subcommand list, in a float |
 
-**Completion is two-level:** the first argument completes over the nine
-subcommands, the argument after `theme`/`variant` over the theme list / the
-variant registry respectively. The theme list is
-`vim.fn.getcompletion("", "color")` at the moment `<Tab>` is pressed, so a
-colorscheme installed mid-session is offered; the variant list is
-`ui.config.variants.list()`, so a variant a host registers from its own
-config (`require("ui.config.variants").register(name, variant)`) shows up
-in completion the moment that call runs, next to the four shipped presets.
+**Completion is two-level:** the first argument completes over the twelve
+subcommands, the argument after `theme`/`variant`/`tabline-style` over the
+theme list / the variant registry / the tabline-style registry
+respectively. The theme list is `vim.fn.getcompletion("", "color")` at the
+moment `<Tab>` is pressed, so a colorscheme installed mid-session is
+offered; the variant and tabline-style lists are
+`ui.config.variants.list()`/`ui.tabline.styles.list()`, so an entry a host
+registers from its own config (`require("ui.config.variants").register(...)`
+/ `require("ui.tabline.styles").register(...)`) shows up in completion the
+moment that call runs, next to the shipped entries.
 
 **`:UI variant` is a runtime switch, unlike the preset choice
 `ui.config.STATUSLINE_VARIANT` used to be.** It calls `ui.config.setup({
@@ -51,6 +55,16 @@ it are separate. `ui.config.get_variant()` reports whichever name was
 actually resolved last, which is what changes after a switch (the
 `STATUSLINE_VARIANT` constant itself is only the boot-time default and does
 not change).
+
+**`:UI tabline-style` is simpler: one field, not a separate config.** Unlike
+a statusline variant (a whole `{order, modules}` table), `cfg.style` is one
+field of the tabline's single shipped config -- switching it mutates that
+field in place on the table `ui.tabline.render.current()` already holds,
+then `redrawtabline` makes it visible immediately. No `ui.config.setup()`
+round-trip needed. `require("ui.tabline.styles")` is the registry: three
+shipped decorators (`rounded` default, `square`, `divider`) plus whatever a
+host registers under its own name via `.register(name, fn)` -- see that
+module's own doc comment for the decorator function shape.
 
 **No range, no count.** Every subcommand acts on global state — the theme, the
 transparency flag — where a line range or a repeat count has no meaning.

@@ -131,12 +131,15 @@ end
 local function ui_status(_args)
   local info = theme.get_info()
   local variant = require("ui.config").get_variant()
+  local tabline_cfg = require("ui.tabline.render").current()
+  local tabline_style = (tabline_cfg and tabline_cfg.style) or "rounded"
 
   local lines = {
     "╭─ UI Status ─────────────────╮",
     string.format("│ Theme:        %-15s │", info.theme or "none"),
     string.format("│ Transparenz:  %-15s │", info.transparency and "an" or "aus"),
     string.format("│ Variante:     %-15s │", variant or "(unbenannt)"),
+    string.format("│ Tabline-Style:%-15s │", tabline_style),
   }
 
   if info.toggle_themes and #info.toggle_themes > 0 then
@@ -217,6 +220,89 @@ local function ui_variants(_args)
   local current = require("ui.config").get_variant()
 
   local lines = { string.format("Verfügbare Statusline-Varianten (%d):", #names), "" }
+
+  for _, name in ipairs(names) do
+    local marker = (name == current) and "✓ " or "  "
+    table.insert(lines, marker .. name)
+  end
+
+  notify.info(table.concat(lines, "\n"))
+end
+
+---Switch the active tabline style and force an immediate redraw. Unlike
+---`switch_variant` above, there is no separate `setup()` step: `cfg.style`
+---is one field of the single already-`enable()`d tabline config, mutated
+---in place on the same table `ui.tabline.render.current()` returns --
+---`render()` reads that table fresh on every redraw, so `redrawtabline`
+---alone is enough to make the change visible.
+---@param name string
+---@return boolean success
+local function switch_tabline_style(name)
+  local styles = require("ui.tabline.styles")
+  if not styles.exists(name) then
+    return false
+  end
+
+  local cfg = require("ui.tabline.render").current()
+  if not cfg then
+    return false
+  end
+
+  cfg.style = name
+  vim.cmd("redrawtabline")
+  return true
+end
+
+---Handle tabline-style command
+---@param args string[]
+local function ui_tabline_style(args)
+  local name = args[2]
+  local styles = require("ui.tabline.styles")
+
+  if not name or name == "" then
+    local cfg = require("ui.tabline.render").current()
+    local current = (cfg and cfg.style) or "rounded"
+    notify.info(
+      string.format(
+        "Aktueller Tabline-Style: %s\nNutze :UI tabline-style <name> zum Wechseln",
+        current
+      )
+    )
+    return
+  end
+
+  if not styles.exists(name) then
+    notify.error(
+      string.format(
+        "Tabline-Style '%s' nicht gefunden.\n\nVerfügbare Styles:\n%s",
+        name,
+        table.concat(styles.list(), ", ")
+      )
+    )
+    return
+  end
+
+  if switch_tabline_style(name) then
+    notify.info(string.format("🎨 Tabline-Style geändert zu: %s", name))
+  else
+    notify.error(
+      string.format(
+        "Fehler beim Wechseln zu Tabline-Style '%s' (Tabline noch nicht aktiviert?)",
+        name
+      )
+    )
+  end
+end
+
+---Handle tabline-styles list command
+---@param _args string[] # Unused: this subcommand takes no argument
+local function ui_tabline_styles(_args)
+  local styles = require("ui.tabline.styles")
+  local names = styles.list()
+  local cfg = require("ui.tabline.render").current()
+  local current = (cfg and cfg.style) or "rounded"
+
+  local lines = { string.format("Verfügbare Tabline-Styles (%d):", #names), "" }
 
   for _, name in ipairs(names) do
     local marker = (name == current) and "✓ " or "  "
@@ -313,6 +399,10 @@ local function ui_help(_args)
 │  :UI variant <name>         Variante wechseln        │
 │  :UI variants               Alle Varianten auflisten │
 │                                                      │
+│  :UI tabline-style          Aktuellen Style zeigen   │
+│  :UI tabline-style <name>   Tabline-Style wechseln   │
+│  :UI tabline-styles         Alle Styles auflisten    │
+│                                                      │
 │  :UI modules                Verfügbare Segmente      │
 │                             auflisten                │
 │  :UI status                 Aktuelle Config zeigen   │
@@ -347,6 +437,8 @@ local function dispatcher(opts)
     themes = ui_themes,
     variant = ui_variant,
     variants = ui_variants,
+    ["tabline-style"] = ui_tabline_style,
+    ["tabline-styles"] = ui_tabline_styles,
     picker = ui_picker,
     modules = ui_modules,
     toggle = ui_toggle,
@@ -398,6 +490,8 @@ local function complete(arglead, cmdline, _cursorpos)
       "themes",
       "variant",
       "variants",
+      "tabline-style",
+      "tabline-styles",
       "picker",
       "modules",
       "toggle",
@@ -424,6 +518,12 @@ local function complete(arglead, cmdline, _cursorpos)
       -- .variants").register(name, ...) shows up here the moment it runs,
       -- same as the four shipped presets.
       return filter(arglead, require("ui.config.variants").list())
+    end
+
+    if subcmd == "tabline-style" then
+      -- Same registry-not-static-list reasoning as "variant" above, one
+      -- module over: require("ui.tabline.styles").register(name, fn).
+      return filter(arglead, require("ui.tabline.styles").list())
     end
   end
 

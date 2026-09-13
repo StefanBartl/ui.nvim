@@ -18,6 +18,7 @@ did.
 - [ui.setup()](#uisetup)
 - [ui.config.setup()](#uiconfigsetup)
 - [The statusline variants](#the-statusline-variants)
+- [Tabline styles](#tabline-styles)
 - [Where the values live](#where-the-values-live)
 - [What is not configurable](#what-is-not-configurable)
 
@@ -128,6 +129,47 @@ bypassing the registry) — the only difference is an anonymous table has no
 name for `:UI status`/`ui.config.get_variant()` to report. See
 `docs/examples/personal-statusline-example.lua` for the full worked example,
 including the `register()` call.
+
+---
+
+## Tabline styles
+
+The tabline has one shipped config, not a variant choice like the
+statusline (see `ui.config.init.lua`'s own note on why: `cfg.style` is a
+single field of it, not a whole `{order, modules}` table to pick between).
+That field still resolves through a registry, `ui.tabline.styles`, the
+same way `separator_style` resolves through
+`ui.statusline.utils.primitives.separators`:
+
+| Style | What it does |
+| --- | --- |
+| `rounded` (default) | A cap on every internal chip boundary; square only where the visible run actually meets an edge |
+| `square` | Nothing added; chips sit flush against each other |
+| `divider` | One plain vertical bar per internal boundary, no rounding |
+
+An unrecognized or unset name falls back to `rounded` rather than throwing.
+
+### `ui.tabline.styles` — registering your own look
+
+```lua
+require("ui.tabline.styles").register(
+  "my_style", -- shows up in :UI tabline-style completion
+  function(chips, chip_bufs, cur, flush_right)
+    -- mutate `chips` (parallel to `chip_bufs`) in place -- see
+    -- ui.tabline.styles's own doc comment for what each shipped decorator
+    -- does with these same four parameters
+  end
+)
+
+require("ui.config").setup({ tabline = { style = "my_style" } })
+```
+
+`:UI tabline-style {name}` switches it at runtime, and `:UI tabline-styles`
+lists every registered name, marking the active one -- unlike
+`:UI variant`, this does not need a full `ui.config.setup()` round-trip: it
+mutates `cfg.style` directly on the table `ui.tabline.render.current()`
+already holds (the tabline config is a single instance, not reassembled
+per switch), then `:redrawtabline` makes it visible.
 
 ---
 
