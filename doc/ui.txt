@@ -129,6 +129,11 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI variants
     List registered variants, marking the active one.
 
+:UI modules
+    List every catalogued statusline segment (built into the "default"
+    theme, or a standalone module), what each shows, what it needs, and
+    which shipped presets already use it. Same data as docs/modules.md.
+
 :UI status
     Current theme, transparency state and statusline variant.
 

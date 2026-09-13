@@ -232,6 +232,51 @@ local function ui_picker(_args)
   theme_picker.open()
 end
 
+---List every catalogued statusline segment -- see ui.statusline.catalog's
+---own doc comment for what "catalogued" excludes and why.
+---@param _args string[] # Unused: this subcommand takes no argument
+local function ui_modules(_args)
+  local catalog = require("ui.statusline.catalog")
+
+  local builtin, standalone = {}, {}
+  for _, entry in ipairs(catalog) do
+    table.insert(entry.builtin and builtin or standalone, entry)
+  end
+
+  ---@param entry Ui.Statusline.CatalogEntry
+  ---@return string
+  local function format_entry(entry)
+    local wiring = (#entry.used_by > 0) and ("in " .. table.concat(entry.used_by, ", "))
+      or "opt-in only"
+    local dep = entry.requires and (" [needs " .. entry.requires .. "]") or ""
+    return ("  %-20s %s%s (%s)"):format(entry.key, entry.summary, dep, wiring)
+  end
+
+  local lines = {
+    ('Built into the "default" theme -- add the key to any preset\'s `order` (%d):'):format(
+      #builtin
+    ),
+    "",
+  }
+  for _, entry in ipairs(builtin) do
+    lines[#lines + 1] = format_entry(entry)
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = ("Standalone modules -- add the key to `order` plus a `modules` entry (%d):"):format(
+    #standalone
+  )
+  lines[#lines + 1] = ""
+  for _, entry in ipairs(standalone) do
+    lines[#lines + 1] = format_entry(entry)
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "Full wiring snippets: docs/modules.md in the ui.nvim repo."
+
+  notify.info(table.concat(lines, "\n"))
+end
+
 ---Toggle between configured themes
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_toggle(_args)
@@ -268,6 +313,8 @@ local function ui_help(_args)
 │  :UI variant <name>         Variante wechseln        │
 │  :UI variants               Alle Varianten auflisten │
 │                                                      │
+│  :UI modules                Verfügbare Segmente      │
+│                             auflisten                │
 │  :UI status                 Aktuelle Config zeigen   │
 │  :UI help                   Diese Hilfe anzeigen     │
 │                                                      │
@@ -301,6 +348,7 @@ local function dispatcher(opts)
     variant = ui_variant,
     variants = ui_variants,
     picker = ui_picker,
+    modules = ui_modules,
     toggle = ui_toggle,
     status = ui_status,
     help = ui_help,
@@ -351,6 +399,7 @@ local function complete(arglead, cmdline, _cursorpos)
       "variant",
       "variants",
       "picker",
+      "modules",
       "toggle",
       "status",
       "help",
