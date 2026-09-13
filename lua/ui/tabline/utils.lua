@@ -16,6 +16,56 @@ local icon_cache = require("lib.lua.memo.lru").new(256)
 
 local M = {}
 
+-- Rounded pill caps for `M.style_buf`'s chip -- same Powerline codepoints
+-- (U+E0B6/U+E0B4) `ui.statusline.utils.primitives.separators.default` uses,
+-- written the same way (explicit byte escapes, not literal glyphs) for the
+-- same reason: an editor/encoding pass has silently dropped these before
+-- (see that table's own doc comment). Public so `ui.tabline.modules.buffers`
+-- can square off the outer edges of the visible chip run.
+M.LEFT_CAP = "\xEE\x82\xB6" --
+M.RIGHT_CAP = "\xEE\x82\xB4" --
+
+-- Buffers currently mid-"flash" (a brief highlight swap on click, before
+-- `goto_buf` actually switches to it -- the same kind of momentary feedback
+-- `lib.nvim.contextmenu` gives on a selection) and the duration of one.
+---@type table<integer, true>
+local flashing = {}
+local FLASH_MS = 120
+
+--- Briefly render `bufnr`'s chip with `UiTbBufFlash` instead of its normal
+--- On/Off group, then revert. Safe to call on any bufnr, current or not.
+---@param bufnr integer
+---@return nil
+function M.flash(bufnr)
+  flashing[bufnr] = true
+  pcall(vim.cmd.redrawtabline)
+  vim.defer_fn(function()
+    flashing[bufnr] = nil
+    pcall(vim.cmd.redrawtabline)
+  end, FLASH_MS)
+end
+
+--- Whether `bufnr` is currently mid-flash. Exposed for tests; `style_buf`
+--- reads this directly.
+---@param bufnr integer
+---@return boolean
+function M.is_flashing(bufnr)
+  return flashing[bufnr] == true
+end
+
+--- `goto_buf`, wrapped with the click-flash above. The click handler calls
+--- this instead of `ui.bindings.keymaps.tabufline.state.goto_buf` directly,
+--- so every click-driven buffer switch flashes, while keymap-driven
+--- switching (Tab/Shift-Tab, `:UI` commands) stays flash-free -- a flash
+--- makes sense as click feedback, not as feedback for an action the user's
+--- own keypress already told them happened.
+---@param bufnr integer
+---@return nil
+function M.goto_buf(bufnr)
+  M.flash(bufnr)
+  require("ui.bindings.keymaps.tabufline.state").goto_buf(bufnr)
+end
+
 ---@param str string|nil
 ---@param hl string|nil # suffix only -- "BufOn" becomes group "UiTbBufOn"
 ---@return string
@@ -60,7 +110,7 @@ function M.register_click_handlers()
 
   vim.cmd([[
     function! UiTbGoToBuf(bufnr, clicks, button, mod)
-      call luaeval('require("ui.bindings.keymaps.tabufline.state").goto_buf(_A)', a:bufnr)
+      call luaeval('require("ui.tabline.utils").goto_buf(_A)', a:bufnr)
     endfunction
   ]])
   vim.cmd([[
@@ -205,7 +255,9 @@ function M.style_buf(bufnr, index, width)
   M.register_click_handlers()
 
   local is_current = api.nvim_get_current_buf() == bufnr
-  local hl_suffix = is_current and "On" or "Off"
+  -- Mid-flash overrides On/Off for the chip's own text/background -- not for
+  -- the icon (see M.flash's own doc comment on why only the text flashes).
+  local hl_suffix = M.is_flashing(bufnr) and "Flash" or (is_current and "On" or "Off")
 
   local icon, fg = devicon_for_buf(bufnr)
   local icon_hl = ensure_icon_hl(fg, is_current)
@@ -224,7 +276,15 @@ function M.style_buf(bufnr, index, width)
   -- Escaped after the width/truncation math above, which has to measure the
   -- name as it will actually display -- `%%` is two characters wide in the
   -- string but renders as one literal `%`.
-  local pad = math.max(1, math.floor((width - #name - 5) / 2))
+  --
+  -- `math.max(2, ...)` rather than `math.max(1, ...)`: at `pad == 1`,
+  -- `pad - 1` below is 0 -- no leading space at all, so the icon sits flush
+  -- against the chip's own left edge (visible once chips narrow, e.g. a
+  -- markdown file's icon touching the rounded cap with no gap, unlike an
+  -- icon glyph that happens to carry its own left-bearing). `pad >= 2`
+  -- guarantees at least one space on each side regardless of how narrow the
+  -- chip gets.
+  local pad = math.max(2, math.floor((width - #name - 5) / 2))
   local body = string.rep(" ", pad - 1)
     .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(stl_escape(name), "Buf" .. hl_suffix))
     .. string.rep(" ", pad - 1)
