@@ -11,8 +11,14 @@
 return {
   order = { "tree_offset", "buffers", "tabs", "btns" },
 
-  -- Target chip width in columns; also NvChad's own default.
-  bufwidth = 21,
+  -- `bufwidth` deliberately left unset: `ui.tabline.modules.buffers` then
+  -- computes a chip width from the available space and the open-buffer
+  -- count instead of a fixed 21 columns (NvChad's own default, and this
+  -- plugin's own behaviour before this became configurable) -- a fixed
+  -- width leaves a leftover strip too narrow for one more chip whenever the
+  -- buffer count doesn't divide the bar evenly. Set `bufwidth` here to pin
+  -- the old fixed-width behaviour back; `bufwidth_min`/`bufwidth_max`
+  -- (default 12/24) bound the auto-computed width instead.
 
   -- "filetree" is `filetree.nvim`'s own filetype (this ecosystem's file
   -- tree), not NvChad's default "NvimTree" -- the tree_offset module reads

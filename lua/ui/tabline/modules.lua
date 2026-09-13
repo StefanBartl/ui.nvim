@@ -10,6 +10,14 @@ local api = vim.api
 
 local M = {}
 
+-- Bounds for the auto-computed chip width (`M.buffers` below) -- the elastic
+-- range that lets the bar fill itself instead of leaving a leftover strip
+-- too narrow for one more fixed-width chip. Below MIN_BUFWIDTH, more buffers
+-- simply overflow (dropped from the front) exactly like a fixed-width bar
+-- always has; the shrinking only happens inside this range.
+local MIN_BUFWIDTH = 12
+local MAX_BUFWIDTH = 24
+
 ---@param ft string
 ---@return integer # 0 when no window in the current tab has this filetype
 local function filetree_window_width(ft)
@@ -62,10 +70,18 @@ end
 --- overflow the columns left by the other modules, keeping the current
 --- buffer visible -- ported from `nvchad.tabufline.modules.buffers`'s own
 --- overflow handling.
+---
+--- `cfg.bufwidth` pins an exact width (the old fixed-21 behaviour) when set.
+--- Left unset, the width is computed instead: `space / #bufs`, clamped to
+--- `[cfg.bufwidth_min or MIN_BUFWIDTH, cfg.bufwidth_max or MAX_BUFWIDTH]` --
+--- few buffers get wide chips up to the max, many buffers get progressively
+--- narrower ones down to the min, and the whole bar fills itself instead of
+--- leaving an unused strip too narrow for one more fixed-width chip. Past
+--- the min, additional buffers overflow exactly as before -- the elastic
+--- range only covers the middle, not an unbounded shrink.
 ---@param cfg Ui.Tabline.Config
 ---@return string
 function M.buffers(cfg)
-  local bufwidth = cfg.bufwidth or 21
   local bufs = vim.tbl_filter(api.nvim_buf_is_valid, vim.t.bufs or {})
   vim.t.bufs = bufs
 
@@ -75,6 +91,14 @@ function M.buffers(cfg)
   -- for a `nvim_eval_statusline` plus a full re-render of every other module
   -- again for every single open buffer -- on every tabline redraw.
   local space = available_space(cfg)
+
+  local bufwidth = cfg.bufwidth
+  if not bufwidth then
+    local min_w = cfg.bufwidth_min or MIN_BUFWIDTH
+    local max_w = cfg.bufwidth_max or MAX_BUFWIDTH
+    local per_buf = math.floor(space / math.max(1, #bufs))
+    bufwidth = math.max(min_w, math.min(max_w, per_buf))
+  end
 
   local chips = {}
   local seen_current = false

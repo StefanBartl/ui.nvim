@@ -21,6 +21,7 @@
 
 local notify = require("lib.nvim.notify").create("[ui.statusline.render]")
 local primitives = require("ui.statusline.utils.primitives")
+local highlights = require("ui.statusline.highlights")
 
 local M = {}
 
@@ -166,6 +167,7 @@ local current = nil
 ---@return nil
 function M.enable(cfg)
   current = cfg
+  highlights.ensure()
   vim.o.statusline = "%!v:lua.require('ui.statusline.render').render()"
   primitives.autocmds()
 end
