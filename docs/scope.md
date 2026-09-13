@@ -1,0 +1,27 @@
+# What it does and what not
+
+| Area | What it covers |
+| --- | --- |
+| Statusline | Several complete layouts, an LSP-aware breadcrumb segment, cursor-progress indicators, file icons, formatter and diagnostic state, test-runner and plugin-progress segments |
+| Tabline | Buffer and tab navigation, buffer reordering, moving a buffer to another tab |
+| Theme | Palette assembly, a theme toggle, transparency, the `:UI` command that drives all of it |
+| Highlights | The groups the frame paints with, kept stable across theme switches |
+| Winbar | Owns the `vim.wo.winbar` write (`ui.winbar.set`) — a content plugin (breadcrumbs, typically) keeps producing the string and hands it over instead of writing the surface itself |
+
+The dividing line this repository draws is worth stating plainly:
+
+> **Content lives inside the window. `ui.nvim` paints the frame around it.**
+
+Cursorline, mode tinting, indent guides, occurrence highlighting and a
+declarative option set are content — they work with any statusline and any
+distribution, and are out of scope here. Statusline, tabline and theme
+assembly are frame.
+
+## What it is not
+
+| Not | Because |
+| --- | --- |
+| A colorscheme | It arranges and applies colours; it does not define a palette from scratch. Accent colors come from the active colorscheme's own highlight groups (`ui.theme.palette`) |
+| A distribution | No plugin list, no opinionated bundle. One UI layer |
+| A statusline framework | It ships presets, not a DSL for building them. A framework is what you write when you do not know what you want; this starts from four generic layouts already in daily use, plus a documented way to bring your own (`opts.variant`, see [docs/examples/](examples/)) |
+| A NvChad replacement | It never covered anything outside statusline/tabline/theme, and does not now either. Everything else NvChad's own plugin bundle installed (Mason, which-key, Treesitter, Telescope, gitsigns, nvim-web-devicons, and more) needs its own, separate plugin spec once NvChad is gone — see [nvchad-migration.md](nvchad-migration.md) |
