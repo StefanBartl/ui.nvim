@@ -102,6 +102,19 @@ local function filename(path)
   return path:match("([^/\\]+)[/\\]*$") or path
 end
 
+--- Escape a literal `%` so embedding this string into `'tabline'` cannot be
+--- misread as one of its own `%`-directives (`%#Group#`, `%=`, `%N@Func@`,
+--- ...) -- a buffer's file/directory name is filesystem-controlled, not
+--- something this module can assume is free of it (a file named e.g.
+--- `50%done.lua`, or one deliberately crafted to break tabline rendering).
+--- Same fix the statusline's own breadcrumb rendering already applies to
+--- LSP/Treesitter symbol text for the identical reason.
+---@param s string
+---@return string
+local function stl_escape(s)
+  return (s:gsub("%%", "%%%%"))
+end
+
 ---@param group string
 ---@return integer|nil
 local function read_bg(group)
@@ -208,20 +221,17 @@ function M.style_buf(bufnr, index, width)
     name = name:sub(1, math.max(1, max_name_len - 2)) .. ".."
   end
 
+  -- Escaped after the width/truncation math above, which has to measure the
+  -- name as it will actually display -- `%%` is two characters wide in the
+  -- string but renders as one literal `%`.
   local pad = math.max(1, math.floor((width - #name - 5) / 2))
   local body = string.rep(" ", pad - 1)
-    .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(name, "Buf" .. hl_suffix))
+    .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(stl_escape(name), "Buf" .. hl_suffix))
     .. string.rep(" ", pad - 1)
 
   local modified = api.nvim_get_option_value("modified", { buf = bufnr })
-  local close_or_dot
-  if is_current then
-    close_or_dot = modified and M.txt("  ", "BufOnModified")
-      or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "BufOnClose")
-  else
-    close_or_dot = modified and M.txt("  ", "BufOffModified")
-      or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "BufOffClose")
-  end
+  local close_or_dot = modified and M.txt("  ", "Buf" .. hl_suffix .. "Modified")
+    or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
 
   local chip = M.btn(body, nil, "GoToBuf", bufnr) .. close_or_dot
   return M.txt(chip, "Buf" .. hl_suffix)

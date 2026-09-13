@@ -95,6 +95,40 @@ describe("ui.statusline.render.generate", function()
       assert.equals("", render.generate({}))
     end)
   end)
+
+  it("does not resolve or warn about an unported theme when modules covers every key", function()
+    -- Regression: `theme` used to resolve unconditionally at the top of
+    -- generate(), before the loop even checked whether any key needed it --
+    -- so a variant like the personal one (theme = "minimal" as a label,
+    -- every order key already in its own modules) warned about "minimal"
+    -- having no fallback every single render, for a fallback it never read.
+    -- Mocking vim.notify itself, not lib.nvim.notify.create()'s return value:
+    -- create() builds a fresh table per call, so render.lua's own already-
+    -- captured notifier is a different object than one created here. A theme
+    -- name unique to this test, not "minimal" (already exercised, and thus
+    -- already deduped, by the "renders an unported theme name..." test above
+    -- in this same file/process) -- reusing that name would let this
+    -- assertion pass vacuously regardless of whether the fix actually works.
+    local warned = {}
+    local original_notify = vim.notify
+    vim.notify = function(msg, level)
+      warned[#warned + 1] = { msg = msg, level = level }
+    end
+
+    local out = render.generate({
+      order = { "a" },
+      modules = {
+        a = function()
+          return "A"
+        end,
+      },
+      theme = "totally-unported-fixture-theme-xyz", -- would warn once if ever resolved
+    })
+
+    vim.notify = original_notify
+    assert.equals("A", out)
+    assert.same({}, warned)
+  end)
 end)
 
 describe("ui.statusline.render enable/render/disable", function()

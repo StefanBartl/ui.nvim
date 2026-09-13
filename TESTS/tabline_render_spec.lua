@@ -156,4 +156,56 @@ describe("ui.tabline.modules", function()
     end)
     vim.t.bufs = saved
   end)
+
+  it("computes available_space once per buffers() call, not once per buffer", function()
+    -- Regression: available_space(cfg) used to be called from inside the
+    -- overflow loop, once per buffer in vim.t.bufs -- pure waste, since
+    -- nothing it measures (tree_offset/tabs/btns) depends on how many chips
+    -- the loop has produced so far. Spying on nvim_eval_statusline (what
+    -- available_space calls) proves it now runs at most once regardless of
+    -- how many buffers are open.
+    local calls = 0
+    local original = vim.api.nvim_eval_statusline
+    vim.api.nvim_eval_statusline = function(...)
+      calls = calls + 1
+      return original(...)
+    end
+
+    local saved = vim.t.bufs
+    local bufs = {}
+    for _ = 1, 5 do
+      bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
+    end
+    vim.t.bufs = bufs
+
+    modules.buffers(default_cfg)
+
+    vim.api.nvim_eval_statusline = original
+    for _, b in ipairs(bufs) do
+      pcall(vim.api.nvim_buf_delete, b, { force = true })
+    end
+    vim.t.bufs = saved
+
+    assert.is_true(calls <= 1, ("expected at most 1 call, got %d"):format(calls))
+  end)
+end)
+
+describe("ui.tabline.utils.style_buf", function()
+  local utils = require("ui.tabline.utils")
+
+  it("escapes a literal %% in the buffer name so it cannot break 'tabline' syntax", function()
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, "50%done.lua")
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    local ok, chip = pcall(utils.style_buf, buf, 1, 21)
+
+    vim.t.bufs = saved
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+    assert.is_true(ok, tostring(chip))
+    assert.is_true(chip:find("50%%done", 1, true) ~= nil, chip)
+    assert.is_nil(chip:find("50%done", 1, true))
+  end)
 end)

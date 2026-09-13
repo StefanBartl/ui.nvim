@@ -13,11 +13,11 @@
 --- it -- `render()` is the zero-argument function `'%!'` calls on every
 --- redraw, so it takes nothing and reads whatever `enable()` last stored.
 ---
---- What this module does NOT do: decide when it runs. `ui.config.setup()`'s
---- return value still only reaches NvChad, through `chadrc.lua`, until the
---- host is rewired (step 7) -- calling `enable()` today is opt-in, and
---- exists so this plugin, and its own spec suite, can prove the whole path
---- works without NvChad on the runtimepath at all.
+--- What this module does NOT do: decide when it runs. Calling `enable()` is
+--- still opt-in -- a host wires it explicitly (see `ui.tabline.render`'s
+--- identical shape, one option later), which is also what lets this
+--- plugin's own spec suite prove the whole path works without NvChad on the
+--- runtimepath at all.
 
 local notify = require("lib.nvim.notify").create("[ui.statusline.render]")
 local primitives = require("ui.statusline.utils.primitives")
@@ -96,7 +96,25 @@ end
 function M.generate(cfg)
   local order = cfg.order or {}
   local modules = cfg.modules or {}
-  local theme = resolve_theme(cfg.theme, cfg.separator_style)
+
+  -- Resolved lazily, on the first key `modules` doesn't cover -- not
+  -- upfront. A variant whose own `modules` already covers every key in
+  -- `order` (most of them; see step 4's own note on `custom`/`custom_minimal`)
+  -- never needs the fallback at all, so resolving it unconditionally meant
+  -- every such variant paid `resolve_theme`'s cost, and any `cfg.theme` name
+  -- with no ported fallback (e.g. "minimal") warned once per session for a
+  -- theme value the render never actually reads. Found live: the personal
+  -- variant sets `theme = "minimal"` purely as a label -- its own `modules`
+  -- table already covers every key in its `order` -- and warned anyway.
+  local theme_resolved = false
+  local theme = nil
+  local function fallback_theme()
+    if not theme_resolved then
+      theme_resolved = true
+      theme = resolve_theme(cfg.theme, cfg.separator_style)
+    end
+    return theme
+  end
 
   local result = {}
   for _, key in ipairs(order) do
@@ -104,8 +122,9 @@ function M.generate(cfg)
       result[#result + 1] = key
     else
       local mod = modules[key]
-      if mod == nil and theme then
-        mod = theme[key]
+      if mod == nil then
+        local theme_mod = fallback_theme()
+        mod = theme_mod and theme_mod[key]
       end
 
       if type(mod) == "function" then

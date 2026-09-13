@@ -69,12 +69,19 @@ function M.buffers(cfg)
   local bufs = vim.tbl_filter(api.nvim_buf_is_valid, vim.t.bufs or {})
   vim.t.bufs = bufs
 
+  -- Computed once, not once per buffer: nothing tree_offset/tabs/btns render
+  -- depends on how many chips this loop has produced so far, so calling this
+  -- inside the loop (as NvChad's own `available_space()` call site does) pays
+  -- for a `nvim_eval_statusline` plus a full re-render of every other module
+  -- again for every single open buffer -- on every tabline redraw.
+  local space = available_space(cfg)
+
   local chips = {}
   local seen_current = false
   local cur = api.nvim_get_current_buf()
 
   for i, bufnr in ipairs(bufs) do
-    if (#chips + 1) * bufwidth > available_space(cfg) then
+    if (#chips + 1) * bufwidth > space then
       if seen_current then
         break
       end
