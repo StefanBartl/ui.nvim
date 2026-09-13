@@ -25,4 +25,10 @@ return {
   -- this to reserve a blank strip the width of whichever tree window is
   -- open, so the buffer chips do not draw underneath it.
   tree_offset_ft = "filetree",
+
+  -- `style` deliberately left unset too -- `ui.tabline.modules.buffers`
+  -- falls back to "rounded" (a cap between every pair of chips, square only
+  -- where the visible run actually meets an edge). Set to "square" for
+  -- chips flush against each other with no boundary decoration, or
+  -- "divider" for a plain vertical bar between them instead of rounding.
 }

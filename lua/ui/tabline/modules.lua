@@ -66,10 +66,67 @@ function M.tree_offset(cfg)
   return "%#UiTbTreeOffset#" .. string.rep(" ", width) .. "%#UiTbFill#"
 end
 
+---@type table<string, true>
+local VALID_STYLES = { rounded = true, square = true, divider = true }
+
+--- Decorate chip boundaries per `style`, mutating `chips` in place:
+---   "rounded" (default) -- a cap on every internal boundary. The first
+---     chip's left edge is always square -- it sits directly against the
+---     bar's own left edge (or `tree_offset`'s fill), never with slack in
+---     between. The last chip's right edge is square only when `flush_right`
+---     says the visible run actually reaches the space budget (buffers had
+---     to be dropped to fit, or the auto-computed width used every column) --
+---     otherwise `"%="` alignment leaves genuine empty space before
+---     `tabs`/`btns`, and squaring an edge that isn't touching anything
+---     reads as a cut corner rather than a frame. A single-chip run follows
+---     the same two rules independently -- square on the left always, square
+---     on the right only if flush.
+---   "square" -- nothing added; chips sit flush, the look before this style
+---     switch existed.
+---   "divider" -- one plain vertical bar per internal boundary, no rounding.
+--- An unrecognized style name falls back to "rounded" rather than silently
+--- rendering unstyled -- same degrade-not-crash contract `get_separators()`
+--- already uses for the statusline's own `separator_style`.
+---@param chips string[]
+---@param chip_bufs integer[] # parallel to `chips`
+---@param cur integer # current buffer, for the rounded style's per-chip cap color
+---@param style string|nil
+---@param flush_right boolean # whether the visible run actually reaches the right edge of its budget
+---@return nil
+local function apply_boundaries(chips, chip_bufs, cur, style, flush_right)
+  style = VALID_STYLES[style] and style or "rounded"
+
+  if style == "square" then
+    return
+  end
+
+  if style == "divider" then
+    local divider = "%#UiTbDivider#" .. utils.DIVIDER
+    for i = 1, #chips - 1 do
+      chips[i] = chips[i] .. divider
+    end
+    return
+  end
+
+  for i, bufnr in ipairs(chip_bufs) do
+    local cap_hl = "%#" .. ((bufnr == cur) and "UiTbBufOnCap" or "UiTbBufOffCap") .. "#"
+    local is_last = i == #chip_bufs
+    if not (is_last and flush_right) then
+      chips[i] = chips[i] .. cap_hl .. utils.RIGHT_CAP
+    end
+    if i > 1 then
+      chips[i] = cap_hl .. utils.LEFT_CAP .. chips[i]
+    end
+  end
+end
+
 --- The buffer chip list. Drops chips from the front once the list would
 --- overflow the columns left by the other modules, keeping the current
 --- buffer visible -- ported from `nvchad.tabufline.modules.buffers`'s own
 --- overflow handling.
+---
+--- `cfg.style` picks the boundary look between chips -- "rounded" (default),
+--- "square", or "divider". See `apply_boundaries`'s own doc comment.
 ---
 --- `cfg.bufwidth` pins an exact width (the old fixed-21 behaviour) when set.
 --- Left unset, the width is computed instead: `space / #bufs`, clamped to
@@ -104,9 +161,15 @@ function M.buffers(cfg)
   local chip_bufs = {} -- parallel to `chips`, kept in sync across the drop below
   local seen_current = false
   local cur = api.nvim_get_current_buf()
+  -- Whether the visible run ever bumped against the space budget -- true the
+  -- moment one more chip wouldn't fit, whether that meant dropping one from
+  -- the front or simply stopping early. Feeds `apply_boundaries`'s decision
+  -- on whether the last chip's right edge is actually touching anything.
+  local flush_right = false
 
   for i, bufnr in ipairs(bufs) do
     if (#chips + 1) * bufwidth > space then
+      flush_right = true
       if seen_current then
         break
       end
@@ -119,20 +182,7 @@ function M.buffers(cfg)
     chip_bufs[#chip_bufs + 1] = bufnr
   end
 
-  -- Round the outer corners of every chip against its neighbour, but square
-  -- off the two true edges of the visible run (the bar's own left edge, and
-  -- wherever "tabs"/"btns" pick up on the right) -- rounding those would cut
-  -- a rounded notch out of a straight screen/monitor edge instead of framing
-  -- a chip. A run of one chip is square on both sides.
-  for i, bufnr in ipairs(chip_bufs) do
-    local cap_hl = "%#" .. ((bufnr == cur) and "UiTbBufOnCap" or "UiTbBufOffCap") .. "#"
-    if i < #chip_bufs then
-      chips[i] = chips[i] .. cap_hl .. utils.RIGHT_CAP
-    end
-    if i > 1 then
-      chips[i] = cap_hl .. utils.LEFT_CAP .. chips[i]
-    end
-  end
+  apply_boundaries(chips, chip_bufs, cur, cfg.style, flush_right)
 
   return table.concat(chips) .. "%#UiTbFill#%="
 end

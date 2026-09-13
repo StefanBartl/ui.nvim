@@ -73,6 +73,10 @@ function M.apply()
   set(0, "UiTbBufOnCap", { fg = sel_bg, bg = fill_bg })
   set(0, "UiTbBufOffCap", { fg = off_bg, bg = fill_bg })
 
+  -- The "divider" style's plain vertical bar between chips -- muted, on the
+  -- fill background, no per-chip color the way the rounded caps have.
+  set(0, "UiTbDivider", { fg = muted_fg, bg = fill_bg })
+
   set(0, "UiTbTabOn", { fg = sel_fg, bg = sel_bg, bold = true })
   set(0, "UiTbTabOff", { fg = off_fg, bg = off_bg })
   set(0, "UiTbTabNewBtn", { fg = sel_fg, bg = fill_bg })

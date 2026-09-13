@@ -26,12 +26,21 @@
 ---        require("ui.config").setup({ variant = "personal" })
 ---
 --- See docs/configuration.md, "ui.config.variants".
+---
+--- No breadcrumbs module (removed 2026-09-13): a host that also uses
+--- `ui.winbar.set()` to draw breadcrumbs into the winbar (`vim.wo.winbar`,
+--- directly below the tabline -- a separate Neovim surface from both the
+--- statusline and the tabline, see `ui.winbar`'s own doc comment) already
+--- has path/symbol context there. This statusline's own former
+--- "breadcrumbs" module (`ui.statusline.modules.lsp.
+--- render_breadcrumbs_inherit_lspfirst`) rendered the same kind of content a
+--- second time, independently, in the middle of the statusline -- not one
+--- feeding the other, just two separate implementations of the same idea.
+--- Add it back under a different key if your winbar draws something else.
 
 local lazy = require("lib.lua.lazy")
 local render_module = lazy.require("ui.statusline.cursor_ctl.renderer")
 local progr_calc_module = lazy.require("ui.statusline.cursor_ctl.progress_calculators")
-local hl_module = lazy.require("ui.statusline.modules.highlighting")
-local lsp_module = lazy.require("ui.statusline.modules.lsp")
 local cursor_module = lazy.require("ui.statusline.cursor_ctl")
 local get_separators = lazy.require("ui.statusline.utils.get_separators")
 local plugin_progress = lazy.require("ui.statusline.modules.plugin_progress")
@@ -57,8 +66,6 @@ return {
       order = {
         "mode",
         "git",
-        "%=",
-        "breadcrumbs",
         "%=",
         "diagnostics",
         "lsp",
@@ -126,20 +133,6 @@ return {
           end
 
           return " %#St_gitIcons#" .. git_status .. "%#St_gitIcons# " .. " "
-        end,
-
-        --- @return string
-        breadcrumbs = function()
-          local band = hl_module.mode_band_group()
-          local content = lsp_module.render_breadcrumbs_inherit_lspfirst(band)
-
-          if not content or content == "" then
-            return ""
-          end
-
-          local sep = get_separators(SEPARATOR_STYLE)
-
-          return hl_module.hl_open(band) .. content .. "%#" .. band .. "Sep#" .. sep.right .. " "
         end,
 
         --- @return string
