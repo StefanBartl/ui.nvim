@@ -5,7 +5,7 @@ thing worth understanding before changing anything here.
 
 | Call | When | Answers |
 | --- | --- | --- |
-| `ui.config.setup()` | while NvChad boots, through `chadrc` | Which theme, which statusline layout |
+| `ui.config.setup()` | from your own config's startup, whenever you want the frame drawn | Which theme, which statusline/tabline layout |
 | `ui.setup(opts)` | after, from your config | Which keymaps and commands exist |
 
 Folding them together would mean the keymaps had to exist before the theme
@@ -42,34 +42,32 @@ useful, and a config that already has its own buffer keymaps wants only
 
 ## `ui.config.setup()`
 
-Called from `chadrc.lua` in the reference host, which today still routes
-through NvChad (roadmap step 7 has not rewired it). NvChad's own `chadrc`
-mechanism never read a `theme` key — it read `base46`, for its own theme
-engine. Since step 6 removed base46, this example is the plugin's own API
-contract, not something NvChad understands; the actual host wiring for a
-NvChad-free host is step 7, not yet written:
+No distribution hook to call it from — this plugin does not need or expect
+one. It is a plain function: call it once from wherever your own config's
+startup sequence lives, assemble the result, then hand the relevant half to
+each renderer's own `enable()`:
 
 ```lua
--- lua/chadrc.lua (illustrative -- see note above)
-local ok, config = pcall(function()
-  return require("ui.config").setup()
-end)
-
-return {
-  theme = config.theme,
-  ui = { statusline = config.ui.statusline },
-}
-```
-
-It takes optional overrides for the theme block:
-
-```lua
-require("ui.config").setup({
+-- Anywhere in your own startup, once (this is the reference host's own
+-- shape, config/ui_statusline/init.lua -- adapt names, not structure):
+local ok, assembled = pcall(require("ui.config").setup, {
   theme = { theme_toggle = { "rosepine", "tokyonight" }, transparency = true },
 })
+if ok then
+  require("ui.statusline.render").enable(assembled.ui.statusline)
+  require("ui.tabline.render").enable(assembled.ui.tabline)
+end
 ```
 
-An override is merged onto a copy; the shipped defaults are not mutated.
+`ui.config.setup()` only ever assembles a config table; it does not touch
+`vim.o.statusline`/`vim.o.tabline` itself. Both `enable()` calls are the
+separate step that actually points those options at this plugin's own
+renderers -- see [`:UI variant`'s own implementation](../lua/ui/bindings/usrcmds/init.lua)
+for the same two-step shape used at runtime.
+
+`theme` is the only overridable block at setup time (see the `theme_toggle`/
+`transparency` fields in the example above). An override is merged onto a
+copy; the shipped defaults are not mutated.
 
 ---
 

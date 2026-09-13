@@ -4,7 +4,7 @@
 :checkhealth ui
 ```
 
-Five sections. As of roadmap step 6, only one thing in the first is fatal:
+Seven sections. As of roadmap step 6, only one thing in the first is fatal:
 `lib.nvim` missing. NvChad's presence is information now, not a dependency
 check — steps 3-5 replaced everything this plugin's own code used to read
 out of it, one gap at a time, and step 6 did the same for base46.
@@ -16,9 +16,9 @@ out of it, one gap at a time, and step 6 did the same for base46.
 | Line | Means |
 | --- | --- |
 | ✅ `lib.nvim is available` | The root module resolves |
-| ✅ `all 10 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
+| ✅ `all 11 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
 | ❌ `lib.nvim is not on the runtimepath` | Fatal — install `StefanBartl/lib.nvim`. Only failure that stops the report |
-| ℹ️ `NvChad is present` / `NvChad is not present` | Neither is an error. The host this plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer (step 7, not done) — this line just says whether that path exists on this machine, not whether this plugin's own code needs it (it doesn't) |
+| ℹ️ `NvChad is present` / `NvChad is not present` | Neither is an error, and this plugin's own code does not need either answer -- it just reports what this particular host looks like. NvChad is not required and (in the reference host this plugin was extracted from, as of step 7, 2026-09-13) not installed at all any more |
 
 `nvconfig`, `nvchad.stl.utils`, `nvchad.tabufline`, `base46` and
 `base46.themes` are gone from this section entirely — not reclassified as
@@ -32,10 +32,10 @@ under any name (steps 3-6).
 | Line | Means |
 | --- | --- |
 | ✅ `active colorscheme "x", transparency default false, toggle pair a / b` | `vim.g.colors_name` plus the shipped theme block |
-| ℹ️ `statusline variant: x` | Which of the six layouts is assembled |
-| ✅ `variant module ui.config.statusline.x resolves` | The variant name is a module path at heart; a typo in it degrades to `normal` with a notification nobody sees twice |
-| ❌ `variant "x" does not resolve` | It will silently fall back to `normal`. This line is why the check exists |
-| ✅ `ui.config.setup() assembles` | The table this plugin's own `ui.statusline.render` (or, until step 7, NvChad through `chadrc`) reads was produced, without touching a NvChad or base46 symbol |
+| ℹ️ `statusline variant: x` | Which of the four shipped presets (or a host-registered one) is assembled |
+| ✅ `variant module ui.config.statusline.x resolves` | The variant name is a module path at heart; a typo in it degrades to `default` with a notification nobody sees twice |
+| ❌ `variant "x" does not resolve` | It will silently fall back to `default`. This line is why the check exists |
+| ✅ `ui.config.setup() assembles` | The table this plugin's own `ui.statusline.render` reads was produced, without touching a NvChad or base46 symbol |
 
 ---
 
@@ -49,7 +49,21 @@ New at step 4. Checks the module that replaced `nvchad.init` +
 | ✅ `ui.statusline.render resolves` | `generate`/`enable`/`render`/`disable` are all present |
 | ✅ `generate() renders the 'default' theme's fallback modules without NvChad` | A synthetic config ran through `generate()` and produced a string, standalone |
 | ℹ️ `a config is currently enable()d` | Something called `ui.statusline.render.enable()` — `vim.o.statusline` is this plugin's, not the host's |
-| ℹ️ `enable() has not been called` | The common case today: `vim.o.statusline` is whatever the host last set (NvChad, through `chadrc.lua`, until step 7) |
+| ℹ️ `enable() has not been called` | `vim.o.statusline` is whatever the host last set it to -- this plugin has no way to know what that was from in here |
+
+---
+
+## Tabline render entrypoint
+
+Mirrors the statusline section above, one option later: checks the module
+that replaced `nvchad.tabufline`'s render side.
+
+| Line | Means |
+| --- | --- |
+| ✅ `ui.tabline.render resolves (generate/enable/render/disable)` | All four are present |
+| ✅ `generate() renders the shipped tabline config without NvChad` | The shipped tabline config ran through `generate()` and produced a string, standalone |
+| ℹ️ `a config is currently enable()d` | Something called `ui.tabline.render.enable()` — `vim.o.tabline` is this plugin's |
+| ℹ️ `enable() has not been called` | `vim.o.tabline` is whatever the host last set it to |
 
 ---
 

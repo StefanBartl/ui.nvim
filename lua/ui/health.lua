@@ -9,12 +9,14 @@
 --- return value assembles without touching a NvChad symbol (step 3). This
 --- section checks that entrypoint resolves and runs, standalone.
 ---
---- What is still true, and what this section says next: nothing calls
---- `ui.statusline.render.enable()` outside this plugin's own tests yet --
---- the actual host still wires `chadrc.lua` to NvChad's own render pipeline,
---- and rewiring it is step 7, not this one. A user running this plugin
---- through that unmodified host is still, in practice, running NvChad's
---- renderer. Step 5 replaced `nvchad.tabufline` the same way (own
+--- What this section says next, historically: at step 4's own time, nothing
+--- called `ui.statusline.render.enable()` outside this plugin's own tests
+--- yet -- the reference host still wired `chadrc.lua` to NvChad's own render
+--- pipeline. Step 7 (2026-09-13) closed that gap in that host; NvChad is not
+--- installed there any more at all. This section still reports NvChad's
+--- presence as information (see below) because that is a fact about
+--- whatever host is running this plugin right now, not a claim about this
+--- plugin's own reference host specifically. Step 5 replaced `nvchad.tabufline` the same way (own
 --- `vim.t.bufs` bookkeeping, own `close_buffer`/`move_buf`) -- it is gone
 --- from this report's dependency list entirely, not merely soft, the same
 --- as `nvconfig`/`nvchad.stl.utils` at step 4. `base46` is gone the same way
@@ -152,7 +154,8 @@ local function check_render_entrypoint()
   else
     health.info(
       "enable() has not been called -- vim.o.statusline is whatever the host last set "
-        .. "(NvChad, through chadrc.lua, until roadmap step 7 rewires the host)"
+        .. "(NvChad's own renderer, if the host still routes through one, or something else "
+        .. "entirely -- this plugin has no way to know from here)"
     )
   end
 end

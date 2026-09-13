@@ -134,7 +134,7 @@ the segment that owns the data.
 | Thing | Why |
 | --- | --- |
 | A dedicated statusline-variant keymap | `:UI variant {name}` (see Commands above) covers it — a command with completion over the registry is more discoverable than a keymap would be for something with more than two states |
-| A `bindings/autocmds.lua` | There is no plugin-level autocmd to put in it. Every one of the seven above belongs to the cache it clears — a central registrar would be a second source of truth for the same state. This is a documented deviation from `NEW-08`, not an oversight |
+| A `bindings/autocmds.lua` | There is no plugin-level autocmd to put in it. Every one of the ten above belongs to the cache it clears — a central registrar would be a second source of truth for the same state. This is a documented deviation from `NEW-08`, not an oversight |
 | Individual statusline segments | They are on or off by which variant is assembled, not by a key. Four toggles for four segments would be more surface than the choice deserves |
 
 **The statusline variant used to be listed here as a setup()-time-only

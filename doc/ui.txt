@@ -51,11 +51,13 @@ NvChad nor base46 on the runtimepath: all four statusline presets assemble
 and render end to end, buffer/tab navigation works against real buffers and
 tabs, and theme/transparency switching works against a real colorscheme.
 
-What is NOT true yet: that a real install of this plugin renders without
-NvChad. Nothing outside this plugin's own tests calls
-`ui.statusline.render.enable()` -- the reference host this plugin was
-extracted from still wires `chadrc.lua` to NvChad's own renderer, and
-rewiring that host is roadmap step 7, not done.
+As of roadmap step 7 (2026-09-13), that is also true of a real install: the
+reference host this plugin was extracted from calls `ui.statusline.render
+.enable()` from its own startup, and NvChad is not installed there any more
+at all. This plugin covers statusline/tabline/theme only, though -- it does
+not replace whatever else a distribution bundle also installed (Mason,
+which-key, Treesitter, Telescope, and so on all needed their own separate
+plugin specs in that host once NvChad's own bundle stopped providing them).
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 `neotest`, `casedesk.nvim`.
@@ -65,20 +67,19 @@ Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
 
 Two entry points, at different times.
 
-`ui.config.setup()` runs while NvChad boots, through `chadrc`, and answers
-"which theme, which layout". NvChad's own `chadrc` never read a `theme` key
-(it read `base46`, for its own theme engine, gone since step 6) -- the
-example below is this plugin's own API contract; a NvChad-free host's actual
-wiring is roadmap step 7, not yet written: >lua
-    -- lua/chadrc.lua (illustrative)
-    local ok, config = pcall(function()
-      return require("ui.config").setup()
-    end)
-
-    return {
-      theme = config.theme,
-      ui = { statusline = config.ui.statusline },
-    }
+`ui.config.setup()` runs from your own config's startup, whenever you want
+the frame drawn -- no distribution hook needed or expected. It only
+assembles a config table; `enable()` on each renderer is the separate step
+that actually points `vim.o.statusline`/`vim.o.tabline` at it: >lua
+    -- Anywhere in your own startup, once (the reference host's own shape,
+    -- config/ui_statusline/init.lua -- adapt names, not structure):
+    local ok, assembled = pcall(require("ui.config").setup, {
+      theme = { theme_toggle = { "rosepine", "tokyonight" } },
+    })
+    if ok then
+      require("ui.statusline.render").enable(assembled.ui.statusline)
+      require("ui.tabline.render").enable(assembled.ui.tabline)
+    end
 <
 `ui.setup(opts)` runs afterwards, from your own config, and answers "which
 keymaps and commands exist": >lua
@@ -203,12 +204,13 @@ a name to register: >lua
 >vim
     :checkhealth ui
 <
-Six sections: dependencies (lib.nvim required; NvChad presence reported as
+Seven sections: dependencies (lib.nvim required; NvChad presence reported as
 information, not a dependency check, since step 4; `nvchad.tabufline` gone
 from this list entirely at step 5, `base46`/`base46.themes` gone the same way
-at step 6), the assembled configuration, this plugin's own statusline render
-entrypoint (resolves? renders the "default" theme's fallback modules without
-NvChad?), which submodules `setup()` turned on (buffer/tab navigation
+at step 6), this plugin's own statusline render entrypoint (resolves?
+renders the "default" theme's fallback modules without NvChad?), the tabline
+render entrypoint (same shape, one option later), the assembled
+configuration, which submodules `setup()` turned on (buffer/tab navigation
 included, under `keymaps`), the soft dependencies each statusline segment
 needs, and whether `ui.winbar` resolves for a content plugin to contribute
 its breadcrumb line to.

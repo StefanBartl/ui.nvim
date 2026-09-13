@@ -12,9 +12,23 @@
 > a real `:colorscheme` call, no bundled theme engine at all. Every module,
 > every one of the shipped statusline layouts end to end, buffer/tab
 > navigation, and theme/transparency handling now work with **neither NvChad
-> nor base46** on the runtimepath (verified headless). Only the *host* this
-> plugin was extracted from still wires `chadrc.lua` to NvChad's own renderer
-> (step 7, not done) — that is the one remaining piece.
+> nor base46** on the runtimepath (verified headless).
+>
+> **Step 7 is done too, as of 2026-09-13.** `chadrc.lua` is gone from the
+> reference host this plugin was extracted from; it calls
+> `require("ui").setup(...)`/`require("ui.config").setup(...)` directly from
+> its own startup phase, and NvChad itself is no longer installed there at
+> all. **That did not make this plugin a NvChad replacement.** `ui.nvim`
+> only ever covered the frame -- statusline, tabline, theme assembly -- the
+> same scope [Scope](#scope) and [What it is not](#what-it-is-not) always
+> named. Everything else NvChad's own plugin bundle also installed (Mason,
+> which-key, Treesitter, Telescope, gitsigns, nvim-web-devicons, and more)
+> needed its own, separate, direct plugin spec in that host once NvChad
+> stopped providing it -- this plugin has no opinion on any of those and
+> does not install or configure them. "NvChad-free" describes this plugin's
+> own statusline/tabline/theme code and, now, that one reference host's
+> setup -- not a claim that installing `ui.nvim` alone reproduces what a
+> NvChad install gives you.
 >
 > **2026-09-12, same day, two more changes after a full-repo audit.** Seven
 > bugs found and fixed (a swapped transparency on/off, a git-status guard
@@ -136,7 +150,11 @@ see [The coupling to NvChad](#the-coupling-to-nvchad) for exactly how much.
 | --- | --- |
 | Neovim | **0.10+** |
 | [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
-| [NvChad](https://github.com/NvChad/NvChad) (v2.5) | not required by this plugin's own code any more (steps 4-6) — still what the reference host's `chadrc.lua` routes rendering through until step 7 rewires it; see below |
+
+[NvChad](https://github.com/NvChad/NvChad) (v2.5) is not required, and is not
+even installed any more in the reference host this plugin was extracted from
+(step 7, done 2026-09-13). See [The coupling to NvChad](#the-coupling-to-nvchad)
+for what that coupling used to be and how each piece of it was replaced.
 
 Optional, each detected at runtime and blanking only its own segment:
 `nvim-web-devicons` (file icons), `neotest` (test-runner segment),
@@ -207,11 +225,12 @@ appear in this plugin's own code any more, under any name.
 > NvChad's own `generate()`, which does not `pcall` a module call, and only
 > reachable with the cursor-progress mode active. Fixed in the same commit.
 >
-> What step 4 does **not** mean: that this plugin renders without NvChad
-> *today*, for a user of the reference host it was extracted from. Nothing
-> outside this plugin's own tests calls `enable()` yet — the host's
-> `chadrc.lua` still hands its config to NvChad's own renderer, and rewiring
-> that is step 7.
+> What step 4 did **not** mean, at the time: that this plugin rendered
+> without NvChad *that day*, for a user of the reference host it was
+> extracted from. Nothing outside this plugin's own tests called `enable()`
+> yet -- the host's `chadrc.lua` still handed its config to NvChad's own
+> renderer. That gap is what step 7 closed, 2026-09-13 -- see the note at
+> the top of this file.
 >
 > **Step 5 (2026-09-08) replaced `nvchad.tabufline`, and found the same
 > shape of gap one level down.** `nvchad.tabufline` never appeared as a
@@ -273,9 +292,13 @@ appear in this plugin's own code any more, under any name.
 
 ## Status
 
-Alpha. The code is here and runs, and steps 3-6 of the decoupling are done —
-only the host wiring (step 7) is not. This plugin's own code needs neither
-NvChad nor base46 any more, for any of statusline, tabline, or theme.
+Alpha. All seven steps of the NvChad decoupling are done, including the host
+wiring (step 7, 2026-09-13). This plugin's own code needs neither NvChad nor
+base46 any more, for any of statusline, tabline, or theme -- and, in the
+reference host it was extracted from, neither is installed any more either.
+That is not the same as this plugin replacing NvChad: it never covered
+anything outside statusline/tabline/theme, and does not now either -- see
+[What it is not](#what-it-is-not).
 
 ```vim
 :checkhealth ui
