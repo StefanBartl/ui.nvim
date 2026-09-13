@@ -69,7 +69,8 @@ left-hand side below is a shipped default, not fixed, and every action binds
 by default -- nothing here needs to be turned on: `ui.setup({ keymaps = {
 next = "<C-Right>", close = false } })` renames `next` and drops `close`
 entirely, leaving every other action (`prev`, `move_right`, `move_left`,
-`move_to_tab`, `toggle_theme`) at its default. `keymaps = false` (or
+`move_to_tab`, `toggle_theme`, `theme_picker`) at its default. `keymaps =
+false` (or
 `ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
 switch, the same shape `my.nvim`'s own keymaps use.
 
@@ -94,6 +95,7 @@ switch, the same shape `my.nvim`'s own keymaps use.
 | Key | `opts.keymaps` name | Mode | Does |
 | --- | --- | --- | --- |
 | `<leader>ut` | `toggle_theme` | `n` | Toggle between the two themes in `theme.theme_toggle` -- same as `:UI toggle` |
+| `<leader>uP` | `theme_picker` | `n` | Open the visual theme picker with live preview -- same as `:UI picker` |
 
 Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of

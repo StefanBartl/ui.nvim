@@ -150,6 +150,9 @@ Registered by `ui.setup({ keymaps = true })`.
     <leader>tl     move it left
     <leader>tt     move the current buffer into a new tab
 
+    <leader>ut     toggle between the two themes in theme.theme_toggle
+    <leader>uP     open the visual theme picker (live preview)
+
 Every one is wrapped: a failure notifies and returns rather than raising,
 because these sit on keys pressed constantly and a traceback out of <Tab>
 makes the editor feel broken.

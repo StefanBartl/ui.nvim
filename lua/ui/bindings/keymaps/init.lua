@@ -50,7 +50,16 @@ function M.setup(opts)
   tabufline_state.setup()
 
   local ok, err = pcall(keymap.register, "ui.nvim", {
-    order = { "next", "prev", "close", "move_right", "move_left", "move_to_tab", "toggle_theme" },
+    order = {
+      "next",
+      "prev",
+      "close",
+      "move_right",
+      "move_left",
+      "move_to_tab",
+      "toggle_theme",
+      "theme_picker",
+    },
     actions = {
       next = {
         default = "<Tab>",
@@ -126,6 +135,17 @@ function M.setup(opts)
           local ok2, err2 = pcall(require("ui.bindings.usrcmds.themes").toggle_theme)
           if not ok2 then
             notify.warn("[ui.bindings.keymaps] Theme toggle failed: " .. tostring(err2))
+          end
+        end,
+      },
+      theme_picker = {
+        default = "<leader>uP",
+        mode = "n",
+        desc = "open the visual theme picker (live preview)",
+        rhs = function()
+          local ok2, err2 = pcall(require("ui.bindings.usrcmds.themes.picker").open)
+          if not ok2 then
+            notify.warn("[ui.bindings.keymaps] Theme picker failed: " .. tostring(err2))
           end
         end,
       },

@@ -28,8 +28,16 @@ local function find_registered(name)
   return nil
 end
 
-local ALL_ACTIONS =
-  { "next", "prev", "close", "move_right", "move_left", "move_to_tab", "toggle_theme" }
+local ALL_ACTIONS = {
+  "next",
+  "prev",
+  "close",
+  "move_right",
+  "move_left",
+  "move_to_tab",
+  "toggle_theme",
+  "theme_picker",
+}
 
 describe("ui.bindings.keymaps.setup with no opts", function()
   it("binds every action at its shipped default -- no opt-in required", function()
@@ -42,6 +50,7 @@ describe("ui.bindings.keymaps.setup with no opts", function()
     assert.equals("<leader>tl", find_registered("move_left").lhs)
     assert.equals("<leader>tt", find_registered("move_to_tab").lhs)
     assert.equals("<leader>ut", find_registered("toggle_theme").lhs)
+    assert.equals("<leader>uP", find_registered("theme_picker").lhs)
   end)
 
   it("binds every action the same way when called with an empty table", function()
@@ -89,7 +98,7 @@ describe("ui.bindings.keymaps.setup with per-action overrides", function()
     assert.equals("<leader>ut", find_registered("toggle_theme").lhs)
   end)
 
-  it("does not warn about an unknown action for any of the seven real names", function()
+  it("does not warn about an unknown action for any of the eight real names", function()
     local warned = {}
     local original_notify = vim.notify
     vim.notify = function(msg, level)
