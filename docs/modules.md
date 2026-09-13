@@ -79,6 +79,7 @@ modules = {
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
+| `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -99,6 +100,10 @@ keystroke count while it records — Neovim has no API to read a register's
 content mid-recording, so the count comes from a `vim.on_key()` hook
 bracketed by `RecordingEnter`/`RecordingLeave`, registered once at first
 render.
+
+`time_in_buffer` is per-session, not persisted across restarts or
+aggregated across sessions — a `sessions.nvim`-based cross-session total is
+a possible follow-up, not built here.
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:
