@@ -41,8 +41,9 @@
 --- binds every action at its shipped default, `false` binds none, and any
 --- key present here overrides just that one action -- `{ next =
 --- "<C-Right>", close = false }` remaps `next` and drops `close`, leaving
---- `prev`/`move_right`/`move_left`/`move_to_tab`/`toggle_theme` at their
---- defaults. Same shape `my.nvim`'s own `bindings/keymaps.lua` uses.
+--- `prev`/`move_right`/`move_left`/`move_to_tab`/`toggle_theme`/
+--- `theme_picker` at their defaults. Same shape `my.nvim`'s own
+--- `bindings/keymaps.lua` uses.
 ---@class Ui.Keymaps.Keys
 ---@field next? Ui.Keymaps.Lhs # default "<Tab>" -- next buffer
 ---@field prev? Ui.Keymaps.Lhs # default "<S-Tab>" -- previous buffer
@@ -51,6 +52,7 @@
 ---@field move_left? Ui.Keymaps.Lhs # default "<leader>tl" -- move buffer left in vim.t.bufs
 ---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab
 ---@field toggle_theme? Ui.Keymaps.Lhs # default "<leader>ut" -- toggle between the two configured themes
+---@field theme_picker? Ui.Keymaps.Lhs # default "<leader>uP" -- open the visual theme picker (live preview)
 
 --- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which
 --- colorscheme to boot into" -- that is the host's own init.lua, independent

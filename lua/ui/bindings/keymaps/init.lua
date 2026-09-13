@@ -36,7 +36,7 @@ end
 --- `my.nvim`'s own `bindings/keymaps.lua`: `tabufline_state.setup()` below
 --- still has to run for the tabline renderer's `vim.t.bufs` bookkeeping even
 --- when a host wants no keymaps bound, and `register()` would otherwise do
---- the work of resolving and skip-recording seven actions for nothing.
+--- the work of resolving and skip-recording eight actions for nothing.
 ---@param opts Ui.Keymaps.Keys|boolean|nil
 ---@return nil
 function M.setup(opts)

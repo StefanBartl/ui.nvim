@@ -22,12 +22,25 @@ end
 
 ---@internal
 --- Move to row `n` in the picker's results and fire the same autocmd a real
---- keypress would have triggered.
+--- keypress would have triggered. Does NOT wait for the preview's debounce
+--- (see `PREVIEW_DEBOUNCE_MS` in picker.lua) -- callers that want the
+--- settled result use `wait_for_theme` below.
 ---@param winid integer
 ---@param n integer
 local function move_to(winid, n)
   vim.api.nvim_win_set_cursor(winid, { n, 0 })
   vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_win_get_buf(winid) })
+end
+
+---@internal
+--- Block until the debounced preview has actually applied `name`, or the
+--- wait times out (leaving the caller's own assertion to report the
+--- mismatch instead of failing on a timing race).
+---@param name string
+local function wait_for_theme(name)
+  vim.wait(300, function()
+    return vim.g.colors_name == name
+  end, 10)
 end
 
 describe("ui.bindings.usrcmds.themes.picker", function()
@@ -74,6 +87,7 @@ describe("ui.bindings.usrcmds.themes.picker", function()
     assert.is_not_nil(target)
 
     move_to(winid, row)
+    wait_for_theme(target)
     assert.equals(target, vim.g.colors_name)
 
     -- Closing the float (however it closes -- WinClosed covers all of them,
@@ -104,6 +118,7 @@ describe("ui.bindings.usrcmds.themes.picker", function()
     assert.is_not_nil(target)
 
     move_to(winid, row)
+    wait_for_theme(target)
     assert.equals(target, vim.g.colors_name)
 
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
@@ -128,6 +143,7 @@ describe("ui.bindings.usrcmds.themes.picker", function()
     assert.is_not_nil(target)
 
     move_to(winid, row)
+    wait_for_theme(target)
     assert.equals(target, vim.g.colors_name)
 
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", false)
@@ -135,6 +151,41 @@ describe("ui.bindings.usrcmds.themes.picker", function()
       return vim.g.colors_name == original
     end, 10)
     assert.equals(original, vim.g.colors_name)
+  end)
+
+  it("debounces rapid moves instead of reloading the colorscheme on every one", function()
+    local original = theme.get_current_theme()
+    picker.open()
+    local winid = picker_winid()
+
+    -- At least three distinct rows to hop across, none of them `original`.
+    local rows = {}
+    for i, name in ipairs(themes) do
+      if name ~= original then
+        rows[#rows + 1] = i
+        if #rows == 3 then
+          break
+        end
+      end
+    end
+    if #rows < 3 then
+      -- Fewer than four installed colorschemes total -- nothing meaningful
+      -- to hop across three times; the other tests already cover the
+      -- two-theme case.
+      return
+    end
+
+    for _, row in ipairs(rows) do
+      move_to(winid, row)
+    end
+    -- Immediately after firing three rapid moves, none has had time to
+    -- settle yet -- the debounce must still be pending, not already
+    -- applied to an intermediate (now stale) row.
+    assert.equals(original, vim.g.colors_name)
+
+    local final_target = themes[rows[#rows]]
+    wait_for_theme(final_target)
+    assert.equals(final_target, vim.g.colors_name)
   end)
 
   it("is a no-op when there is nothing to pick from", function()
