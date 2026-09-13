@@ -122,4 +122,30 @@ return {
     source = "ui.statusline.modules.lsp",
     used_by = {},
   },
+
+  -- Clickable modules -- ui.statusline.utils.clickable.wrap() on top of an
+  -- existing segment or a new one. See docs/modules.md's own "Clickable
+  -- modules" section for the click protocol these build on.
+  {
+    key = "diagnostics_clickable",
+    summary = "diagnostics, plus a left click jumps to the next one (vim.diagnostic.goto_next()).",
+    builtin = false,
+    source = "ui.statusline.modules.diagnostics_clickable",
+    used_by = {},
+  },
+  {
+    key = "git_clickable",
+    summary = "git, plus a left click opens a branch switcher and a right click a context menu (switch/copy/details).",
+    requires = "gitsigns.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.git_clickable",
+    used_by = {},
+  },
+  {
+    key = "variant",
+    summary = "Active statusline variant name; a left click opens a quick-switch menu.",
+    builtin = false,
+    source = "ui.statusline.modules.variant",
+    used_by = {},
+  },
 }

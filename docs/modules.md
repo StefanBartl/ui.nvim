@@ -20,6 +20,7 @@ page and that command can't drift apart, they're the same data.
 
 - [Built into the "default" theme](#built-into-the-default-theme)
 - [Standalone modules](#standalone-modules)
+- [Clickable modules](#clickable-modules)
 - [Building your own module](#building-your-own-module)
 - [What is deliberately not here](#what-is-deliberately-not-here)
 
@@ -110,6 +111,57 @@ removed it for.
 
 ---
 
+## Clickable modules
+
+`ui.statusline.utils.clickable` is a generic click layer: `wrap(segment_fn,
+handlers)` takes any `fun(): string` and returns a new one whose rendered
+text responds to mouse clicks, via one shared `%id@UiSlClick@...%X` protocol
+rather than a hand-written global Vimscript function per action (that
+one-global-per-action shape is what `ui.tabline.utils`' `btn` does instead,
+which fits a small fixed set of tabline actions but does not scale to an open
+set of statusline segments). `handlers` is a table keyed by button:
+`{ l = fn, r = fn, m = fn }` for left/right/middle click, each `fun(): nil`.
+
+The three modules below are all built the same way — `clickable.wrap()` on
+top of an existing (or new) segment function, at module-load time, not
+per-render:
+
+```lua
+-- ui.statusline.modules.diagnostics_clickable, in full:
+local primitives = require("ui.statusline.utils.primitives")
+local clickable = require("ui.statusline.utils.clickable")
+
+return clickable.wrap(primitives.diagnostics, {
+  l = function()
+    vim.diagnostic.goto_next()
+  end,
+})
+```
+
+| Key | Shows | Needs | Source |
+| --- | --- | --- | --- |
+| `diagnostics_clickable` | `diagnostics`, plus a left click jumps to the next one (`vim.diagnostic.goto_next()`) | — | `ui.statusline.modules.diagnostics_clickable` |
+| `git_clickable` | `git`, plus a left click opens a dependency-free branch switcher (`vim.ui.select` over `git branch`) and a right click a `lib.nvim.contextmenu` (switch / copy branch name / details) | gitsigns.nvim for the text; a `git` executable on `$PATH` for the clicks | `ui.statusline.modules.git_clickable` |
+| `variant` | Active statusline variant name; a left click opens a quick-switch menu over `ui.config.variants.list()`, then runs `:UI variant <name>` | — | `ui.statusline.modules.variant` |
+
+Wiring is identical to any other standalone module — the key in `order`, a
+`modules` entry that requires and calls it:
+
+```lua
+order = { "mode", "%=", "diagnostics_clickable", "git_clickable" },
+modules = {
+  diagnostics_clickable = require("ui.statusline.modules.diagnostics_clickable"),
+  git_clickable = require("ui.statusline.modules.git_clickable"),
+},
+```
+
+Building your own clickable module is `clickable.wrap()` around whatever
+segment function you already have (see the "Building your own module"
+section below for the building blocks) — nothing about `wrap()` requires the
+segment itself to be new.
+
+---
+
 ## Building your own module
 
 A module is `fun(): string`, nothing more — anything below is a piece to
@@ -119,6 +171,7 @@ build one from, not a module itself:
 | --- | --- |
 | `ui.statusline.utils.primitives` | Raw building blocks the "default" theme wraps with highlights: `git()`, `lsp()`, `diagnostics()`, `file()`, `lsp_msg()`, `is_activewin()`, `modes` (the mode-name/highlight-suffix table) |
 | `ui.statusline.utils.get_separators` | Resolves a `separator_style` name (or `{left, right}` table) to the actual glyph pair |
+| `ui.statusline.utils.clickable` | `wrap(segment_fn, handlers)` — makes any segment respond to left/right/middle clicks. See [Clickable modules](#clickable-modules) above |
 | `ui.statusline.cursor_ctl` | Row/column scroll-progress rendering — what several presets' own `cursor` override uses |
 | `ui.statusline.modules.highlighting` | `mode_band_group()` (the current mode's highlight group, for colouring anything by mode), `hl_open()`/`hl_wrap()`/`stl_strip_hl()` |
 
