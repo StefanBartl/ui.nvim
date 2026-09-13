@@ -4,10 +4,13 @@ What is where, and which question each page answers.
 
 | Page | Answers |
 | --- | --- |
+| [requirements.md](requirements.md) | Neovim version, required plugins, and the optional soft integrations |
+| [scope.md](scope.md) | What this plugin covers, and what it deliberately does not |
 | [configuration.md](configuration.md) | Both setup entry points, the four statusline presets, what is not configurable |
 | [modules.md](modules.md) | Every statusline segment this plugin ships, one line each, with a copy-pasteable wiring snippet |
 | [BINDINGS.md](BINDINGS.md) | Every command, keymap and autocommand — including the ones that deliberately do not exist |
 | [health.md](health.md) | Every line `:checkhealth ui` can print, and what to do about it |
+| [nvchad-migration.md](nvchad-migration.md) | Credits, and the step-by-step decision record of how the NvChad coupling was replaced |
 
 `:help ui` is the same reference inside the editor.
 

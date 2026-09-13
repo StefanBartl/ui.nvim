@@ -98,6 +98,10 @@ switch, the same shape `my.nvim`'s own keymaps use.
 | `<leader>bc` | `close` | `n` | Close the current buffer (or `{count}` of them), keeping the window layout. An uncounted close (`1<leader>bc`, i.e. the plain keypress) briefly flashes the chip before closing; `{count}>1` closes immediately, unflashed |
 | `<leader>bq` | `close_all` | `n` | Close every listed buffer in the current tab -- all flash together first, then close as one batch |
 
+The flash on an uncounted close means a `:confirm`-style prompt for an
+unsaved buffer now appears ~120ms later than a direct close would. Usually
+unnoticeable; a deliberate trade-off for click-parity feedback, not a bug.
+
 ### Tabs
 
 | Key | `opts.keymaps` name | Mode | Does |

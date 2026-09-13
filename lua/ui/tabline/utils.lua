@@ -41,6 +41,13 @@ local FLASH_MS = 120
 
 --- Briefly render `bufnr`'s chip with `UiTbBufFlash` instead of its normal
 --- On/Off group, then revert. Safe to call on any bufnr, current or not.
+---
+--- Only the text/background part of the chip flashes. The devicon keeps its
+--- own On/Off-keyed highlight group (`ensure_icon_hl`, cached by `(fg,
+--- is_current)`) because no `Flash`-background variant of it is built --
+--- adding one is a small, undone change, not a deliberate trade-off, so for
+--- ~120ms the icon and the text sit on visibly different backgrounds in the
+--- same chip.
 ---@param bufnr integer
 ---@return nil
 function M.flash(bufnr)
