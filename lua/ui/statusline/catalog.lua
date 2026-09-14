@@ -95,7 +95,7 @@ return {
   },
   {
     key = "filetree_cwd_mode",
-    summary = "filetree.nvim's cwd-mode badge (PROJECT/LOCK/MANUAL/...), as a filled capsule.",
+    summary = "filetree.nvim's cwd-mode badge (PROJECT/LOCK/MANUAL/...), as a filled capsule; opts.history adds a 3-dot mode/root trail.",
     requires = "filetree.nvim",
     builtin = false,
     source = "ui.statusline.modules.filetree_cwd_mode",
