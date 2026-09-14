@@ -8,6 +8,7 @@ local M = {}
 
 local theme = require("ui.bindings.usrcmds.themes")
 local theme_picker = require("ui.bindings.usrcmds.themes.picker")
+local screenkey = require("ui.screenkey")
 
 -----------------------------------------------------------------------
 -- Helpers
@@ -62,6 +63,30 @@ local function ui_transparency(args)
   -- Toggle
   local new_state = theme.toggle_transparency()
   notify.info(string.format("✨ Transparenz %s", new_state and "aktiviert" or "deaktiviert"))
+end
+
+---Handle screenkey command -- the in-editor keystroke HUD, off by default
+---(see `ui.screenkey`'s own doc comment for why). `on`/`off` set an explicit
+---state, matching `ui_transparency` above; no argument toggles, matching
+---`:UI toggle`'s own naming for "the state-flip subcommand".
+---@param args string[]
+local function ui_screenkey(args)
+  local action = args[2]
+
+  if action == "on" then
+    screenkey.enable()
+    notify.info("⌨️  Screenkey aktiviert")
+    return
+  end
+
+  if action == "off" then
+    screenkey.disable()
+    notify.info("⌨️  Screenkey deaktiviert")
+    return
+  end
+
+  local now_enabled = screenkey.toggle()
+  notify.info(string.format("⌨️  Screenkey %s", now_enabled and "aktiviert" or "deaktiviert"))
 end
 
 ---Handle theme command
@@ -388,6 +413,10 @@ local function ui_help(_args)
 │  :UI transparency on        Transparenz aktivieren   │
 │  :UI transparency off       Transparenz deaktivieren │
 │                                                      │
+│  :UI screenkey              Screenkey-HUD umschalten │
+│  :UI screenkey on           Screenkey aktivieren     │
+│  :UI screenkey off          Screenkey deaktivieren   │
+│                                                      │
 │  :UI theme                  Aktuelles Theme zeigen   │
 │  :UI theme <name>           Theme setzen             │
 │  :UI themes                 Alle Themes auflisten    │
@@ -433,6 +462,7 @@ local function dispatcher(opts)
 
   local actions = {
     transparency = ui_transparency,
+    screenkey = ui_screenkey,
     theme = ui_theme,
     themes = ui_themes,
     variant = ui_variant,
@@ -486,6 +516,7 @@ local function complete(arglead, cmdline, _cursorpos)
   if num_args == 1 then
     local subcommands = {
       "transparency",
+      "screenkey",
       "theme",
       "themes",
       "variant",
@@ -506,6 +537,10 @@ local function complete(arglead, cmdline, _cursorpos)
     local subcmd = parts[2]
 
     if subcmd == "transparency" then
+      return filter(arglead, { "on", "off" })
+    end
+
+    if subcmd == "screenkey" then
       return filter(arglead, { "on", "off" })
     end
 
