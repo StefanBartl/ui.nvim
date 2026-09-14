@@ -98,10 +98,21 @@ local function sla_badge(entry)
     return ""
   end
 
-  local marker = worst.remaining < 0 and "SLA!" or "SLA"
-  -- DiagnosticError: an existing group carrying the theme's error color,
-  -- same "no new highlight group" convention the base label follows below.
-  return " %#DiagnosticError#" .. marker .. " " .. sla.format_duration(worst.remaining) .. " "
+  -- IDEEN-statusline.md's "farbcodierter Countdown, grün -> gelb -> rot"
+  -- minus the green: the badge staying hidden until `under_threshold` is
+  -- SLA.md §6C's own explicit anti-noise design ("sonst ist es
+  -- Dauerrauschen"), not something this segment should override. What is a
+  -- genuine "weiterdenken" on top of it is the two-stage color inside that
+  -- already-visible window -- overdue is a materially different situation
+  -- from merely urgent, and a reader scanning the statusline shouldn't have
+  -- to read the duration text to tell them apart.
+  local overdue = worst.remaining < 0
+  local marker = overdue and "SLA!" or "SLA"
+  -- DiagnosticError/DiagnosticWarn: existing groups carrying the theme's
+  -- error/warning colors, same "no new highlight group" convention the base
+  -- label follows below.
+  local hl = overdue and "%#DiagnosticError#" or "%#DiagnosticWarn#"
+  return " " .. hl .. marker .. " " .. sla.format_duration(worst.remaining) .. " "
 end
 
 ---@param entry Ui.Casedesk.Entry

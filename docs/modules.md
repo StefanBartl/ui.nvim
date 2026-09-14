@@ -73,7 +73,7 @@ modules = {
 | --- | --- | --- | --- |
 | `plugin_progress` | Whichever plugin is currently running a long operation | `lib.nvim.progress` | `ui.statusline.modules.plugin_progress` |
 | `plugin_summary` | lazy.nvim's own/external plugin count, e.g. `"12/48"` | lazy.nvim | `ui.statusline.modules.plugin_summary` |
-| `casedesk` | Current case's short info (number, company, reply count) plus an SLA badge | casedesk.nvim | `ui.statusline.modules.casedesk` |
+| `casedesk` | Current case's short info (number, company, reply count) plus a yellow/red SLA urgency badge | casedesk.nvim | `ui.statusline.modules.casedesk` |
 | `filetree_cwd_mode` | filetree.nvim's cwd-mode badge (`PROJECT`/`LOCK`/`MANUAL`/…), as a filled capsule | filetree.nvim | `ui.statusline.modules.filetree_cwd_mode` |
 | `undo_depth` | Undo steps available on the current branch, plus a glyph if the undo tree has branched | — | `ui.statusline.modules.undo_depth` |
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
@@ -122,6 +122,13 @@ mean call time above 50ms) — otherwise green. "Today" is the closest honest
 proxy this data supports: telemetry aggregates calls rather than
 timestamping each one, so this reads `Data.days[today]` for which functions
 were active, not a true "this second" signal.
+
+`casedesk`'s SLA badge stays hidden until a clock drops under
+`config.sla_warn_at` of its budget — casedesk.nvim's own SLA.md §6C design,
+kept as-is here: an always-visible countdown for a case with a six-week
+budget is noise, not signal. Once visible, it is two-stage rather than one
+flat color: yellow (`%#DiagnosticWarn#`) while urgent but not yet overdue,
+red (`%#DiagnosticError#`, marker `SLA!`) once the deadline has passed.
 
 `recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
 one its `analyzer` config option already selects — `regex` by default) with
