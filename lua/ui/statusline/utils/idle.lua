@@ -28,16 +28,25 @@ local function ensure_autocmds()
   local group = Autocmd.group("UiStatuslineIdle", true)
 
   Autocmd.create({ "CursorHold", "CursorHoldI" }, function()
-    is_idle_state = true
-    vim.cmd("redrawstatus")
+    if not is_idle_state then
+      is_idle_state = true
+      vim.cmd("redrawstatus")
+    end
   end, {
     group = group,
     desc = "ui.statusline: mark the editor idle for idle-only segments",
   })
 
+  -- CursorMoved/CursorMovedI fire on every single cursor step (holding a
+  -- movement key, scrolling), so only redraw on the actual idle->active
+  -- transition -- redrawing unconditionally here would re-run the whole
+  -- statusline render on every keystroke just to reconfirm a boolean that
+  -- was already false.
   Autocmd.create({ "CursorMoved", "CursorMovedI", "InsertEnter", "ModeChanged" }, function()
-    is_idle_state = false
-    vim.cmd("redrawstatus")
+    if is_idle_state then
+      is_idle_state = false
+      vim.cmd("redrawstatus")
+    end
   end, {
     group = group,
     desc = "ui.statusline: mark the editor active again, hiding idle-only segments",

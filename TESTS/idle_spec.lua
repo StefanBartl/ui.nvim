@@ -59,6 +59,59 @@ describe("ui.statusline.utils.idle", function()
     assert.is_false(idle.is_idle())
   end)
 
+  it("does not redrawstatus on a CursorMoved that doesn't change idle state", function()
+    -- bug: the active-again autocmd used to write is_idle_state and call
+    -- vim.cmd("redrawstatus") unconditionally on every CursorMoved/
+    -- CursorMovedI event -- i.e. on every single cursor step, not just the
+    -- idle->active transition. That forces a full, synchronous statusline
+    -- redraw (re-running every module's render function) on every keystroke
+    -- while already active, purely to reconfirm a boolean that hadn't
+    -- changed.
+    local idle = fresh_idle()
+    assert.is_false(idle.is_idle()) -- already not idle
+
+    local redraw_count = 0
+    local orig_cmd = vim.cmd
+    vim.cmd = function(c)
+      if c == "redrawstatus" then
+        redraw_count = redraw_count + 1
+      end
+      return orig_cmd(c)
+    end
+    local ok = pcall(function()
+      fire("CursorMoved")
+      fire("CursorMovedI")
+    end)
+    vim.cmd = orig_cmd
+    assert.is_true(ok)
+
+    assert.equals(0, redraw_count)
+  end)
+
+  it("redraws exactly once per actual idle<->active transition", function()
+    local idle = fresh_idle()
+
+    local redraw_count = 0
+    local orig_cmd = vim.cmd
+    vim.cmd = function(c)
+      if c == "redrawstatus" then
+        redraw_count = redraw_count + 1
+      end
+      return orig_cmd(c)
+    end
+    local ok = pcall(function()
+      fire("CursorHold") -- not idle -> idle: 1 redraw
+      fire("CursorHold") -- already idle: no redraw
+      fire("CursorMoved") -- idle -> not idle: 1 redraw
+      fire("CursorMoved") -- already not idle: no redraw
+    end)
+    vim.cmd = orig_cmd
+    assert.is_true(ok)
+
+    assert.equals(2, redraw_count)
+    assert.is_false(idle.is_idle())
+  end)
+
   describe("wrap()", function()
     it("renders empty while not idle", function()
       local idle = fresh_idle()

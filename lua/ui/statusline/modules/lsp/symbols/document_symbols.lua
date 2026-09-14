@@ -293,6 +293,92 @@ local function get_cached_doc_symbols(bufnr)
   return nil, false
 end
 
+---Walk a hierarchical outline, collecting the chain of ancestor symbols that
+---contain (l, c), then filtering it down to DEFAULT_KEEP_KINDS.
+---@param list table[]
+---@param l integer
+---@param c integer
+---@return table[]
+local function locate_in_hierarchical(list, l, c)
+  local best_path = {}
+  local function walk(nodes, path)
+    for _, sym in ipairs(nodes) do
+      if sym.range and range_contains(sym.range, l, c) then
+        -- Shallow copy: `path` holds references to already-matched symbol
+        -- tables (each potentially carrying its own `children` subtree), so
+        -- a deep copy here would clone subtrees no caller ever reads through
+        -- `this` -- only an independent *array* of those references is
+        -- needed so sibling branches don't clobber each other's path.
+        local this = {}
+        for i, v in ipairs(path) do
+          this[i] = v
+        end
+        table.insert(this, sym)
+        if sym.children and #sym.children > 0 then
+          walk(sym.children, this)
+        else
+          best_path = this
+        end
+      end
+    end
+  end
+  walk(list, {})
+
+  if #best_path == 0 then
+    return {}
+  end
+
+  local filtered = {}
+  for _, s in ipairs(best_path) do
+    for _, k in ipairs(DEFAULT_KEEP_KINDS) do
+      if (s.kind or 0) == k then
+        table.insert(filtered, s)
+        break
+      end
+    end
+  end
+  return filtered
+end
+
+---Find the innermost flat symbol whose range contains (l, c).
+---@param infos table[]
+---@param l integer
+---@param c integer
+---@return table[]
+local function locate_in_flat(infos, l, c)
+  local best, best_span
+  for _, si in ipairs(infos) do
+    local loc = si.location
+    local range = loc and loc.range
+    if range and range_contains(range, l, c) then
+      local sL, sC = range.start.line, range.start.character
+      local eL, eC = range["end"].line, range["end"].character
+      local span = (eL - sL) * 10000 + (eC - sC)
+      if not best or span < best_span then
+        best, best_span = si, span
+      end
+    end
+  end
+
+  if not best then
+    return {}
+  end
+
+  local ok = false
+  for _, k in ipairs(DEFAULT_KEEP_KINDS) do
+    if (best.kind or 0) == k then
+      ok = true
+      break
+    end
+  end
+
+  if not ok then
+    return {}
+  end
+
+  return { best }
+end
+
 ---@nodiscard
 ---@return string|nil
 function M.symbol_context_lsp()
@@ -316,83 +402,8 @@ function M.symbol_context_lsp()
     return nil
   end
 
-  local keep_kinds = DEFAULT_KEEP_KINDS
-  local path_syms
-
-  if hierarchical then
-    -- Hierarchical processing
-    local function locate_in_hierarchical(list, l, c)
-      local best_path = {}
-      local function walk(nodes, path)
-        for _, sym in ipairs(nodes) do
-          if sym.range and range_contains(sym.range, l, c) then
-            local this = vim.deepcopy(path)
-            table.insert(this, sym)
-            if sym.children and #sym.children > 0 then
-              walk(sym.children, this)
-            else
-              best_path = this
-            end
-          end
-        end
-      end
-      walk(list, {})
-
-      if #best_path == 0 then
-        return {}
-      end
-
-      local filtered = {}
-      for _, s in ipairs(best_path) do
-        for _, k in ipairs(keep_kinds) do
-          if (s.kind or 0) == k then
-            table.insert(filtered, s)
-            break
-          end
-        end
-      end
-      return filtered
-    end
-
-    path_syms = locate_in_hierarchical(items, l0, c0)
-  else
-    -- Flat processing
-    local function locate_in_flat(infos, l, c)
-      local best, best_span
-      for _, si in ipairs(infos) do
-        local loc = si.location
-        local range = loc and loc.range
-        if range and range_contains(range, l, c) then
-          local sL, sC = range.start.line, range.start.character
-          local eL, eC = range["end"].line, range["end"].character
-          local span = (eL - sL) * 10000 + (eC - sC)
-          if not best or span < best_span then
-            best, best_span = si, span
-          end
-        end
-      end
-
-      if not best then
-        return {}
-      end
-
-      local ok = false
-      for _, k in ipairs(keep_kinds) do
-        if (best.kind or 0) == k then
-          ok = true
-          break
-        end
-      end
-
-      if not ok then
-        return {}
-      end
-
-      return { best }
-    end
-
-    path_syms = locate_in_flat(items, l0, c0)
-  end
+  local path_syms = hierarchical and locate_in_hierarchical(items, l0, c0)
+    or locate_in_flat(items, l0, c0)
 
   if #path_syms == 0 then
     return nil
