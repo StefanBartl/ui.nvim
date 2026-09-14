@@ -95,9 +95,16 @@ describe("ui.statusline.modules.github_stats_badge", function()
   end)
 
   it("renders empty when the tracked repo has zero views", function()
+    -- A distinct slug from the other tests in this file, deliberately --
+    -- `views_this_week`'s cache (github_stats_badge/init.lua's
+    -- `stats_cache`) is keyed by slug alone, not by (slug, test), and lives
+    -- for STATS_TTL_SECONDS. Reusing "StefanBartl/ui.nvim" here would let
+    -- this test see the OTHER test's cached count (42) instead of calling
+    -- its own mocked `query_metric` (which returns 0) -- exactly the
+    -- order-dependent failure this file used to have.
     package.loaded["github_stats.config"] = {
       get_repos = function()
-        return { "StefanBartl/ui.nvim" }
+        return { "StefanBartl/ui-zero-views.nvim" }
       end,
     }
     package.loaded["github_stats.analytics"] = {
@@ -109,7 +116,7 @@ describe("ui.statusline.modules.github_stats_badge", function()
     local original_systemlist = vim.fn.systemlist
     ---@diagnostic disable-next-line: duplicate-set-field
     vim.fn.systemlist = function()
-      return { "https://github.com/StefanBartl/ui.nvim.git" }
+      return { "https://github.com/StefanBartl/ui-zero-views.nvim.git" }
     end
 
     local buf = vim.api.nvim_create_buf(true, false)
