@@ -145,6 +145,14 @@ return {
     used_by = {},
   },
   {
+    key = "runtime_analysis_ampel",
+    summary = "Traffic-light glyph (\xF0\x9F\x9F\xA2/\xF0\x9F\x9F\xA1/\xF0\x9F\x94\xB4) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today.",
+    requires = "runtime-analysis.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.runtime_analysis_ampel",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,

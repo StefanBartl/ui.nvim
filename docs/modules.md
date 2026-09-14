@@ -81,6 +81,7 @@ modules = {
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
+| `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -111,6 +112,15 @@ remote get-url origin` (cached per directory) and only shows anything when
 that repo is one `github_stats.nvim.config.get_repos()` actually tracks —
 personal and low-utility by design, not something a generic statusline
 plugin could offer.
+
+`runtime_analysis_ampel` renders nothing until at least one plugin has a
+runtime-analysis.telemetry instance (`known_namespaces()` non-empty), then
+turns red if any instrumented function called today has ever errored, or
+yellow if none have errored but one runs noticeably slow today (lifetime
+mean call time above 50ms) — otherwise green. "Today" is the closest honest
+proxy this data supports: telemetry aggregates calls rather than
+timestamping each one, so this reads `Data.days[today]` for which functions
+were active, not a true "this second" signal.
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:
