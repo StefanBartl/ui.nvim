@@ -14,6 +14,8 @@
 ---
 --- The shipped values live in `ui.config.DEFAULTS`.
 
+local notify = require("lib.nvim.notify").create("[ui]")
+
 local M = {}
 
 --- Enable the selected submodules.
@@ -35,12 +37,21 @@ local M = {}
 function M.setup(opts)
   opts = opts or {}
 
+  -- Each of the three below is pcall'd on its own: they wire up unrelated
+  -- submodules, so one failing (a bad opts.keymaps table, a submodule's own
+  -- setup error) must not also skip the other two.
   if opts.all or opts.keymaps then
-    require("ui.bindings.keymaps").setup(opts.keymaps)
+    local ok, err = pcall(require("ui.bindings.keymaps").setup, opts.keymaps)
+    if not ok then
+      notify.error("keymaps setup failed: " .. tostring(err))
+    end
   end
 
   if opts.all or opts.usrcmds then
-    require("ui.bindings.usrcmds").setup()
+    local ok, err = pcall(require("ui.bindings.usrcmds").setup)
+    if not ok then
+      notify.error("usrcmds setup failed: " .. tostring(err))
+    end
   end
 
   -- Opt-OUT, unlike keymaps/usrcmds above: the context-menu renderer/trigger
@@ -51,7 +62,10 @@ function M.setup(opts)
   -- render/trigger gated). See `ui.contextmenu.set_enabled`'s own doc
   -- comment.
   if opts.menu == false then
-    require("ui.contextmenu").set_enabled(false)
+    local ok, err = pcall(require("ui.contextmenu").set_enabled, false)
+    if not ok then
+      notify.error("contextmenu set_enabled(false) failed: " .. tostring(err))
+    end
   end
 end
 
