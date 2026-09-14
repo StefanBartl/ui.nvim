@@ -31,6 +31,7 @@
 ---@field all? boolean # Shorthand for every flag below
 ---@field keymaps? boolean|Ui.Keymaps.Keys # turns the keymaps submodule on; `true` (or omitted, under `all`) for every default, a table to remap/drop individual actions -- see `Ui.Keymaps.Keys`
 ---@field usrcmds? boolean # The `:UI` command and theme management
+---@field menu? boolean # opt-OUT, unlike the two above: `false` disables `ui.contextmenu`'s renderer/trigger; omitted (or `true`) leaves it at its already-working default
 
 --- One keymap action's left-hand side, or `false` to not bind it at all.
 ---@alias Ui.Keymaps.Lhs string|false

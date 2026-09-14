@@ -164,4 +164,37 @@ describe("ui.setup", function()
     require("ui").setup({ all = true })
     assert.equals(2, vim.fn.exists(":UI"))
   end)
+
+  describe("opts.menu", function()
+    local contextmenu = require("ui.contextmenu")
+
+    after_each(function()
+      -- Global toggle -- leave it at its default for the rest of the suite.
+      contextmenu.set_enabled(true)
+    end)
+
+    it("leaves the context menu enabled by default (opt-out, not opt-in)", function()
+      require("ui").setup({ all = true })
+      assert.is_true(contextmenu.is_enabled())
+    end)
+
+    it("menu = false disables ui.contextmenu's renderer", function()
+      require("ui").setup({ all = true, menu = false })
+      assert.is_false(contextmenu.is_enabled())
+      assert.is_nil(contextmenu.open({ contextmenu.entry(true, "x", function() end) }))
+    end)
+
+    it("menu = false does not touch the item builders -- they stay unconditional", function()
+      require("ui").setup({ all = true, menu = false })
+
+      local out = {}
+      local added = contextmenu.group(
+        out,
+        contextmenu.heading("Test"),
+        contextmenu.entry(true, "x", function() end)
+      )
+      assert.is_true(added)
+      assert.equals(2, #out) -- heading + one entry, no separator before the first group
+    end)
+  end)
 end)

@@ -25,6 +25,11 @@ local M = {}
 --- `ui.bindings.keymaps.setup()`, which is the thing that actually knows
 --- what "default" means for each action -- see that module's own doc
 --- comment.
+---
+--- `opts.menu` is the odd one out here, opt-OUT rather than opt-in: pass
+--- `false` to disable `ui.contextmenu`'s renderer/trigger (`open`/
+--- `bind_buffer`) -- omitting it, or `opts.all`, leaves the menu at its
+--- already-working default rather than needing to ask for it.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
@@ -36,6 +41,17 @@ function M.setup(opts)
 
   if opts.all or opts.usrcmds then
     require("ui.bindings.usrcmds").setup()
+  end
+
+  -- Opt-OUT, unlike keymaps/usrcmds above: the context-menu renderer/trigger
+  -- already work today with no setup call at all, so there is nothing for
+  -- `opts.all`/an absent `opts.menu` to turn on here -- only an explicit
+  -- `menu = false` does anything, per the semantics decided in
+  -- `PLAN-ui-kit-migration.md` (data builders always available, only
+  -- render/trigger gated). See `ui.contextmenu.set_enabled`'s own doc
+  -- comment.
+  if opts.menu == false then
+    require("ui.contextmenu").set_enabled(false)
   end
 end
 

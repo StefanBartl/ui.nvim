@@ -31,13 +31,23 @@ require("ui").setup({
   all = true,      -- shorthand for every flag below
   keymaps = true,  -- buffer/tab navigation and tabline mappings
   usrcmds = true,  -- the :UI command and theme management
+  menu = false,    -- opt out of ui.contextmenu's renderer/trigger
 })
 ```
 
-Nothing here is on by default. A host that wants everything passes `all = true`, which
-is what the flags exist to make explicit — the two halves are independently
-useful, and a config that already has its own buffer keymaps wants only
-`usrcmds`.
+Nothing here is on by default, with one deliberate exception: `menu` is
+opt-**out**, not opt-in. `ui.contextmenu`'s `open`/`bind_buffer` already work
+with no setup call at all, so `all = true` (or omitting `menu` entirely)
+leaves that behaviour exactly as it was; only an explicit `menu = false`
+does anything, disabling the renderer/trigger while leaving the item
+builders (`entry`/`group`/`submenu`) unconditional -- the semantics decided
+in this plugin's own `ui.kit`/`ui.contextmenu` migration: `menu = false`
+must mean the menu never renders, not that it is installed-but-silent.
+
+Everything else here is opt-in as before: a host that wants everything
+passes `all = true`, which is what the flags exist to make explicit — the
+keymaps/usrcmds halves are independently useful, and a config that already
+has its own buffer keymaps wants only `usrcmds`.
 
 ---
 
