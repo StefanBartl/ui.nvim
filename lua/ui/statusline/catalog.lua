@@ -161,6 +161,13 @@ return {
     used_by = {},
   },
   {
+    key = "idle_clock",
+    summary = 'Wall-clock time, e.g. "14:32", shown only once the editor has been idle (CursorHold) and hidden again on the next keystroke.',
+    builtin = false,
+    source = "ui.statusline.modules.idle_clock",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
