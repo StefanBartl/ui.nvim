@@ -161,6 +161,13 @@ return {
     used_by = {},
   },
   {
+    key = "since_last_save",
+    summary = "Duration since the buffer became modified, escalating muted -> DiagnosticWarn -> DiagnosticError the longer it sits unsaved.",
+    builtin = false,
+    source = "ui.statusline.modules.since_last_save",
+    used_by = {},
+  },
+  {
     key = "idle_clock",
     summary = 'Wall-clock time, e.g. "14:32", shown only once the editor has been idle (CursorHold) and hidden again on the next keystroke.',
     builtin = false,
