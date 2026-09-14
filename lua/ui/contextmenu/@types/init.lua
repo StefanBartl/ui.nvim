@@ -59,3 +59,5 @@
 ---@field submenu fun(label: string, items: Ui.ContextMenu.Item[], opts?: Ui.ContextMenu.ItemOpts): Ui.ContextMenu.Item|nil
 ---@field open fun(items: Ui.ContextMenu.Item[]|string, opts?: Ui.ContextMenu.OpenOpts): Ui.Kit.Surface|nil  Returns the surface (kit renderer only -- nil for nvzone/menu, which exposes no equivalent handle)
 ---@field bind_buffer fun(bufnr: integer, get_items: Ui.ContextMenu.ItemsProvider, opts?: Ui.ContextMenu.BindOpts)
+---@field set_enabled fun(value: boolean)  Enable/disable the renderer/trigger without touching the item builders (`ui.setup({ menu = false })`'s target)
+---@field is_enabled fun(): boolean  Whether the renderer/trigger are currently active -- for `:checkhealth` and tests
