@@ -445,6 +445,35 @@ Siehe auch: ui/bindings/usrcmds/themes/README.md für technische Details
 end
 
 -----------------------------------------------------------------------
+-- Subcommand registry
+-----------------------------------------------------------------------
+
+-- Single source of truth for both the dispatcher and completion() below,
+-- so a new subcommand can't be wired into one without the other.
+local SUBCOMMANDS = {
+  { name = "transparency", fn = ui_transparency },
+  { name = "screenkey", fn = ui_screenkey },
+  { name = "theme", fn = ui_theme },
+  { name = "themes", fn = ui_themes },
+  { name = "variant", fn = ui_variant },
+  { name = "variants", fn = ui_variants },
+  { name = "tabline-style", fn = ui_tabline_style },
+  { name = "tabline-styles", fn = ui_tabline_styles },
+  { name = "picker", fn = ui_picker },
+  { name = "modules", fn = ui_modules },
+  { name = "toggle", fn = ui_toggle },
+  { name = "status", fn = ui_status },
+  { name = "help", fn = ui_help },
+}
+
+local actions = {}
+local subcommand_names = {}
+for _, entry in ipairs(SUBCOMMANDS) do
+  actions[entry.name] = entry.fn
+  table.insert(subcommand_names, entry.name)
+end
+
+-----------------------------------------------------------------------
 -- Dispatcher
 -----------------------------------------------------------------------
 
@@ -459,23 +488,6 @@ local function dispatcher(opts)
   end
 
   local sub = args[1]
-
-  local actions = {
-    transparency = ui_transparency,
-    screenkey = ui_screenkey,
-    theme = ui_theme,
-    themes = ui_themes,
-    variant = ui_variant,
-    variants = ui_variants,
-    ["tabline-style"] = ui_tabline_style,
-    ["tabline-styles"] = ui_tabline_styles,
-    picker = ui_picker,
-    modules = ui_modules,
-    toggle = ui_toggle,
-    status = ui_status,
-    help = ui_help,
-  }
-
   local action = actions[sub]
 
   if action then
@@ -514,22 +526,7 @@ local function complete(arglead, cmdline, _cursorpos)
 
   -- Complete first argument (subcommands)
   if num_args == 1 then
-    local subcommands = {
-      "transparency",
-      "screenkey",
-      "theme",
-      "themes",
-      "variant",
-      "variants",
-      "tabline-style",
-      "tabline-styles",
-      "picker",
-      "modules",
-      "toggle",
-      "status",
-      "help",
-    }
-    return filter(arglead, subcommands)
+    return filter(arglead, subcommand_names)
   end
 
   -- Complete second argument based on subcommand

@@ -33,6 +33,7 @@ function M.symbol_context_smart()
   return doc_symbols.symbol_context_smart()
 end
 
+---@return string
 function M.mode_band_group()
   local hl_module = require("ui.statusline.modules.highlighting")
   return hl_module.mode_band_group()
@@ -50,6 +51,7 @@ end
 
 local SEP_HEX = "f0058"
 
+---@return string
 function M.render_breadcrumbs_lspfirst()
   ensure_deps()
   local utils = require("ui.statusline.utils.primitives")
