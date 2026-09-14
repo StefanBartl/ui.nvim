@@ -158,6 +158,12 @@ local function request_doc_symbols_async(bufnr)
     return
   end
 
+  -- Snapshot the tick the request was made for — the buffer may advance
+  -- past it (another edit) while the request is in flight, and stamping
+  -- the cache with the tick *at response time* would mark a stale result
+  -- as fresh, suppressing the refresh that should follow the next edit.
+  local req_tick = current_tick(bufnr)
+
   local function on_result(err, result, ctx)
     cache.pending = false
     cache.last_req = vim.uv.now()
@@ -170,7 +176,7 @@ local function request_doc_symbols_async(bufnr)
     cache.items = result
     cache.hierarchical = hierarchical
     cache.client_id = ctx and ctx.client_id or nil
-    cache.version = current_tick(bufnr)
+    cache.version = req_tick
 
     -- Schedule redraw safely
     local function redraw()

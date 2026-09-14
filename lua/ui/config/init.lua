@@ -102,8 +102,21 @@ local function load_statusline_config(opts)
   end
 
   _current_variant_name = name
-  return resolved
+
+  -- `variants.resolve()` returns the same require()-cached module table on
+  -- every call (a shipped preset) -- deepcopy so the assembled config below
+  -- can never in-place-mutate the shipped singleton for every later
+  -- `M.setup()` call, the same reference-leak class already fixed for
+  -- `tabline_config` below.
+  return vim.deepcopy(resolved)
 end
+
+--- The only keys `M.setup()` reads. An unrecognized key is almost always a
+--- typo (`themes` for `theme`) rather than a deliberate extra field -- since
+--- nothing here validates the *shape* of `theme`/`tabline`/`variant` beyond
+--- "is it a table", a misspelled key would otherwise silently vanish with no
+--- error and no visible effect beyond "my override didn't apply".
+local KNOWN_SETUP_KEYS = { theme = true, tabline = true, variant = true }
 
 ---Setup complete configuration
 ---@param user_opts? table Optional user overrides for theme, plus an
@@ -113,8 +126,23 @@ end
 function M.setup(user_opts)
   user_opts = user_opts or {}
 
-  -- 1. Load theme config (centralized)
-  local theme_config = require("ui.config.theme")
+  for key in pairs(user_opts) do
+    if not KNOWN_SETUP_KEYS[key] then
+      notify.warn(
+        string.format(
+          "[ui.config] Unknown setup() key '%s' (expected one of: theme, tabline, variant) -- ignored",
+          tostring(key)
+        )
+      )
+    end
+  end
+
+  -- 1. Load theme config (centralized) -- deepcopy: `require()` caches the
+  -- module table, so without the copy `theme_config` would be the exact
+  -- same table object on every `M.setup()` call, and any later in-place
+  -- edit of the returned config would permanently corrupt it for every
+  -- subsequent call (same reference-leak class as `tabline_config` below).
+  local theme_config = vim.deepcopy(require("ui.config.theme"))
 
   -- 2. Allow user overrides for theme
   if user_opts.theme ~= nil then
