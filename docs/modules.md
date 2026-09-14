@@ -74,7 +74,7 @@ modules = {
 | `plugin_progress` | Whichever plugin is currently running a long operation | `lib.nvim.progress` | `ui.statusline.modules.plugin_progress` |
 | `plugin_summary` | lazy.nvim's own/external plugin count, e.g. `"12/48"` | lazy.nvim | `ui.statusline.modules.plugin_summary` |
 | `casedesk` | Current case's short info (number, company, reply count) plus a yellow/red SLA urgency badge | casedesk.nvim | `ui.statusline.modules.casedesk` |
-| `filetree_cwd_mode` | filetree.nvim's cwd-mode badge (`PROJECT`/`LOCK`/`MANUAL`/…), as a filled capsule | filetree.nvim | `ui.statusline.modules.filetree_cwd_mode` |
+| `filetree_cwd_mode` | filetree.nvim's cwd-mode badge (`PROJECT`/`LOCK`/`MANUAL`/…), as a filled capsule; `opts.history = true` adds a 3-dot mode/root trail | filetree.nvim | `ui.statusline.modules.filetree_cwd_mode` |
 | `undo_depth` | Undo steps available on the current branch, plus a glyph if the undo tree has branched | — | `ui.statusline.modules.undo_depth` |
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
@@ -122,6 +122,17 @@ mean call time above 50ms) — otherwise green. "Today" is the closest honest
 proxy this data supports: telemetry aggregates calls rather than
 timestamping each one, so this reads `Data.days[today]` for which functions
 were active, not a true "this second" signal.
+
+`filetree_cwd_mode`'s `opts.history = true` appends the last 3
+`(mode, root)` badges as small dots after the usual capsule — filled for
+the current one, hollow for earlier ones, each colored the same way the
+capsule itself is. Off by default (a visual addition, not a fix). Keyed by
+mode AND root, not mode alone: swapping between two `lock` cases with
+different roots — the "jumping between two open cases" scenario the idea
+names — produces two distinct dots even though the mode name never
+changes. Tracked off filetree's own `User FiletreeCwdModeChanged` autocmd,
+the same one this module's header already documents needing no extra
+refresh wiring for.
 
 `casedesk`'s SLA badge stays hidden until a clock drops under
 `config.sla_warn_at` of its budget — casedesk.nvim's own SLA.md §6C design,
