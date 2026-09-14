@@ -13,6 +13,7 @@
 ---@field source string|nil # require path for a standalone module; nil for a builtin one
 ---@field requires string|nil # a soft dependency this segment renders empty without; nil if it has none
 ---@field used_by string[] # shipped preset names that include this key by default; empty means opt-in only
+---@field essential boolean|nil # true = kept by `ui.statusline.render`'s `responsive` mode even in a narrow window; unset/false = dropped there. Only meaningful with `Ui.Statusline.Config.responsive = true` -- see docs/modules.md's "Responsive mode" section
 
 ---@type Ui.Statusline.CatalogEntry[]
 return {
@@ -24,12 +25,14 @@ return {
     summary = "Current Vim mode, as a filled colour chip.",
     builtin = true,
     used_by = { "default", "minimal", "lsp", "blocks" },
+    essential = true,
   },
   {
     key = "file",
     summary = "File name and devicon.",
     builtin = true,
     used_by = { "default" },
+    essential = true,
   },
   {
     key = "git",
@@ -49,6 +52,7 @@ return {
     summary = "Per-severity error/warn/hint/info counts.",
     builtin = true,
     used_by = { "default", "minimal", "lsp", "blocks" },
+    essential = true,
   },
   {
     key = "lsp",
@@ -67,6 +71,7 @@ return {
     summary = "Line/column position; several presets add a row/column scroll-progress bar via ui.statusline.cursor_ctl.",
     builtin = true,
     used_by = { "default", "minimal", "lsp", "blocks" },
+    essential = true,
   },
 
   -- Standalone modules -- add the key to your own `order`, and a `modules`

@@ -45,6 +45,53 @@ local theme_cache = {}
 ---@type table<string, true>
 local warned = {}
 
+--- IDEEN-statusline.md's "Adaptive Segmentauswahl nach Fensterbreite": drop
+--- every catalog key NOT tagged `essential` while the statusline's own
+--- window is narrower than `responsive_width`, instead of the alternative
+--- this idea explicitly rejected -- a parallel "compact" `order` list a host
+--- would have to hand-maintain per preset, drifting from the real one the
+--- moment either changes.
+---
+--- Built lazily from `ui.statusline.catalog` (not required at module load:
+--- `catalog.lua` requires nothing back from here, but resolving it only once
+--- `responsive` is actually used keeps a host that never opts in from paying
+--- for a table walk on every redraw).
+---@type table<string, boolean>|nil
+local essential_by_key = nil
+
+---@param key string
+---@return boolean
+local function is_essential(key)
+  if not essential_by_key then
+    essential_by_key = {}
+    for _, entry in ipairs(require("ui.statusline.catalog")) do
+      essential_by_key[entry.key] = entry.essential == true
+    end
+  end
+  local known = essential_by_key[key]
+  -- A key the catalog does not know at all is a host's own custom module --
+  -- kept rather than silently dropped, since this module has no basis to
+  -- judge it either way.
+  if known == nil then
+    return true
+  end
+  return known
+end
+
+---@param cfg Ui.Statusline.Config
+---@return boolean
+local function should_go_compact(cfg)
+  if not cfg.responsive then
+    return false
+  end
+  local winid = vim.g.statusline_winid or 0
+  local ok, width = pcall(vim.api.nvim_win_get_width, winid)
+  if not ok then
+    return false
+  end
+  return width < (cfg.responsive_width or 80)
+end
+
 ---@param message string
 ---@param key string # de-duplicates on this, not on the message text
 local function warn_once(key, message)
@@ -97,6 +144,16 @@ end
 function M.generate(cfg)
   local order = cfg.order or {}
   local modules = cfg.modules or {}
+
+  if should_go_compact(cfg) then
+    local compact = {}
+    for _, key in ipairs(order) do
+      if key == "%=" or is_essential(key) then
+        compact[#compact + 1] = key
+      end
+    end
+    order = compact
+  end
 
   -- Resolved lazily, on the first key `modules` doesn't cover -- not
   -- upfront. A variant whose own `modules` already covers every key in
