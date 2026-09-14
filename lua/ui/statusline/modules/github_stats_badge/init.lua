@@ -61,8 +61,12 @@ local function views_this_week(slug)
     return cached.count
   end
 
-  local ok, analytics = pcall(require, "github_stats.analytics")
-  if not ok then
+  -- `package.loaded` rather than `require`: this render path runs on the
+  -- very first statusline redraw, so a `require` here would pull
+  -- github_stats.nvim in before it gets to load on its own lazy trigger
+  -- (see the identical fix/comment in filetree_cwd_mode's render function).
+  local analytics = package.loaded["github_stats.analytics"]
+  if type(analytics) ~= "table" then
     return nil
   end
 
@@ -77,8 +81,9 @@ end
 
 ---@return string
 return function()
-  local ok_gh, config = pcall(require, "github_stats.config")
-  if not ok_gh then
+  -- `package.loaded`, not `require` -- see the comment in `views_this_week`.
+  local config = package.loaded["github_stats.config"]
+  if type(config) ~= "table" then
     return ""
   end
 
