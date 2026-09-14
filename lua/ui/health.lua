@@ -274,14 +274,27 @@ local function check_modules()
 end
 
 --- The statusline segments that depend on something outside this plugin.
+---
+--- Named by the exact module path each segment's own `pcall(require, ...)`
+--- checks (see `ui.statusline.modules.*`), not just the plugin's repo name --
+--- kept in sync with `ui.statusline.catalog`'s `requires` field by hand,
+--- since the catalog itself doesn't carry the require path, only the
+--- human-readable plugin name.
 ---@return nil
 local function check_segments()
   health.start("Statusline segments")
 
   for _, entry in ipairs({
     { "nvim-web-devicons", "file type icons; without it the icon column is blank" },
-    { "neotest", "the test-runner segment" },
-    { "casedesk.meta", "the working-directory mode badge" },
+    { "filetree", "cwd-mode badge (filetree_cwd_mode)" },
+    { "github_stats.config", "weekly view-count badge (github_stats_badge)" },
+    {
+      "runtime-analysis.telemetry",
+      "health ampel across instrumented plugins (runtime_analysis_ampel)",
+    },
+    { "recommender.config", "alias-suggestion count badge (recommender_badge)" },
+    { "sessions.statusline", "active session name + dirty marker (session_status)" },
+    { "sandbox.statusline", "ambient container summary (sandbox_ambient)" },
   }) do
     if has(entry[1]) then
       health.ok(("%s -- %s"):format(entry[1], entry[2]))
