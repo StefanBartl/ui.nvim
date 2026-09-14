@@ -77,7 +77,15 @@ end
 ---@return nil
 function M.goto_buf(bufnr)
   M.flash(bufnr)
-  require("ui.bindings.keymaps.tabufline.state").goto_buf(bufnr)
+  -- pcall'd like `close_buffer` below: the tabline was rendered with this
+  -- bufnr as a click target, but it can have gone invalid by the time the
+  -- click actually lands (closed by a near-simultaneous click on a
+  -- neighbour's "x", or a keymap) -- must not surface as an unhandled error
+  -- out of the click handler.
+  local ok, err = pcall(require("ui.bindings.keymaps.tabufline.state").goto_buf, bufnr)
+  if not ok then
+    notify.warn("goto_buf failed: " .. tostring(err))
+  end
 end
 
 ---@param str string|nil

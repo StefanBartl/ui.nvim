@@ -156,6 +156,76 @@ describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
   end)
 end)
 
+describe("bug: ui.tabline.utils.goto_buf was not pcall'd", function()
+  -- close_buffer() above was already pcall'd; goto_buf() -- the click
+  -- handler for switching TO a tab, not closing one -- called
+  -- state.goto_buf(bufnr) straight through, so a bufnr that went invalid
+  -- between the tabline render and the click landing (closed by a
+  -- near-simultaneous click elsewhere) raised, unhandled, out of the click
+  -- handler instead of notifying.
+  local utils = require("ui.tabline.utils")
+  local state = require("ui.bindings.keymaps.tabufline.state")
+
+  it("notifies instead of raising when the underlying switch fails", function()
+    local original = state.goto_buf
+    state.goto_buf = function()
+      error("boom")
+    end
+
+    local notified = false
+    local original_notify = vim.notify
+    vim.notify = function(msg)
+      if msg:find("goto_buf failed", 1, true) then
+        notified = true
+      end
+    end
+
+    assert.has_no.errors(function()
+      utils.goto_buf(1)
+    end)
+
+    vim.notify = original_notify
+    state.goto_buf = original
+    assert.is_true(notified)
+  end)
+end)
+
+describe("bug: close_buffer's floating-window check used window 0, not bufnr's window", function()
+  -- close_all_bufs()/close_n_buffers() call close_buffer(bufnr) explicitly
+  -- while the CURRENT window can be anything -- including an unrelated
+  -- float (LSP hover, the theme picker, a notify popup). The old code
+  -- checked nvim_win_get_config(0).zindex, so an unrelated float merely
+  -- being current made it force-close THAT float via a bare `:bw` instead
+  -- of ever touching `bufnr`.
+  local state = require("ui.bindings.keymaps.tabufline.state")
+
+  it("closes the target bufnr rather than an unrelated floating window", function()
+    local target = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(target, "/tmp/ui_nvim_close_buffer_float_regression.lua")
+    vim.t.bufs = vim.t.bufs or {}
+    table.insert(vim.t.bufs, target)
+
+    local float_buf = vim.api.nvim_create_buf(false, true)
+    local float_win = vim.api.nvim_open_win(float_buf, true, {
+      relative = "editor",
+      row = 1,
+      col = 1,
+      width = 10,
+      height = 3,
+      style = "minimal",
+    })
+
+    assert.has_no.errors(function()
+      state.close_buffer(target)
+    end)
+
+    assert.is_true(vim.api.nvim_win_is_valid(float_win))
+    assert.is_false(vim.tbl_contains(vim.t.bufs, target))
+
+    pcall(vim.api.nvim_win_close, float_win, true)
+  end)
+end)
+
 describe("bug: themes.default T.mode() drew its own separator glyph twice", function()
   -- One `St_<Mode>ModeSep` group already carries the sep_r glyph AND fades
   -- into ST_EmptySpace's background -- a second bare sep_r right after it
