@@ -83,6 +83,7 @@ modules = {
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
 | `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 Alias-Vorschläge für diese Datei offen"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
+| `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -140,6 +141,16 @@ kept as-is here: an always-visible countdown for a case with a six-week
 budget is noise, not signal. Once visible, it is two-stage rather than one
 flat color: yellow (`%#DiagnosticWarn#`) while urgent but not yet overdue,
 red (`%#DiagnosticError#`, marker `SLA!`) once the deadline has passed.
+
+`idle_clock` is built on `ui.statusline.utils.idle`, a small reusable
+primitive (`is_idle()` / `wrap(segment_fn)`) for any segment that should
+only appear once the editor has sat still for `updatetime` ms
+(`CursorHold`/`CursorHoldI`) and disappear again on the very next
+keystroke or cursor move — IDEEN-statusline.md's "Idle-Erweiterung nach N
+Sekunden Inaktivität" names a mini git log or extra breadcrumb room as
+other possible payloads; `idle_clock` is only the first (its own
+suggested "Uhrzeit"), and a future one can reuse `ui.statusline.utils.idle`
+without its own `CursorHold` wiring.
 
 `recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
 one its `analyzer` config option already selects — `regex` by default) with
@@ -237,6 +248,7 @@ build one from, not a module itself:
 | `ui.statusline.utils.primitives` | Raw building blocks the "default" theme wraps with highlights: `git()`, `lsp()`, `diagnostics()`, `file()`, `lsp_msg()`, `is_activewin()`, `modes` (the mode-name/highlight-suffix table) |
 | `ui.statusline.utils.get_separators` | Resolves a `separator_style` name (or `{left, right}` table) to the actual glyph pair |
 | `ui.statusline.utils.clickable` | `wrap(segment_fn, handlers)` — makes any segment respond to left/right/middle clicks. See [Clickable modules](#clickable-modules) above |
+| `ui.statusline.utils.idle` | `is_idle()` / `wrap(segment_fn)` — makes any segment render nothing until `CursorHold`/`CursorHoldI` (`updatetime` ms with no input), hidden again on the next keystroke or cursor move. `idle_clock` above is the first module built on it |
 | `ui.statusline.cursor_ctl` | Row/column scroll-progress rendering — what several presets' own `cursor` override uses. `cursor_ctl.renderer.pct_bar(pct)` (an 8-level density glyph from a 0..100 value) is reusable on its own — `diagnostics_sparkline` above is the first module to do that |
 | `ui.statusline.modules.highlighting` | `mode_band_group()` (the current mode's highlight group, for colouring anything by mode), `hl_open()`/`hl_wrap()`/`stl_strip_hl()` |
 
