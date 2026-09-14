@@ -18,6 +18,22 @@ local M = {}
 local MIN_BUFWIDTH = 12
 local MAX_BUFWIDTH = 24
 
+-- Nerd Font glyphs (the devicon and the close/modified icon inside every
+-- chip) can render 1 display cell wider in a real terminal/GUI's actual
+-- font than Neovim's own width tables believe -- ambiguous-width Private
+-- Use Area codepoints, rendered inconsistently across terminals/fonts, and
+-- `ui.tabline.utils.style_buf`'s own width accounting (however carefully
+-- it measures via `strdisplaywidth`/`nvim_eval_statusline`) can only ever
+-- report Neovim's OWN model, never the font actually drawing it. Found
+-- live: the resulting overflow grew with the number of VISIBLE chips (each
+-- one carries its own icon), which a flat margin would not scale with --
+-- treating every chip as if it cost `ICON_WIDTH_SLACK` columns more than
+-- its real `bufwidth` when deciding how many fit (while `style_buf` itself
+-- still renders at the real, unpadded `bufwidth`) reserves exactly that
+-- much headroom per chip, so a mismatch like this has room to be wrong in
+-- before it can ever reach Neovim's own last-resort tabline truncation.
+local ICON_WIDTH_SLACK = 2
+
 ---@param ft string
 ---@return integer # 0 when no window in the current tab has this filetype
 local function filetree_window_width(ft)
@@ -135,7 +151,7 @@ function M.buffers(cfg)
   local flush_right = false
 
   for i, bufnr in ipairs(bufs) do
-    if (#chips + 1) * bufwidth > space then
+    if (#chips + 1) * (bufwidth + ICON_WIDTH_SLACK) > space then
       flush_right = true
       if seen_current then
         break

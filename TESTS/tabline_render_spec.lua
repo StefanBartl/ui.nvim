@@ -251,7 +251,12 @@ describe("ui.tabline.modules", function()
     it(
       "fits every buffer when they fit at the minimum width, unlike a fixed 21-wide chip",
       function()
-        vim.o.columns = 300 -- 15 * 21 = 315 would NOT fit; 15 * 12 = 180 does
+        -- Wide enough that the auto-computed bufwidth (clamped to
+        -- MAX_BUFWIDTH=24 at this buffer count) plus ICON_WIDTH_SLACK's
+        -- extra per-chip reservation still lets all 15 fit -- a fixed
+        -- 21-wide chip (15 * 21 = 315) would already be tight even before
+        -- that reservation.
+        vim.o.columns = 450
         local saved = vim.t.bufs
         local bufs = make_bufs(15)
         vim.t.bufs = bufs
@@ -460,11 +465,18 @@ describe("ui.tabline.modules.buffers boundary styles", function()
 
     it("four chips with room to spare: square only on the very first left edge", function()
       local saved = vim.t.bufs
+      local saved_cols = vim.o.columns
+      -- Wide enough that 4 chips at bufwidth=20 fit with room to spare even
+      -- after ICON_WIDTH_SLACK's extra per-chip reservation (4 * (20 + 2) =
+      -- 88, well under 200) -- this test is about boundary-cap placement
+      -- when nothing overflows, not about the slack arithmetic itself.
+      vim.o.columns = 200
       local bufs = make_bufs(4)
       vim.t.bufs = bufs
 
       local out = modules.buffers({ order = { "buffers" }, bufwidth = 20 })
 
+      vim.o.columns = saved_cols
       vim.t.bufs = saved
       delete_bufs(bufs)
 
@@ -509,11 +521,17 @@ describe("ui.tabline.modules.buffers boundary styles", function()
   describe('style = "divider"', function()
     it("adds one plain divider per internal boundary, no caps", function()
       local saved = vim.t.bufs
+      local saved_cols = vim.o.columns
+      -- Wide enough for the auto-computed bufwidth (clamped to
+      -- MAX_BUFWIDTH=24 here) plus ICON_WIDTH_SLACK's extra per-chip
+      -- reservation to still fit all 4 chips with room to spare.
+      vim.o.columns = 200
       local bufs = make_bufs(4)
       vim.t.bufs = bufs
 
       local out = modules.buffers({ order = { "buffers" }, style = "divider" })
 
+      vim.o.columns = saved_cols
       vim.t.bufs = saved
       delete_bufs(bufs)
 
