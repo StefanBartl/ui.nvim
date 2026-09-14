@@ -574,7 +574,7 @@ function M.setup()
   usercmd.create("UI", dispatcher, {
     nargs = "*",
     complete = complete,
-    desc = "UI Kontrolle (Theme, Transparenz)",
+    desc = "UI Kontrolle (Theme, Transparenz, Varianten, Tabline-Stil, ... -- siehe :UI help)",
   })
 
   -- Optional: Create shorter aliases

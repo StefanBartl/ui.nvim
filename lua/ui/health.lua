@@ -277,6 +277,23 @@ local function check_modules()
     -- silently drops anything past it.
     health.info(":UI is not registered (call require('ui').setup({ all = true }))")
   end
+
+  -- Not the `package.loaded` shape the two entries above use: `menu` is not
+  -- an opt-in `ui.setup()` turns on, it is an opt-OUT that is already on by
+  -- default (see `ui.contextmenu`'s own doc comment) -- `require()`ing it
+  -- here has no side effect beyond defining its functions (no autocmd/
+  -- highlight registration at load time), and `is_enabled()`'s own doc
+  -- comment says explicitly "For :checkhealth and tests".
+  local ok_menu, enabled = pcall(function()
+    return require("ui.contextmenu").is_enabled()
+  end)
+  if not ok_menu then
+    health.warn("ui.contextmenu failed to load: " .. tostring(enabled))
+  elseif enabled then
+    health.ok("menu -- right-click context menu (ui.contextmenu)")
+  else
+    health.info("menu is off (ui.setup({ menu = false }) was called)")
+  end
 end
 
 --- The statusline segments that depend on something outside this plugin.
