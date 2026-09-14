@@ -134,6 +134,21 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       assert.is_false(vim.tbl_contains(vim.t.bufs, a))
       a = nil
     end)
+
+    -- Found live: clicking a tabline "x" while a winfixbuf-locked window (a
+    -- file tree sidebar, typically) happens to be the current one raised
+    -- E1513 out of the `vim.cmd("b" .. ...)` neighbour-switch below, same
+    -- class of problem the goto_buf test right below this one already
+    -- covers for goto_buf -- close_buffer just never got the same guard.
+    it("does not throw when the current window is winfixbuf-locked", function()
+      vim.api.nvim_set_current_buf(b)
+      vim.wo.winfixbuf = true
+      assert.has_no.errors(function()
+        state.close_buffer()
+      end)
+      vim.wo.winfixbuf = false
+      b = nil -- close_buffer already ran on it
+    end)
   end)
 
   describe("goto_buf", function()
