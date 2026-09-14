@@ -171,12 +171,35 @@ local function hop_off_fixedbuf()
   end
 end
 
+--- Whether closing `bufnr` would hit the `confirm bd` prompt below --
+--- i.e. it reaches that branch at all (not a terminal, not a floating
+--- window's buffer) and actually has unsaved changes. Used by
+--- `close_all_bufs`/`close_n_buffers` to ask ONCE for the whole batch
+--- (UI-01: "confirm once, not once per item") instead of once per buffer.
+---@param bufnr integer
+---@return boolean
+local function needs_close_confirm(bufnr)
+  if not api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].buftype == "terminal" then
+    return false
+  end
+  local bufwin = vim.fn.bufwinid(bufnr)
+  if bufwin ~= -1 and api.nvim_win_get_config(bufwin).zindex then
+    return false
+  end
+  return vim.bo[bufnr].bufhidden ~= "delete" and vim.bo[bufnr].modified
+end
+M.__needs_close_confirm = needs_close_confirm
+
 --- Close `bufnr` (default: the current buffer), landing on a sensible
 --- neighbour rather than whatever Neovim's own `:bdelete` would fall back
 --- to. Ported from `nvchad.tabufline.close_buffer`.
+---
 ---@param bufnr? integer
+---@param skip_confirm? boolean Force-close without `confirm bd`'s
+---  save-changes prompt -- for a caller that already asked once for the
+---  whole batch it is part of (`close_all_bufs`/`close_n_buffers`).
 ---@return nil
-function M.close_buffer(bufnr)
+function M.close_buffer(bufnr, skip_confirm)
   bufnr = bufnr or api.nvim_get_current_buf()
 
   if vim.bo[bufnr].buftype == "terminal" then
@@ -227,7 +250,7 @@ function M.close_buffer(bufnr)
   end
 
   if bufhidden ~= "delete" then
-    vim.cmd("confirm bd" .. bufnr)
+    vim.cmd((skip_confirm and "bd! " or "confirm bd") .. bufnr)
   end
 
   vim.cmd("redrawtabline")
@@ -260,13 +283,34 @@ function M.close_all_bufs(include_cur_buf)
     end
   end
 
+  -- UI-01: confirm once for the whole batch, not once per modified buffer
+  -- below -- without this, "close all" with N unsaved buffers popped N
+  -- sequential `confirm bd` dialogs for a single `<leader>bq`.
+  local modified = 0
+  for _, bufnr in ipairs(bufs) do
+    if needs_close_confirm(bufnr) then
+      modified = modified + 1
+    end
+  end
+
+  if modified > 0 then
+    local choice = vim.fn.confirm(
+      string.format("Discard changes in %d modified buffer(s)?", modified),
+      "&Yes\n&No",
+      2
+    )
+    if choice ~= 1 then
+      return
+    end
+  end
+
   -- pcall'd per buffer, no notify here -- this module stays low-level (see
   -- its own doc comment); the deferred caller (ui.tabline.utils) already
   -- notifies on the whole batch failing. Without this, one already-invalid
   -- or otherwise failing bufnr would abort the rest of a "close all" batch,
   -- leaving everything after it in vim.t.bufs open.
   for _, bufnr in ipairs(bufs) do
-    pcall(M.close_buffer, bufnr)
+    pcall(M.close_buffer, bufnr, true)
   end
 end
 
