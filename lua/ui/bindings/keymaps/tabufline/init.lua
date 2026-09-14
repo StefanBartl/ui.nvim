@@ -161,10 +161,32 @@ function M.close_n_buffers(n)
     return true
   end
 
+  -- UI-01: ask once for the whole batch instead of letting the loop below
+  -- pop `confirm bd`'s save-changes prompt once per modified buffer it
+  -- happens to touch. `vim.t.bufs` is an upper-bound approximation of what
+  -- `n` iterations of close-then-land-on-neighbour will visit -- accepting
+  -- an occasional over-ask (confirming when the actually-touched buffers
+  -- turn out unmodified) is preferable to precisely simulating the
+  -- traversal just to decide whether to ask at all.
+  local any_modified = false
+  for _, bufnr in ipairs(vim.t.bufs or {}) do
+    if state.__needs_close_confirm(bufnr) then
+      any_modified = true
+      break
+    end
+  end
+
+  if any_modified then
+    local choice = vim.fn.confirm("Discard changes in modified buffer(s)?", "&Yes\n&No", 2)
+    if choice ~= 1 then
+      return false
+    end
+  end
+
   local success = true
 
   for _ = 1, n do
-    local ok, err = pcall(state.close_buffer)
+    local ok, err = pcall(state.close_buffer, nil, true)
     if not ok then
       notify.warn("[ui.tabufline] close_buffer failed: " .. tostring(err))
       success = false
