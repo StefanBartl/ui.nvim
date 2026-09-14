@@ -331,13 +331,13 @@ local function gen_unique_name(name, index)
 end
 
 -- `close_or_dot`'s rendered width, keyed by `modified` -- only two shapes
--- ever exist (the close button " 󰅖 " or the plain two-space modified
--- placeholder), and neither changes with the highlight group name or the
--- click-id embedded in it, so this is measured at most twice per session,
--- ever, not per chip per redraw. `nvim_eval_statusline` (not
--- `strdisplaywidth`) because the real string carries `%#Group#`/
--- `%N@Func@...%X` tabline directives, which `strdisplaywidth` would count
--- as literal text instead of the zero-width markup they are.
+-- ever exist (the close button " 󰅖 " or the modified-buffer dot " ● "),
+-- and neither changes with the highlight group name or the click-id
+-- embedded in it, so this is measured at most twice per session, ever, not
+-- per chip per redraw. `nvim_eval_statusline` (not `strdisplaywidth`)
+-- because the real string carries `%#Group#`/`%N@Func@...%X` tabline
+-- directives, which `strdisplaywidth` would count as literal text instead
+-- of the zero-width markup they are.
 ---@type table<boolean, integer>
 local close_width_cache = {}
 
@@ -392,8 +392,18 @@ function M.style_buf(bufnr, index, width)
     name = gen_unique_name(name, index) or name
   end
 
+  -- Always a click target, modified or not: a plain "unsaved changes" dot
+  -- with no click handler (found live: rendered as two blank spaces, no
+  -- glyph at all) left a modified buffer's chip with no way to close it by
+  -- mouse whatsoever -- indistinguishable from a rendering bug. `KillBuf`
+  -- already routes through `confirm bd<bufnr>` (see
+  -- `ui.bindings.keymaps.tabufline.state.close_buffer`), which prompts to
+  -- save/discard/cancel for a modified buffer, so wiring the same handler
+  -- here is safe -- only the icon/highlight differs from the plain close
+  -- button, as a reminder that closing will prompt.
   local modified = api.nvim_get_option_value("modified", { buf = bufnr })
-  local close_or_dot = modified and M.txt("  ", "Buf" .. hl_suffix .. "Modified")
+  local close_or_dot = modified
+      and M.txt(M.btn(" ● ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Modified")
     or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
 
   -- icon + the single space that always follows it -- `strdisplaywidth`
