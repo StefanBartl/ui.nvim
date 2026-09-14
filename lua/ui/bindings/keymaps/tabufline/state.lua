@@ -130,6 +130,47 @@ function M.setup()
   })
 end
 
+--- If `win` is `winfixbuf`-locked, the nearest window that both lists
+--- buffers and is not itself locked -- `win` itself otherwise (including
+--- when no such window exists). Shared by `goto_buf` and `close_buffer`:
+--- both run a command that changes what the current window shows (`:b`,
+--- `:enew`, `nvim_set_current_buf`), and `winfixbuf` would otherwise
+--- silently fight (E1513) over what a locked window is allowed to display.
+---
+--- `close_buffer` needed this too once a fix confirmed the bug was real:
+--- clicking a tabline "x" while a `winfixbuf`-locked window (a file tree
+--- sidebar, typically) happens to be the current one raised exactly this
+--- error and left the buffer open -- `goto_buf` already guarded against the
+--- same class of problem, `close_buffer` just never got the same check.
+---@param win integer
+---@return integer
+local function switchable_win(win)
+  if not api.nvim_get_option_value("winfixbuf", { win = win }) then
+    return win
+  end
+
+  for _, w in ipairs(api.nvim_list_wins()) do
+    local buflisted = api.nvim_get_option_value("buflisted", { buf = api.nvim_win_get_buf(w) })
+    local win_fixedbuf = api.nvim_get_option_value("winfixbuf", { win = w })
+    if buflisted and not win_fixedbuf then
+      return w
+    end
+  end
+
+  return win
+end
+
+--- Hop the current window to `switchable_win`'s result, if that differs
+--- from where it already is.
+---@return nil
+local function hop_off_fixedbuf()
+  local cur = api.nvim_get_current_win()
+  local target = switchable_win(cur)
+  if target ~= cur then
+    api.nvim_set_current_win(target)
+  end
+end
+
 --- Close `bufnr` (default: the current buffer), landing on a sensible
 --- neighbour rather than whatever Neovim's own `:bdelete` would fall back
 --- to. Ported from `nvchad.tabufline.close_buffer`.
@@ -139,6 +180,7 @@ function M.close_buffer(bufnr)
   bufnr = bufnr or api.nvim_get_current_buf()
 
   if vim.bo[bufnr].buftype == "terminal" then
+    hop_off_fixedbuf()
     vim.cmd(vim.bo[bufnr].buflisted and "set nobl | enew" or "hide")
     vim.cmd("redrawtabline")
     return
@@ -148,10 +190,20 @@ function M.close_buffer(bufnr)
   local bufhidden = vim.bo[bufnr].bufhidden
 
   if api.nvim_win_get_config(0).zindex then
-    -- A floating window's buffer: force-close the window itself.
+    -- A floating window's buffer: force-close the window itself. Not a
+    -- winfixbuf case -- destroying the window outright, not switching what
+    -- buffer it shows.
     vim.cmd("bw")
     return
-  elseif idx and vim.t.bufs and #vim.t.bufs > 1 then
+  end
+
+  -- Every branch below runs a command that changes what the current window
+  -- shows (`:b`, `nvim_set_current_buf`, `:enew`) -- hop off a
+  -- winfixbuf-locked window first, or the whole close aborts on E1513
+  -- before `bufnr` itself ever gets touched.
+  hop_off_fixedbuf()
+
+  if idx and vim.t.bufs and #vim.t.bufs > 1 then
     local step = (idx == #vim.t.bufs) and -1 or 1
     vim.cmd("b" .. vim.t.bufs[idx + step])
   elseif not vim.bo[bufnr].buflisted then
@@ -176,27 +228,13 @@ function M.close_buffer(bufnr)
 end
 
 --- Switch to `bufnr` directly (as opposed to `next()`/`prev()`'s relative
---- move). If the current window is `winfixbuf`-locked, hop to the nearest
---- window that both lists buffers and is not itself locked first -- the
---- tabline's click handler and `winfixbuf` would otherwise silently fight
---- over what the window shows. Ported from `nvchad.tabufline.goto_buf`.
+--- move). Hops off a `winfixbuf`-locked current window first (see
+--- `switchable_win`'s own doc comment). Ported from
+--- `nvchad.tabufline.goto_buf`.
 ---@param bufnr integer
 ---@return nil
 function M.goto_buf(bufnr)
-  local cur_win = api.nvim_get_current_win()
-  local fixedbuf = api.nvim_get_option_value("winfixbuf", { win = cur_win })
-
-  if fixedbuf then
-    for _, win in ipairs(api.nvim_list_wins()) do
-      local buflisted = api.nvim_get_option_value("buflisted", { buf = api.nvim_win_get_buf(win) })
-      local win_fixedbuf = api.nvim_get_option_value("winfixbuf", { win = win })
-      if buflisted and not win_fixedbuf then
-        api.nvim_set_current_win(win)
-        break
-      end
-    end
-  end
-
+  hop_off_fixedbuf()
   api.nvim_set_current_buf(bufnr)
 end
 
