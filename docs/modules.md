@@ -21,6 +21,7 @@ page and that command can't drift apart, they're the same data.
 - [Built into the "default" theme](#built-into-the-default-theme)
 - [Standalone modules](#standalone-modules)
 - [Clickable modules](#clickable-modules)
+- [Responsive mode](#responsive-mode)
 - [Building your own module](#building-your-own-module)
 - [What is deliberately not here](#what-is-deliberately-not-here)
 
@@ -245,6 +246,39 @@ Building your own clickable module is `clickable.wrap()` around whatever
 segment function you already have (see the "Building your own module"
 section below for the building blocks) — nothing about `wrap()` requires the
 segment itself to be new.
+
+---
+
+## Responsive mode
+
+`Ui.Statusline.Config.responsive = true` drops every `order` key NOT tagged
+`essential` in the catalog while the statusline's own window
+(`vim.g.statusline_winid`) is narrower than `responsive_width` (default 80
+columns) — a narrow split falls back to "just the essentials" (`mode`,
+`file`, `diagnostics`, `cursor`) instead of either hard-truncating every
+segment's own text or requiring a hand-maintained second, "compact" `order`
+list per preset that would drift from the real one the moment either
+changes (IDEEN-statusline.md's "Adaptive Segmentauswahl nach
+Fensterbreite" explicitly named that drift risk as the reason NOT to do
+it that way):
+
+```lua
+ui.statusline.render.enable({
+  order = { "mode", "file", "git", "%=", "lsp", "diagnostics", "cursor" },
+  modules = { --[[ ... ]] },
+  responsive = true,
+  responsive_width = 90, -- optional; default 80
+})
+```
+
+Off by default — an existing `order`/`modules` config renders identically
+whether or not this page exists. Opting a segment INTO the always-kept set
+is a one-line catalog change (`essential = true` on its entry in
+[`lua/ui/statusline/catalog.lua`](../lua/ui/statusline/catalog.lua)), not a
+per-preset one; a key `responsive` mode has never heard of (a host's own
+custom module not in the catalog at all) is kept rather than silently
+dropped, since this mechanism has no basis to judge it either way. The
+`"%="` alignment break is always kept regardless of width.
 
 ---
 

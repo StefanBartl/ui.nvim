@@ -77,6 +77,8 @@
 ---@field modules? table<string, string|fun(): string> # per-key override; a key absent here falls back to `theme`'s module set
 ---@field theme? string # fallback module-set name (see ui.statusline.themes.*); default "default"
 ---@field separator_style? string|{left: string, right: string} # passed to the theme's `build()`
+---@field responsive? boolean # when true, `order` drops every non-essential key (see ui.statusline.catalog's `essential` field) while the statusline's own window is narrower than `responsive_width`; default false (opt-in)
+---@field responsive_width? integer # column width below which `responsive` kicks in; default 80
 
 --- The assembled shape `ui.tabline.render.generate()`/`enable()` consume --
 --- the `ui.tabline` half of what `ui.config.setup()` returns. One shipped
