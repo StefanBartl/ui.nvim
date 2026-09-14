@@ -113,6 +113,8 @@ local contextmenu = require("ui.contextmenu")
 
 contextmenu.setup({ renderer = "auto", native_popup = false })  -- renderer: "auto"|"kit"|"nvzone"; native_popup: true keeps Neovim's own PopUp menu (default: off)
 contextmenu.renderer()                         -- the configured value
+contextmenu.set_enabled(bool)                  -- also reachable as require("ui").setup({ menu = bool }); default true
+contextmenu.is_enabled()                       -- current state
 contextmenu.entry(available, label, fn, rtxt, opts)  -- {name,rtxt,cmd,icon,hl} or nil; opts = { icon, icon_hl, hl }
 contextmenu.heading(title)                     -- group heading marker; pass it first to `group`
 contextmenu.group(out, entry, entry, nil, entry)  -- varargs; appends non-nil items, separator between groups
@@ -136,6 +138,11 @@ See `@types/init.lua` for full field documentation (`Ui.ContextMenu.Item`,
   host composing the menu) ever calls `require("menu")`, so a plugin can call
   `entry`/`group`/`submenu` unconditionally regardless of whether nvzone/menu
   is installed.
+- Same reasoning extends to `set_enabled(false)`: it gates `open` alone (the
+  only place either renderer actually draws anything), not the item builders.
+  `bind_buffer`'s trigger delegates to `open`, so a disabled menu still runs
+  `get_items()` when its keymap fires — cheap, and consistent with "data
+  builders are always there" — it just never renders.
 - `heading` is a marker passed **into** `group`, not a `title` parameter on
   it, so gating reaches it: a section whose every entry is unavailable drops
   its title along with itself, rather than leaving a heading standing over

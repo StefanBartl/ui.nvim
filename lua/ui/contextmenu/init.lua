@@ -57,6 +57,35 @@ local M = {}
 ---@type "auto"|"kit"|"nvzone"
 local renderer = "auto"
 
+--- Whether `M.open`/`M.bind_buffer` actually render/trigger anything --
+--- `ui.setup({ menu = false })`'s target. Decided in
+--- `PLAN-ui-kit-migration.md`: `menu = false` means the menu never RENDERS,
+--- not that it is installed-but-silent -- so only this flag exists; the item
+--- builders (`entry`/`group`/`submenu`/`heading`) are unconditional and
+--- always available, exactly as before. Default `true`: this toggle is for a
+--- host that wants to explicitly opt OUT of behaviour that already works
+--- today, not something to opt into.
+---@type boolean
+local enabled = true
+
+--- Enable or disable the renderer/trigger without touching the data
+--- builders. `bind_buffer`'s own trigger delegates to `M.open` (see its own
+--- doc comment), so gating `open` alone is enough to cover both -- a
+--- disabled menu still runs `get_items()` when `<RightMouse>` fires (cheap,
+--- and matches "data builders are always there"), it just never renders.
+---@param value boolean
+---@return nil
+function M.set_enabled(value)
+  enabled = value
+end
+
+--- Whether the renderer/trigger are currently active. For `:checkhealth` and
+--- tests -- a caller building items has no reason to check this itself.
+---@return boolean
+function M.is_enabled()
+  return enabled
+end
+
 ---@internal
 --- Say once per session that the explicitly requested nvzone/menu isn't
 --- installed and the kit is drawing instead.
@@ -261,6 +290,10 @@ end
 ---@param opts? Ui.ContextMenu.OpenOpts
 ---@return Ui.Kit.Surface|nil
 function M.open(items, opts)
+  if not enabled then
+    return nil
+  end
+
   opts = opts or {}
   local mouse = opts.mouse ~= false
 
