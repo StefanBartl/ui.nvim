@@ -117,8 +117,12 @@ function M.setup(user_opts)
   local theme_config = require("ui.config.theme")
 
   -- 2. Allow user overrides for theme
-  if user_opts.theme then
-    theme_config = vim.tbl_deep_extend("force", theme_config, user_opts.theme)
+  if user_opts.theme ~= nil then
+    if type(user_opts.theme) == "table" then
+      theme_config = vim.tbl_deep_extend("force", theme_config, user_opts.theme)
+    else
+      notify.warn("[ui.config] opts.theme must be a table, got " .. type(user_opts.theme))
+    end
   end
 
   -- 3. Load selected statusline variant (shipped preset, or opts.variant)
@@ -127,9 +131,22 @@ function M.setup(user_opts)
   -- 3b. Tabline: one shipped config, not a variant choice -- deep-merge any
   -- host override over the defaults rather than resolving through a
   -- registry the way statusline names do.
-  local tabline_config = require("ui.config.DEFAULTS").tabline
-  if user_opts.tabline then
-    tabline_config = vim.tbl_deep_extend("force", tabline_config, user_opts.tabline)
+  --
+  -- `vim.deepcopy()` here, not the shared DEFAULTS.tabline table directly:
+  -- a key present in only one of `vim.tbl_deep_extend`'s inputs is shared
+  -- by reference, not copied (documented the hard way in
+  -- `config/statusline/lsp.lua`'s own doc comment) -- without the copy,
+  -- `config.ui.tabline` would be the exact same table object as
+  -- `ui.config.DEFAULTS().tabline`, so any later in-place edit of the
+  -- returned config would permanently corrupt the shipped default for
+  -- every subsequent `M.setup()` call.
+  local tabline_config = vim.deepcopy(require("ui.config.DEFAULTS").tabline)
+  if user_opts.tabline ~= nil then
+    if type(user_opts.tabline) == "table" then
+      tabline_config = vim.tbl_deep_extend("force", tabline_config, user_opts.tabline)
+    else
+      notify.warn("[ui.config] opts.tabline must be a table, got " .. type(user_opts.tabline))
+    end
   end
 
   -- 4. Assemble final config

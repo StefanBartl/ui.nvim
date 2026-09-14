@@ -269,7 +269,13 @@ local function check_modules()
   if vim.fn.exists(":UI") == 2 then
     health.ok(":UI is registered")
   else
-    health.warn(":UI is not registered", { "Call require('ui').setup({ all = true })" })
+    -- info, not warn: same lazy-loading normal-state as the usrcmds entry
+    -- right above (:UI is what its setup() registers) -- nothing has gone
+    -- wrong here, setup() just has not run with usrcmds/all enabled yet.
+    -- The advice is folded into the message, not a second argument:
+    -- vim.health.info() (unlike .warn()/.error()) takes one param only and
+    -- silently drops anything past it.
+    health.info(":UI is not registered (call require('ui').setup({ all = true }))")
   end
 end
 

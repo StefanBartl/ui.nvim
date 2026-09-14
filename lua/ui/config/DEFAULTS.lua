@@ -1,7 +1,7 @@
 ---@module 'ui.config.DEFAULTS'
 --- Everything this plugin ships as a default, in one place (NEW-07).
 ---
---- Two groups, and they are read at different times, which is why they are
+--- Three groups, and they are read at different times, which is why they are
 --- named apart rather than merged into one flat table:
 ---
 ---   * `theme` — transparency default and the pair `:UI toggle` swaps

@@ -226,6 +226,34 @@ describe("bug: close_buffer's floating-window check used window 0, not bufnr's w
   end)
 end)
 
+describe("bug: config.ui.tabline shared its identity with DEFAULTS.tabline", function()
+  -- Without a `tabline` override, `tabline_config` used to be exactly
+  -- `require("ui.config.DEFAULTS").tabline` (the same table object), and
+  -- `vim.tbl_deep_extend` only copies a key present in more than one input
+  -- table -- a key present in only one, like `tabline` here, is carried by
+  -- reference. The exact same reference-sharing detail already corrupted a
+  -- config once before this plugin's history (see
+  -- config/statusline/lsp.lua's own doc comment on that incident) -- any
+  -- later in-place edit of the returned config's `.ui.tabline` would have
+  -- permanently mutated the shipped default for every subsequent setup().
+  local cfg = require("ui.config")
+
+  it("returns a tabline table that is not the same object as DEFAULTS.tabline", function()
+    local assembled = cfg.setup()
+    local defaults_tabline = require("ui.config.DEFAULTS").tabline
+    assert.is_not.equal(defaults_tabline, assembled.ui.tabline)
+  end)
+
+  it("mutating the assembled tabline config does not leak into DEFAULTS", function()
+    local assembled = cfg.setup()
+    local before = vim.deepcopy(require("ui.config.DEFAULTS").tabline)
+
+    assembled.ui.tabline.bufwidth = 999999
+
+    assert.same(before, require("ui.config.DEFAULTS").tabline)
+  end)
+end)
+
 describe("bug: themes.default T.mode() drew its own separator glyph twice", function()
   -- One `St_<Mode>ModeSep` group already carries the sep_r glyph AND fades
   -- into ST_EmptySpace's background -- a second bare sep_r right after it
