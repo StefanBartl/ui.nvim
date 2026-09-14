@@ -83,6 +83,7 @@ modules = {
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
 | `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 Alias-Vorschläge für diese Datei offen"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
+| `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
@@ -141,6 +142,15 @@ kept as-is here: an always-visible countdown for a case with a six-week
 budget is noise, not signal. Once visible, it is two-stage rather than one
 flat color: yellow (`%#DiagnosticWarn#`) while urgent but not yet overdue,
 red (`%#DiagnosticError#`, marker `SLA!`) once the deadline has passed.
+
+`since_last_save` renders nothing while the buffer is unmodified (right
+after a save, or before the first edit) and shows a `● <duration>` once it
+is — muted (`Comment`) at first, `DiagnosticWarn` past
+`opts.warn_after_seconds` (default 60), `DiagnosticError` past
+`opts.critical_after_seconds` (default 300) — softer than a plain `[+]`
+flag that never distinguishes "just typed a character" from "forgot to
+save for twenty minutes". The clock resets the moment the buffer is saved,
+not merely capped or hidden.
 
 `idle_clock` is built on `ui.statusline.utils.idle`, a small reusable
 primitive (`is_idle()` / `wrap(segment_fn)`) for any segment that should
