@@ -29,11 +29,18 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 
 ## Around it
 
-> **[casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim)** and
-> **[filetree.nvim](https://github.com/StefanBartl/filetree.nvim)** — each
+> **[casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim)**,
+> **[filetree.nvim](https://github.com/StefanBartl/filetree.nvim)**,
+> **[github_stats.nvim](https://github.com/StefanBartl/github_stats.nvim)**,
+> **[runtime-analysis.nvim](https://github.com/StefanBartl/runtime-analysis.nvim)**,
+> **[recommender.nvim](https://github.com/StefanBartl/recommender.nvim)**,
+> **[sessions.nvim](https://github.com/StefanBartl/sessions.nvim)** and
+> **[sandbox.nvim](https://github.com/StefanBartl/sandbox.nvim)** — each
 > contributes one optional statusline segment (a case-info badge, a cwd-mode
-> badge); neither is a dependency, and the segment is simply absent without
-> them.
+> badge, a weekly-views badge, a health ampel, an alias-suggestion count, the
+> active session name, an ambient container summary); none is a dependency,
+> and the segment is simply absent without it. The full list, with the exact
+> wiring snippet for each, is [docs/modules.md](docs/modules.md).
 >
 > **[my.nvim](https://github.com/StefanBartl/my.nvim)** — the winbar's actual content owner. `ui.winbar.set()` is the
 > frame's scheduled, window-validity-checked write; my.nvim's breadcrumbs
@@ -43,6 +50,16 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 > All of the above are soft: without them everything else works unchanged.
 > [lib.nvim](https://github.com/StefanBartl/lib.nvim) is the one real
 > dependency — see [Requirements](docs/requirements.md).
+>
+> The traffic also runs the other way, at far greater scale: `ui.kit` (float
+> pickers, input, confirm, menu, toast, viewer, ...) and `ui.contextmenu` are
+> the shared UI toolkit roughly twenty sibling plugins build their prompts,
+> confirmations and right-click menus on top of — every one of them through a
+> `pcall`, so ui.nvim stays a soft dependency on their side too. `ui.kit` and
+> `ui.contextmenu` are documented in [modules.md](docs/modules.md)'s
+> "Building your own module" pointers and in their own module headers under
+> [`lua/ui/kit/`](lua/ui/kit/) and
+> [`lua/ui/contextmenu/`](lua/ui/contextmenu/).
 
 ---
 

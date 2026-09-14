@@ -84,6 +84,8 @@ modules = {
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
 | `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 Alias-Vorschläge für diese Datei offen"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
+| `session_status` | sessions.nvim's active session name, with a dirty marker (` *`) when the window/buffer layout changed since the last save or load | sessions.nvim | `ui.statusline.modules.session_status` |
+| `sandbox_ambient` | sandbox.nvim's ambient container summary, e.g. `"docker (2/5)"` | sandbox.nvim | `ui.statusline.modules.sandbox_ambient` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
@@ -162,6 +164,16 @@ Sekunden Inaktivität" names a mini git log or extra breadcrumb room as
 other possible payloads; `idle_clock` is only the first (its own
 suggested "Uhrzeit"), and a future one can reuse `ui.statusline.utils.idle`
 without its own `CursorHold` wiring.
+
+`session_status` and `sandbox_ambient` are thin requires, not
+reimplementations: both sessions.nvim and sandbox.nvim already ship a
+ready-made, statusline-plugin-agnostic component
+(`sessions.statusline.component()`, `sandbox.statusline.status()`) that is
+cached/rate-limited on their own side and documented safe to call on every
+redraw, so this module is exactly the `pcall(require, ...)` wrapper needed to
+drop either into an `order` list the same way as any other soft-dependency
+module here — no separate caching, debouncing or error handling happens on
+this side.
 
 `recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
 one its `analyzer` config option already selects — `regex` by default) with
