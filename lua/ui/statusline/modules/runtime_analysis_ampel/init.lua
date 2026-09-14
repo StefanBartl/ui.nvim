@@ -34,6 +34,16 @@ local OK_GLYPH = " \xF0\x9F\x9F\xA2 "
 --- langsam" for today's ampel state.
 local SLOW_MEAN_MS = 50
 
+--- `entries_from_disk` below (namespace with no live telemetry instance) is
+--- a real disk read (`telemetry.load`) with no cache of its own, unlike the
+--- in-memory `inst.report()` branch -- and the statusline redraws on nearly
+--- every event, so without a TTL this would shell out to disk on every
+--- cursor move for each such namespace. Short enough to stay "right now"
+--- per this module's own doc comment, long enough to absorb a redraw burst.
+local DISK_TTL_SECONDS = 5
+---@type table<string, { entries: Ui.Statusline.RuntimeAnalysisAmpel.Entry[], expires_at: integer }>
+local disk_cache = {}
+
 ---@class Ui.Statusline.RuntimeAnalysisAmpel.Entry
 ---@field errors integer
 ---@field mean_ms number|nil
@@ -60,8 +70,15 @@ end
 ---@param today string
 ---@return Ui.Statusline.RuntimeAnalysisAmpel.Entry[]
 local function entries_from_disk(telemetry, namespace, today)
+  local cached = disk_cache[namespace]
+  local now = os.time()
+  if cached and cached.expires_at > now then
+    return cached.entries
+  end
+
   local data = telemetry.load(namespace)
   if not data then
+    disk_cache[namespace] = { entries = {}, expires_at = now + DISK_TTL_SECONDS }
     return {}
   end
 
@@ -77,6 +94,7 @@ local function entries_from_disk(telemetry, namespace, today)
       entries[#entries + 1] = { errors = stats.errors or 0, mean_ms = mean_ms }
     end
   end
+  disk_cache[namespace] = { entries = entries, expires_at = now + DISK_TTL_SECONDS }
   return entries
 end
 

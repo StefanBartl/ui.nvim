@@ -6,6 +6,8 @@
 --- anderen, aber genau deshalb charmant für ein privates Setup") -- empty
 --- everywhere else, including when github_stats.nvim is not installed.
 
+local primitives = require("ui.statusline.utils.primitives")
+
 local dir_to_slug = require("lib.lua.memo.lru").new(64)
 
 -- github_stats.nvim already memoizes the JSON read behind a query
@@ -80,7 +82,7 @@ return function()
     return ""
   end
 
-  local buf_path = vim.api.nvim_buf_get_name(0)
+  local buf_path = vim.api.nvim_buf_get_name(primitives.stbufnr())
   if buf_path == "" then
     return ""
   end

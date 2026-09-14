@@ -19,6 +19,8 @@
 --- hour straight. `SLA_REFRESH_SECONDS` bounds how stale it can get without
 --- recomputing (meta read + a stream reparse) on every single redraw.
 
+local primitives = require("ui.statusline.utils.primitives")
+
 local uv = vim.uv or vim.loop
 
 local SLA_REFRESH_SECONDS = 60
@@ -134,7 +136,7 @@ local function compute(entry)
 end
 
 return function()
-  local bufname = vim.api.nvim_buf_get_name(0)
+  local bufname = vim.api.nvim_buf_get_name(primitives.stbufnr())
   local bucket = math.floor(os.time() / SLA_REFRESH_SECONDS)
   if bufname == cached_bufname and bucket == cached_bucket then
     return cached_text

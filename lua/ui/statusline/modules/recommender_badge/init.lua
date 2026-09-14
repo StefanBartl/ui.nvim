@@ -16,10 +16,18 @@
 --- `nvim_buf_get_changedtick` -- re-running the analyzer on every statusline
 --- redraw would rescan the whole buffer for no reason between edits.
 
+local Autocmd = require("lib.nvim.bindings.autocmd")
 local primitives = require("ui.statusline.utils.primitives")
 
 ---@type table<integer, { tick: integer, count: integer }>
 local cache = {}
+
+Autocmd.create({ "BufDelete", "BufWipeout" }, function(args)
+  cache[args.buf] = nil
+end, {
+  group = Autocmd.group("UiStatuslineRecommenderBadge", true),
+  desc = "ui.statusline: forget a deleted buffer's recommender_badge cache",
+})
 
 ---@param buf integer
 ---@return integer|nil # nil on any error (unknown analyzer, soft dep gone mid-session, ...)
