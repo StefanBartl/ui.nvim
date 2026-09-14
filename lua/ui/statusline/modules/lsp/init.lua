@@ -51,6 +51,19 @@ end
 
 local SEP_HEX = "f0058"
 
+-- SEP_HEX never changes at runtime, so resolve its glyph and displayable-ness
+-- once here instead of re-decoding + re-measuring it (via a fresh closure) on
+-- every single breadcrumb render.
+local SEP_GLYPH = require("lib.lua.strings.convert.hex_to_string")(SEP_HEX)
+local SEP_GLYPH_USABLE = SEP_GLYPH ~= "" and vim.fn.strdisplaywidth(SEP_GLYPH) == 1
+
+---@return string
+local function breadcrumb_sep()
+  return " "
+    .. (SEP_GLYPH_USABLE and SEP_GLYPH or ((vim.o.columns >= 100) and "⟶" or "›"))
+    .. " "
+end
+
 ---@return string
 function M.render_breadcrumbs_lspfirst()
   ensure_deps()
@@ -60,16 +73,7 @@ function M.render_breadcrumbs_lspfirst()
   local ctx = doc_symbols.symbol_context_smart()
   local icon = devicons.file_icon_segment_lsp()
 
-  local cp = require("lib.lua.strings.convert.hex_to_string")
-  local sep = (function()
-    return (
-      " "
-      .. (cp(SEP_HEX) ~= "" and vim.fn.strdisplaywidth(cp(SEP_HEX)) == 1 and cp(SEP_HEX) or ((vim.o.columns >= 100) and "⟶" or "›"))
-      .. " "
-    )
-  end)()
-
-  local line = formatters.compact_breadcrumb_line(rel, ctx, sep, nil)
+  local line = formatters.compact_breadcrumb_line(rel, ctx, breadcrumb_sep(), nil)
   line = formatters.stl_escape(line)
   return icon .. " " .. line .. "%*"
 end
@@ -83,16 +87,7 @@ function M.render_breadcrumbs_inherit_lspfirst(band_group)
   local ctx = doc_symbols.symbol_context_smart()
   local icon = devicons.file_icon_segment_inherit(band_group)
 
-  local cp = require("lib.lua.strings.convert.hex_to_string")
-  local sep = (function()
-    return (
-      " "
-      .. (cp(SEP_HEX) ~= "" and vim.fn.strdisplaywidth(cp(SEP_HEX)) == 1 and cp(SEP_HEX) or ((vim.o.columns >= 100) and "⟶" or "›"))
-      .. " "
-    )
-  end)()
-
-  local line = formatters.compact_breadcrumb_line(rel, ctx, sep, nil)
+  local line = formatters.compact_breadcrumb_line(rel, ctx, breadcrumb_sep(), nil)
   line = formatters.stl_escape(line)
   return icon .. " " .. line
 end

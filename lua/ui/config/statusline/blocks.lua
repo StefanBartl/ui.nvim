@@ -20,7 +20,15 @@ local SEPARATOR_STYLE = "arrow"
 -- Gen block helper (mirrors NvChad's own nvchad/stl/minimal.lua)
 -- ============================================================================
 
+-- SEPARATOR_STYLE never changes at runtime, so the closure below only ever
+-- needs building once, not on every "mode"/"cursor" redraw.
+local cached_gen_block
+
 local function get_gen_block()
+  if cached_gen_block then
+    return cached_gen_block
+  end
+
   local utils = require("ui.statusline.utils.primitives")
 
   -- gen_block's own left/right frame only reads as intended with "round" or
@@ -40,7 +48,7 @@ local function get_gen_block()
   ---@param iconHl_group string
   ---@param txt_hl_group string
   ---@return string
-  return function(icon, txt, sep_l_hlgroup, iconHl_group, txt_hl_group)
+  cached_gen_block = function(icon, txt, sep_l_hlgroup, iconHl_group, txt_hl_group)
     return sep_l_hlgroup
       .. sep_l
       .. iconHl_group
@@ -51,6 +59,7 @@ local function get_gen_block()
       .. txt
       .. sep_r
   end
+  return cached_gen_block
 end
 
 return {

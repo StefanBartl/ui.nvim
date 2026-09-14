@@ -3,6 +3,8 @@
 
 local M = {}
 
+local PCT_BARS = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" }
+
 --- Escape "%" for statusline so it is treated as a literal percent sign.
 --- @param s string
 --- @return string
@@ -24,15 +26,14 @@ function M.pct_bar(pct)
   elseif pct > 100 then
     pct = 100
   end
-  local bars = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" }
-  local step = 100 / #bars
+  local step = 100 / #PCT_BARS
   local idx = math.floor(pct / step) + 1
   if idx < 1 then
     idx = 1
-  elseif idx > #bars then
-    idx = #bars
+  elseif idx > #PCT_BARS then
+    idx = #PCT_BARS
   end
-  return bars[idx]
+  return PCT_BARS[idx]
 end
 
 --- Build a compact progress token like "  37% ▅ " (escaped for statusline).
