@@ -166,6 +166,22 @@ return {
     used_by = {},
   },
   {
+    key = "session_status",
+    summary = "sessions.nvim's active session name, with a dirty marker when the layout changed since the last save/load.",
+    requires = "sessions.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.session_status",
+    used_by = {},
+  },
+  {
+    key = "sandbox_ambient",
+    summary = 'sandbox.nvim\'s ambient container summary, e.g. "docker (2/5)".',
+    requires = "sandbox.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.sandbox_ambient",
+    used_by = {},
+  },
+  {
     key = "since_last_save",
     summary = "Duration since the buffer became modified, escalating muted -> DiagnosticWarn -> DiagnosticError the longer it sits unsaved.",
     builtin = false,
