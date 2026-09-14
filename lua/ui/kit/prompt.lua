@@ -1,0 +1,69 @@
+---@module 'ui.kit.prompt'
+--- Prompt component: ask a question and collect an answer, either a yes/no
+--- `confirm` (a list chooser in Phase 2; horizontal buttons arrive in Phase 4)
+--- or free `text` (via the input component).
+
+local select = require("ui.kit.select")
+local input = require("ui.kit.input")
+local confirm = require("ui.kit.confirm")
+
+local M = {}
+
+--- Open a prompt.
+---@param opts table  # { question, answer_type = "confirm"|"text", choices?, default?, theme?, on_answer, expand_env? }
+--- `expand_env = true` (only meaningful for `answer_type = "text"`) runs the
+--- answer through `lib.nvim.cross.fs.expand_path` before `on_answer` — see
+--- `ui.kit.input`.
+---@return any
+function M.open(opts)
+  opts = opts or {}
+  local answer_type = opts.answer_type or "confirm"
+  ---@type fun(answer: any)
+  local on_answer = opts.on_answer or function(_) end
+
+  if answer_type == "text" then
+    return input.open({
+      title = opts.question,
+      default = opts.default,
+      theme = opts.theme,
+      expand_env = opts.expand_env,
+      on_submit = function(text)
+        on_answer(text)
+      end,
+      on_cancel = function()
+        on_answer(nil)
+      end,
+    })
+  end
+
+  -- confirm: yes/no (or a custom `choices` list). `layout = "buttons"` uses the
+  -- horizontal button dialog; the default is a vertical list chooser. on_answer
+  -- receives a boolean for the default two-choice case, or the chosen string
+  -- when `choices` is set.
+  if opts.layout == "buttons" then
+    return confirm.open({
+      question = opts.question,
+      choices = opts.choices,
+      theme = opts.theme,
+      on_answer = on_answer,
+    })
+  end
+
+  local custom = type(opts.choices) == "table" and #opts.choices > 0
+  local choices = custom and opts.choices or { "Yes", "No" }
+
+  return select.open({
+    title = opts.question,
+    selection = choices,
+    theme = opts.theme,
+    on_select = function(choice, idx)
+      if custom then
+        on_answer(choice)
+      else
+        on_answer(idx == 1) -- Yes == true
+      end
+    end,
+  })
+end
+
+return M

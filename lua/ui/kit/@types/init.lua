@@ -1,0 +1,294 @@
+---@meta
+---@module 'ui.kit.@types'
+
+--- Semantic highlight groups of a theme. Each is either a highlight-group name
+--- to link to (string) or an explicit highlight spec (Lib.Highlight.Opts).
+---@class Ui.Kit.ThemeHighlights
+---@field normal    string|Lib.Highlight.Opts # body            (default: link NormalFloat)
+---@field border    string|Lib.Highlight.Opts # border          (default: link FloatBorder)
+---@field title     string|Lib.Highlight.Opts # title           (default: link FloatTitle)
+---@field selection string|Lib.Highlight.Opts # current item    (default: link PmenuSel)
+---@field accent    string|Lib.Highlight.Opts # focused/active  (default: link Special)
+---@field muted     string|Lib.Highlight.Opts # hints/secondary (default: link Comment)
+---@field error     string|Lib.Highlight.Opts # error/destructive (default: link DiagnosticError)
+---@field flash     string|Lib.Highlight.Opts # momentary pick feedback (default: link IncSearch)
+---@field hover     string|Lib.Highlight.Opts # row under the mouse pointer (default: link Visual)
+
+--- A resolved theme: design tokens read by every component.
+---@class Ui.Kit.Theme
+---@field border string|string[]                 # nvim_open_win border
+---@field ascii_border boolean                   # true when the border uses ASCII glyphs
+---@field padding { x: integer, y: integer }
+---@field zindex { base: integer, popup: integer, toast: integer, menu: integer }
+---@field title_pos "left"|"center"|"right"
+---@field dims { min_w: integer, max_w: integer, min_h: integer, max_h: integer }
+---@field hl Ui.Kit.ThemeHighlights
+
+--- A theme argument accepted by surfaces/components: a preset name, a partial
+--- override table (deep-merged over the active default), or nil (active default).
+---@alias Ui.Kit.ThemeArg string|table|nil
+
+--- Options for `kit.surface.open`.
+---@class Ui.Kit.SurfaceOpts
+---@field lines? string[]        # initial content
+---@field theme? Ui.Kit.ThemeArg
+---@field title? string
+---@field title_pos? "left"|"center"|"right"  # overrides the theme
+---@field width? integer
+---@field height? integer
+---@field relative? "editor"|"cursor"|"win"
+---@field win? integer          # anchor window, required when relative = "win"
+---@field anchor? "NW"|"NE"|"SW"|"SE"  # default "NW", except cursor/mouse auto-flips to "SW" near the bottom of the screen
+---@field row? integer
+---@field col? integer
+---@field zindex? integer        # overrides the theme's popup zindex
+---@field enter? boolean         # focus the new window (default true)
+---@field focusable? boolean
+---@field nice_quit? boolean|Lib.Window.NiceQuitOpts  # bind q/<Esc> to close
+---@field filetype? string
+---@field modifiable? boolean
+---@field on_close? fun()        # called once when the window closes (any cause)
+---@field wo? table<string, any>
+---@field bo? table<string, any>
+
+--- Handle returned by `kit.surface.open` — a themed float + lifecycle.
+---@class Ui.Kit.Surface
+---@field winid integer
+---@field bufnr integer
+---@field set_lines fun(self: Ui.Kit.Surface, lines: string[])
+---@field set_title fun(self: Ui.Kit.Surface, title: string|nil)
+---@field focus fun(self: Ui.Kit.Surface)
+---@field on_close fun(self: Ui.Kit.Surface, cb: fun())
+---@field is_valid fun(self: Ui.Kit.Surface): boolean
+---@field close fun(self: Ui.Kit.Surface)
+
+--- Options for the `note` component / `kit.popup({ type = "note" })`.
+---@class Ui.Kit.NoteOpts
+---@field title? string
+---@field message string|string[]
+---@field theme? Ui.Kit.ThemeArg
+---@field timeout? integer        # auto-close after N ms (0/nil = stay)
+---@field width? integer
+---@field height? integer
+---@field relative? "editor"|"cursor"|"win"
+
+--- Options for the `viewer` component / `kit.popup({ type = "viewer" })`.
+---@class Ui.Kit.ViewerOpts
+---@field title? string
+---@field lines? string[]                                # alias: message
+---@field message? string|string[]
+---@field theme? Ui.Kit.ThemeArg
+---@field width? integer
+---@field height? integer
+---@field relative? "editor"|"cursor"|"win"
+---@field enter? boolean                                  # focus + allow scrolling (default true)
+---@field filetype? string
+---@field close_on_focus_lost? boolean                    # dismiss on WinLeave/BufLeave (default true)
+
+--- One entry of a `kit.menu`. Two shapes are accepted, because this component
+--- doubles as the native renderer for `ui.contextmenu`: the kit's own
+--- `label`/`action` pair, and nvzone/menu's `name`/`cmd` (with `items` for a
+--- nested fly-out, `rtxt` for a right-aligned hint, `hl` for a row colour).
+--- `{ name = "separator" }` draws an inert divider.
+---@class Ui.Kit.MenuItem
+---@field label? string      # display text (leading/trailing space is trimmed)
+---@field action? fun()      # callback run when the item is picked (alias: cb)
+---@field name? string       # display text, nvzone/menu spelling (or the literal "separator")
+---@field cmd? fun()|string  # leaf action, nvzone/menu spelling: callback or Ex command string
+---@field items? Ui.Kit.MenuItem[]  # nested fly-out (mutually exclusive with cmd/action)
+---@field rtxt? string       # right-aligned hint text (usually a keymap)
+---@field icon? string       # leading glyph, drawn in a column of its own -- NOT part of `label`
+---@field icon_hl? string    # highlight group for the icon (default: `hl`, else KitAccent)
+---@field hl? string         # highlight group for this row's label
+
+--- Options for `kit.menu`.
+---@class Ui.Kit.MenuOpts
+---@field items Ui.Kit.MenuItem[]
+---@field title? string
+---@field theme? Ui.Kit.ThemeArg  # default: the `menu` preset (coloured frame)
+---@field relative? "editor"|"cursor"|"win"|"mouse"
+---@field win? integer       # anchor window; implies relative = "win" when `relative` is unset
+---@field anchor? "NW"|"NE"|"SW"|"SE"  # which corner sits at (row, col); default "NW" (auto-flips to "SW" near the bottom of the screen for cursor/mouse)
+---@field row? integer       # explicit placement, paired with `relative`
+---@field col? integer
+---@field mouse? boolean     # shorthand for `relative = "mouse"` (nvzone/menu's spelling)
+---@field hide_cursor? boolean          # blank the terminal cursor while open; default true
+---@field single_click? boolean         # one left click picks, a click outside dismisses; default true
+---@field close_on_focus_lost? boolean  # dismiss when focus moves elsewhere; default true
+---@field flash_on_select? boolean      # light the picked row before acting; default true
+---@field flash_ms? integer             # how long that lasts; default 100, <= 0 disables
+---@field hover? boolean                # follow the mouse without a click, via 'mousemoveevent' + <MouseMove>; default true
+---@field group_style? "box"|"header"|"plain"  # how a group of items is drawn; default "box"
+---@field submenu_marker? string        # glyph marking a nested entry; default "→"
+
+--- One `kit.select`/`kit.popup({type="select"})` item, for a multi-line entry
+--- with per-column custom highlight groups (worked example:
+--- `docs/EXAMPLES/kit-select.lua`). A plain string item still works
+--- unchanged -- this is opt-in per item.
+---@class Ui.Kit.RichItem
+---@field lines string[]                       # >=1 line; buffer content for this item
+---@field highlights? Ui.Kit.ItemHighlight[]
+---@field anchor? integer                      # 0-based line (within `lines`) the cursor lands on; default 0
+---@field selectable? boolean                  # false = inert decoration (separator, heading): skipped by navigation, <CR> does nothing; default true
+---@field hover_start_col? integer               # byte column (line 0) the hover paint starts at; nil = column 0
+---@field hover_end_col? integer                # byte column (line 0) the hover paint stops at; nil = the whole row width (chooser.lua's paint_hover)
+
+--- One highlight span within a `Ui.Kit.RichItem`.
+---@class Ui.Kit.ItemHighlight
+---@field line integer        # 0-based, within this item's `lines`
+---@field col_start? integer  # default 0
+---@field col_end? integer    # default: end of that line
+---@field hl_group string
+
+--- One field of a `kit.form`. `name` is the key its answer is stored under
+--- in the result table handed to `on_submit`.
+---@class Ui.Kit.FormField
+---@field name string                     # result table key
+---@field label? string                   # alias: prompt
+---@field prompt? string
+---@field default? string
+---@field required? boolean               # <Esc> aborts the whole form instead of skipping this field
+---@field expand_env? boolean             # run the answer through lib.nvim.cross.fs.expand_path
+---@field theme? Ui.Kit.ThemeArg       # overrides opts.theme for this field
+---@field width? integer                  # overrides opts.width for this field
+---@field relative? "editor"|"cursor"|"win"  # overrides opts.relative for this field
+
+--- Options for `kit.form` / `kit.popup({ type = "form" })`.
+---@class Ui.Kit.FormOpts
+---@field fields Ui.Kit.FormField[]
+---@field theme? Ui.Kit.ThemeArg
+---@field width? integer
+---@field relative? "editor"|"cursor"|"win"
+---@field on_submit fun(values: table<string, string>)
+---@field on_cancel? fun()
+
+--- Options for `kit.input` / `kit.popup({ type = "input" })`.
+---@class Ui.Kit.InputOpts
+---@field title? string                   # alias: prompt
+---@field prompt? string
+---@field default? string
+---@field theme? Ui.Kit.ThemeArg
+---@field width? integer
+---@field relative? "editor"|"cursor"|"win"
+---@field expand_env? boolean              # run the submitted line through lib.nvim.cross.fs.expand_path
+---@field secret? boolean                  # mask the input as you type (vim.fn.inputsecret replacement)
+---@field mask? string                     # placeholder char when secret = true (default "*")
+---@field completion? string               # a getcompletion() type ("file", "dir", ...); <Tab> completes (vim.fn.input's completion="file" replacement)
+---@field on_submit? fun(line: string)      # <CR>
+---@field on_cancel? fun()                  # <Esc>
+
+--- Options for `kit.live_input` / `kit.popup({ type = "live_input" })`.
+---@class Ui.Kit.LiveInputOpts
+---@field title? string                   # alias: prompt
+---@field prompt? string
+---@field default? string
+---@field theme? Ui.Kit.ThemeArg
+---@field width? integer
+---@field relative? "editor"|"cursor"|"win"
+---@field row? integer                     # only with relative="editor"; overrides the default centered placement
+---@field col? integer                     # only with relative="editor"; overrides the default centered placement
+---@field debounce? integer                # ms between the last keystroke and on_change (default 80)
+---@field on_change fun(query: string)      # fired debounced as the user types
+---@field on_submit? fun(query: string)     # <CR>
+---@field on_cancel? fun()                  # <Esc>
+
+--- Options for `kit.compare` / `kit.popup({ type = "compare" })`. See
+--- lua/ui/kit/compare.lua's module doc for the SEARCH → MARKED →
+--- COMPARE flow.
+---@class Ui.Kit.CompareOpts
+---@field items any[]                                  # candidates to pick from
+---@field format_item? fun(item: any): any              # results-list line; default tostring
+---@field query? fun(query: string, items: any[]): any[] # custom filter; default: substring match on format_item
+---@field render fun(item: any, surface: Ui.Kit.Surface)  # required: paint `item` into `surface`
+---@field clear? fun()                                  # called once before every state transition
+---@field on_compare? fun(a: any, b: any)                # fires once with BOTH picks, before either render() call for COMPARE — the only point in this contract where a caller's render can know its sibling item, e.g. to scale two images relative to each other instead of each to its own pane
+---@field mark_key? string                               # marks the first pick (default "<M-c>"); <CR> also works
+---@field title? string
+---@field theme? Ui.Kit.ThemeArg
+---@field on_close? fun(a: any, b: any)                  # a/b = the two picks; b is nil on an aborted pick
+
+--- Handle returned by `kit.compare`. `state`/`slots`/`move`/`mark`/`confirm`
+--- mirror `kit.picker`'s handle shape so the state machine is directly
+--- drivable/testable without simulating keypresses.
+---@class Ui.Kit.CompareHandle
+---@field close fun()
+---@field state fun(): "search"|"marked"|"compare"
+---@field slots fun(): table<string, Ui.Kit.Surface>
+---@field move fun(delta: integer)
+---@field mark fun()                                     # SEARCH only: freeze the highlighted item, enter MARKED
+---@field confirm fun()                                  # SEARCH: same as mark; MARKED: pick the 2nd item, enter COMPARE
+
+--- Options for `kit.setup`.
+---@class Ui.Kit.SetupOpts
+---@field default? string                       # active preset name
+---@field presets? table<string, table>         # user-registered presets
+
+--- The `ui.kit` module.
+---@class Ui.Kit
+---@field setup fun(opts?: Ui.Kit.SetupOpts)
+---@field popup fun(opts: table): any            # dispatch on opts.type
+---@field note fun(opts: Ui.Kit.NoteOpts): Ui.Kit.Surface|nil
+---@field viewer fun(opts: Ui.Kit.ViewerOpts): Ui.Kit.Surface|nil  # read-only info panel, closes on focus loss
+---@field toast fun(opts: table): Ui.Kit.Surface|nil    # ephemeral corner message
+---@field input fun(opts: Ui.Kit.InputOpts): Ui.Kit.Surface|nil    # single-line insert-mode prompt (secret = true masks it)
+---@field live_input fun(opts: Ui.Kit.LiveInputOpts): Ui.Kit.Surface|nil  # debounced on_change as you type
+---@field form fun(opts: Ui.Kit.FormOpts): Ui.Kit.Surface|nil  # sequential multi-field prompt
+---@field select fun(opts: table): any                       # native themed list chooser (single/multi)
+---@field prompt fun(opts: table): any                       # ask: confirm (yes/no) or text
+---@field picker fun(opts: table): table|nil                 # interactive picker (prompt drives results)
+---@field confirm fun(opts: table): Ui.Kit.Surface|nil    # button-confirm dialog (horizontal buttons)
+---@field menu fun(opts: table): Ui.Kit.Surface|nil        # cursor-anchored action list (label → callback)
+---@field compare fun(opts: Ui.Kit.CompareOpts): Ui.Kit.CompareHandle|nil  # pick two items, view them side by side
+---@field progress fun(opts: table): table                     # passthrough to lib.nvim.progress.create
+---@field sync fun(open_fn: fun(opts: table): any, opts: table, timeout_ms: integer|nil): any  # vim.wait bridge for on_submit/on_cancel components; full signature (incl. the two boolean returns) is on lua/ui/kit/init.lua's M.sync
+---@field preview fun(): integer, integer                       # open the live theme playground (also :KitPreview)
+---@field surface Ui.Kit.SurfaceModule
+---@field theme Ui.Kit.ThemeModule
+---@field layout Ui.Kit.LayoutModule
+---@field chooser Ui.Kit.ChooserModule  # low-level escape hatch behind kit.select -- see its own doc comment
+
+---@class Ui.Kit.SurfaceModule
+---@field open fun(opts?: Ui.Kit.SurfaceOpts): Ui.Kit.Surface|nil
+
+--- The chooser `kit.select` delegates to; see `kit.chooser`'s doc comment
+--- in lua/ui/kit/init.lua for when to reach for this directly.
+---@class Ui.Kit.ChooserModule
+---@field open fun(opts: table): Ui.Kit.Surface|nil
+---@field set_items fun(opts: table): boolean  # replace the open list in place (same window); false when nothing is open
+---@field close fun()
+---@field is_open fun(): boolean
+---@field move fun(delta: integer)
+---@field toggle fun()
+---@field submit fun()
+---@field current_index fun(): integer|nil
+---@field current_item fun(): any
+
+--- Geometry for one slot (an nvim_open_win config).
+---@class Ui.Kit.Slot
+---@field relative "editor"
+---@field row integer
+---@field col integer
+---@field width integer
+---@field height integer
+
+--- A mounted layout group.
+---@class Ui.Kit.Group
+---@field slots table<string, Ui.Kit.Surface>
+---@field close fun()
+
+---@class Ui.Kit.LayoutModule
+---@field compute fun(spec: table): { slots: table<string, Ui.Kit.Slot>, outer: table }
+---@field mount fun(spec: table, opts?: table): Ui.Kit.Group
+---@field template fun(name: string, opts?: table): Ui.Kit.Group|nil
+---@field templates table<string, { spec: table }>
+
+---@class Ui.Kit.ThemeModule
+---@field resolve fun(theme?: Ui.Kit.ThemeArg): Ui.Kit.Theme
+---@field apply fun(winid: integer, resolved: Ui.Kit.Theme)
+---@field materialize fun(resolved: Ui.Kit.Theme)   # define the Kit* highlight groups (no window)
+---@field border_glyphs fun(resolved: Ui.Kit.Theme): table|nil  # box-drawing glyph set, or nil (borderless)
+---@field setup fun(opts?: Ui.Kit.SetupOpts)
+---@field presets fun(): string[]
+---@field default fun(): string  # name of the currently active default preset
+
+return {}
