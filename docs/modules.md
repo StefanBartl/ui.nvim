@@ -82,6 +82,7 @@ modules = {
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
+| `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 Alias-Vorschläge für diese Datei offen"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
 | `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -121,6 +122,13 @@ mean call time above 50ms) — otherwise green. "Today" is the closest honest
 proxy this data supports: telemetry aggregates calls rather than
 timestamping each one, so this reads `Data.days[today]` for which functions
 were active, not a true "this second" signal.
+
+`recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
+one its `analyzer` config option already selects — `regex` by default) with
+its own `threshold`/`custom_aliases`/`blacklist`, so this always agrees with
+what `:Recommender` itself would report; no separate config to keep in
+sync. The result is cached per buffer by `nvim_buf_get_changedtick`, so
+editing invalidates it but an unrelated redraw does not re-scan the buffer.
 
 `breadcrumbs` needs one extra piece most others don't — a highlight group to
 colour it by mode:
