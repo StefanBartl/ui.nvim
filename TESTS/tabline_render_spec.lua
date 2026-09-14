@@ -596,6 +596,51 @@ describe("ui.tabline.utils click-flash", function()
     assert.is_true(chip:find("BufFlash", 1, true) ~= nil, chip)
   end)
 
+  it("inverts the icon's own fg/bg while flashing, in sync with the text", function()
+    -- Forces a clean icon/highlight-group cache (same invalidation the
+    -- module's own `ColorScheme` handler does): earlier tests in this file
+    -- may have already cached this buffer's icon group against a stale
+    -- `UiTbBufOff` background, which would make the two reads below fail to
+    -- line up even though the actual, current rendering is correct.
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, "flash_icon_test.lua")
+    local saved = vim.t.bufs
+    vim.t.bufs = { buf }
+
+    local resting_chip = utils.style_buf(buf, 1, 21)
+    local resting_group = resting_chip:match("%%#(UiTbIcon_[%w_]-)#")
+
+    utils.flash(buf)
+    local flash_chip = utils.style_buf(buf, 1, 21)
+    local flash_group = flash_chip:match("%%#(UiTbIcon_[%w_]-)#")
+
+    vim.wait(300, function()
+      return not utils.is_flashing(buf)
+    end)
+    vim.t.bufs = saved
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+    assert.is_string(resting_group)
+    assert.is_string(flash_group)
+    assert.is_true(flash_group:find("_Flash", 1, true) ~= nil, flash_group)
+    assert.is_not.same(resting_group, flash_group)
+
+    -- Same two colors as the resting icon group, just swapped -- an actual
+    -- inversion, not a third color introduced for the flash. When no
+    -- devicon color is available at all (e.g. nvim-web-devicons not
+    -- resolving in this test environment), `ensure_icon_hl` falls back to
+    -- `UiTbBufFlash`'s own background for the "icon color" half of the
+    -- swap instead -- accounted for below rather than assumed away.
+    local resting_hl = vim.api.nvim_get_hl(0, { name = resting_group, link = false })
+    local flash_hl = vim.api.nvim_get_hl(0, { name = flash_group, link = false })
+    local expected_flash_bg = resting_hl.fg
+      or vim.api.nvim_get_hl(0, { name = "UiTbBufFlash", link = false }).bg
+    assert.are.same(expected_flash_bg, flash_hl.bg)
+    assert.are.same(resting_hl.bg, flash_hl.fg)
+  end)
+
   it("goto_buf flashes the target and still switches to it", function()
     local original = vim.api.nvim_get_current_buf()
     local buf = vim.api.nvim_create_buf(true, false)

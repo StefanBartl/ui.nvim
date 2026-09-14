@@ -42,12 +42,12 @@ local FLASH_MS = 120
 --- Briefly render `bufnr`'s chip with `UiTbBufFlash` instead of its normal
 --- On/Off group, then revert. Safe to call on any bufnr, current or not.
 ---
---- Only the text/background part of the chip flashes. The devicon keeps its
---- own On/Off-keyed highlight group (`ensure_icon_hl`, cached by `(fg,
---- is_current)`) because no `Flash`-background variant of it is built --
---- adding one is a small, undone change, not a deliberate trade-off, so for
---- ~120ms the icon and the text sit on visibly different backgrounds in the
---- same chip.
+--- The devicon flashes too: `ensure_icon_hl` (cached by `(fg, is_current,
+--- flashing)`) swaps the icon's own fg/bg pair for ~120ms instead of
+--- reusing its normal On/Off-keyed group, so the icon reads as a
+--- momentary color-inverted block in step with the text's own flash
+--- rather than sitting inert on its usual background while the rest of
+--- the chip flashes around it.
 ---@param bufnr integer
 ---@return nil
 function M.flash(bufnr)
@@ -255,16 +255,32 @@ local hl_built = {}
 
 ---@param fg string|nil
 ---@param is_current boolean
+---@param mid_flash boolean # mid-"flash" (see M.flash) -- swaps fg/bg instead of the normal pair
 ---@return string
-local function ensure_icon_hl(fg, is_current)
+local function ensure_icon_hl(fg, is_current, mid_flash)
   local bg_group = is_current and "UiTbBufOn" or "UiTbBufOff"
-  local name = "UiTbIcon_" .. (fg and fg:gsub("#", "") or "none") .. "_" .. bg_group
+  local name = "UiTbIcon_"
+    .. (fg and fg:gsub("#", "") or "none")
+    .. "_"
+    .. bg_group
+    .. (mid_flash and "_Flash" or "")
   if hl_built[name] then
     return name
   end
 
   local bg = read_bg(bg_group)
-  local ok = pcall(api.nvim_set_hl, 0, name, { fg = fg, bg = bg })
+  local hl
+  if mid_flash then
+    -- Inverted: the icon's normal background becomes its foreground, and
+    -- its own devicon color (or, lacking one, the text flash's own
+    -- background) becomes the fill -- the same two colors as the resting
+    -- state, just swapped, so the icon visibly blinks without introducing
+    -- a third color that would clash with an arbitrary devicon hue.
+    hl = { fg = bg, bg = fg or read_bg("UiTbBufFlash") }
+  else
+    hl = { fg = fg, bg = bg }
+  end
+  local ok = pcall(api.nvim_set_hl, 0, name, hl)
   if ok then
     hl_built[name] = true
   end
@@ -361,12 +377,14 @@ function M.style_buf(bufnr, index, width)
   M.register_click_handlers()
 
   local is_current = api.nvim_get_current_buf() == bufnr
-  -- Mid-flash overrides On/Off for the chip's own text/background -- not for
-  -- the icon (see M.flash's own doc comment on why only the text flashes).
-  local hl_suffix = M.is_flashing(bufnr) and "Flash" or (is_current and "On" or "Off")
+  local mid_flash = M.is_flashing(bufnr)
+  -- Mid-flash overrides On/Off for the chip's own text/background (see
+  -- M.flash's own doc comment) -- and for the icon too, via `mid_flash`
+  -- below, so the whole chip blinks together rather than just its text.
+  local hl_suffix = mid_flash and "Flash" or (is_current and "On" or "Off")
 
   local icon, fg = devicon_for_buf(bufnr)
-  local icon_hl = ensure_icon_hl(fg, is_current)
+  local icon_hl = ensure_icon_hl(fg, is_current, mid_flash)
 
   local ok_name, raw_path = pcall(api.nvim_buf_get_name, bufnr)
   local name = (ok_name and raw_path ~= "") and filename(raw_path) or "[No Name]"
