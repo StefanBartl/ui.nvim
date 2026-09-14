@@ -306,9 +306,45 @@ local function gen_unique_name(name, index)
   return nil
 end
 
+-- `close_or_dot`'s rendered width, keyed by `modified` -- only two shapes
+-- ever exist (the close button " 󰅖 " or the plain two-space modified
+-- placeholder), and neither changes with the highlight group name or the
+-- click-id embedded in it, so this is measured at most twice per session,
+-- ever, not per chip per redraw. `nvim_eval_statusline` (not
+-- `strdisplaywidth`) because the real string carries `%#Group#`/
+-- `%N@Func@...%X` tabline directives, which `strdisplaywidth` would count
+-- as literal text instead of the zero-width markup they are.
+---@type table<boolean, integer>
+local close_width_cache = {}
+
+---@param modified boolean
+---@param rendered string
+---@return integer
+local function close_width(modified, rendered)
+  local cached = close_width_cache[modified]
+  if cached then
+    return cached
+  end
+  local w = api.nvim_eval_statusline(rendered, { use_tabline = true }).width
+  close_width_cache[modified] = w
+  return w
+end
+
 --- Render one buffer chip: devicon, (deduplicated, truncated) name, and a
 --- modified-dot or close button depending on focus/modified state. Ported
 --- from `nvchad.tabufline.utils.style_buf`.
+---
+--- The chip's rendered width never exceeds `width`: every fixed-width
+--- piece (icon, the space after it, the close/modified button) is measured
+--- for real rather than assumed, and the name is truncated to whatever is
+--- left over -- the caller (`ui.tabline.modules.buffers`) budgets how many
+--- whole chips fit into the available columns from this same `width`, so a
+--- chip that quietly rendered wider than promised (found live: exactly
+--- this, at narrow widths, from a `math.max(2, ...)` padding floor that
+--- could win over the width budget) overflows the whole tabline by that
+--- much per chip -- invisible until Neovim's own last-resort truncation
+--- (no `%<` marker anywhere in this tabline) chops it off the FRONT of the
+--- first chip, mangling exactly the one buffer a reader looks for first.
 ---@param bufnr integer
 ---@param index integer # this buffer's 1-based position in `vim.t.bufs`
 ---@param width integer # target chip width in columns; `bufwidth` in the tabline config
@@ -330,30 +366,52 @@ function M.style_buf(bufnr, index, width)
     name = gen_unique_name(name, index) or name
   end
 
-  local max_name_len = math.max(1, width - 5)
+  local modified = api.nvim_get_option_value("modified", { buf = bufnr })
+  local close_or_dot = modified and M.txt("  ", "Buf" .. hl_suffix .. "Modified")
+    or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
+
+  -- icon + the single space that always follows it -- `strdisplaywidth`
+  -- (not `#icon`) since devicon glyphs are multi-byte and occasionally
+  -- multi-cell; no `%` directives in a bare glyph, so this is cheaper than
+  -- `nvim_eval_statusline` and just as correct.
+  local icon_part_width = vim.fn.strdisplaywidth(icon) + 1
+  -- At least one space on each side of the icon+name block, always -- an
+  -- icon flush against the chip's own rounded cap (visible once chips get
+  -- this narrow) looks like a rendering glitch, not a deliberately tight
+  -- chip.
+  local min_side_pad = 1
+  local fixed = icon_part_width + close_width(modified, close_or_dot) + min_side_pad * 2
+
+  -- `math.max(0, ...)`, not `math.max(1, ...)`: below `fixed` (icon +
+  -- padding + close/modified button, no name at all), there is no name
+  -- length left to show and forcing one anyway would only add width a
+  -- `width` this tight never asked for. `width < fixed` itself is a
+  -- structurally impossible request (the icon and close button alone
+  -- already cost `fixed`) that this function cannot honor either way --
+  -- `M.buffers()` never sends one in practice, its own `bufwidth` floor
+  -- (`MIN_BUFWIDTH` / `cfg.bufwidth_min`, 12 by default) sits well above
+  -- `fixed`.
+  local max_name_len = math.max(0, width - fixed)
   if #name > max_name_len then
-    name = name:sub(1, math.max(1, max_name_len - 2)) .. ".."
+    if max_name_len <= 2 then
+      -- Not even room for one head character plus "..": the ellipsis
+      -- itself would blow the budget this narrow, so it is dropped rather
+      -- than added on top of a truncated name that no longer fits either.
+      name = name:sub(1, max_name_len)
+    else
+      name = name:sub(1, max_name_len - 2) .. ".."
+    end
   end
 
   -- Escaped after the width/truncation math above, which has to measure the
   -- name as it will actually display -- `%%` is two characters wide in the
   -- string but renders as one literal `%`.
-  --
-  -- `math.max(2, ...)` rather than `math.max(1, ...)`: at `pad == 1`,
-  -- `pad - 1` below is 0 -- no leading space at all, so the icon sits flush
-  -- against the chip's own left edge (visible once chips narrow, e.g. a
-  -- markdown file's icon touching the rounded cap with no gap, unlike an
-  -- icon glyph that happens to carry its own left-bearing). `pad >= 2`
-  -- guarantees at least one space on each side regardless of how narrow the
-  -- chip gets.
-  local pad = math.max(2, math.floor((width - #name - 5) / 2))
-  local body = string.rep(" ", pad - 1)
-    .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(stl_escape(name), "Buf" .. hl_suffix))
-    .. string.rep(" ", pad - 1)
+  local extra = math.max(0, width - fixed - #name)
+  local side_pad = min_side_pad + math.floor(extra / 2)
 
-  local modified = api.nvim_get_option_value("modified", { buf = bufnr })
-  local close_or_dot = modified and M.txt("  ", "Buf" .. hl_suffix .. "Modified")
-    or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
+  local body = string.rep(" ", side_pad)
+    .. ("%#" .. icon_hl .. "#" .. icon .. " " .. M.txt(stl_escape(name), "Buf" .. hl_suffix))
+    .. string.rep(" ", side_pad)
 
   local chip = M.btn(body, nil, "GoToBuf", bufnr) .. close_or_dot
   return M.txt(chip, "Buf" .. hl_suffix)
