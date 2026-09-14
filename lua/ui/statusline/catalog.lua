@@ -87,7 +87,7 @@ return {
   },
   {
     key = "casedesk",
-    summary = "Current case's short info (number, company, reply count) plus an SLA badge.",
+    summary = "Current case's short info (number, company, reply count) plus a yellow/red SLA urgency badge.",
     requires = "casedesk.nvim",
     builtin = false,
     source = "ui.statusline.modules.casedesk",
