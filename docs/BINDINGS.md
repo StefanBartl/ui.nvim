@@ -29,6 +29,7 @@ theme list.
 | `:UI picker` | — | Open a floating theme picker (`lib.nvim.ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
+| `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
@@ -36,10 +37,10 @@ theme list.
 | `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
 | `:UI help` | — | The subcommand list, in a float |
 
-**Completion is two-level:** the first argument completes over the twelve
+**Completion is two-level:** the first argument completes over the thirteen
 subcommands, the argument after `theme`/`variant`/`tabline-style` over the
 theme list / the variant registry / the tabline-style registry
-respectively. The theme list is `vim.fn.getcompletion("", "color")` at the
+respectively (`screenkey`/`transparency` complete `on`/`off` the same way). The theme list is `vim.fn.getcompletion("", "color")` at the
 moment `<Tab>` is pressed, so a colorscheme installed mid-session is
 offered; the variant and tabline-style lists are
 `ui.config.variants.list()`/`ui.tabline.styles.list()`, so an entry a host
@@ -156,6 +157,7 @@ the segment that owns the data.
 | A dedicated statusline-variant keymap | `:UI variant {name}` (see Commands above) covers it — a command with completion over the registry is more discoverable than a keymap would be for something with more than two states |
 | A `bindings/autocmds.lua` | There is no plugin-level autocmd to put in it. Every one of the ten above belongs to the cache it clears — a central registrar would be a second source of truth for the same state. This is a documented deviation from `NEW-08`, not an oversight |
 | Individual statusline segments | They are on or off by which variant is assembled, not by a key. Four toggles for four segments would be more surface than the choice deserves |
+| A default keymap for `:UI screenkey` | It's a demo/recording aid, not something reached for during normal editing -- a keymap would occupy a slot for a toggle nobody hits by muscle memory. `:UI screenkey` is discoverable via `:UI help`/`<Tab>` like every other one-off subcommand |
 
 **The statusline variant used to be listed here as a setup()-time-only
 choice** ("switching it at runtime would mean re-assembling what NvChad read
