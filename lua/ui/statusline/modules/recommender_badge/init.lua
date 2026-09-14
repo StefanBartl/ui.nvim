@@ -32,8 +32,15 @@ end, {
 ---@param buf integer
 ---@return integer|nil # nil on any error (unknown analyzer, soft dep gone mid-session, ...)
 local function suggestion_count(buf)
-  local ok_cfg, config = pcall(require, "recommender.config")
-  if not ok_cfg then
+  -- `package.loaded`, not `require`: this runs from the render function on
+  -- every statusline redraw, including the very first one -- a `require`
+  -- here would pull recommender.nvim in before it gets to load on its own
+  -- lazy trigger (see the identical fix/comment in filetree_cwd_mode's
+  -- render function). The analyzer submodule below is only reached once
+  -- `recommender.config` is confirmed already loaded, so that `require` is
+  -- not a fresh eager-load of the plugin itself.
+  local config = package.loaded["recommender.config"]
+  if type(config) ~= "table" then
     return nil
   end
 

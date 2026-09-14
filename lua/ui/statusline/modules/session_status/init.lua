@@ -12,8 +12,12 @@
 
 ---@return string
 return function()
-  local ok, statusline = pcall(require, "sessions.statusline")
-  if not ok then
+  -- `package.loaded`, not `require`: this render function runs on the very
+  -- first statusline redraw too -- a `require` here would pull
+  -- sessions.nvim in before it gets to load on its own lazy trigger (see
+  -- the identical fix/comment in filetree_cwd_mode's render function).
+  local statusline = package.loaded["sessions.statusline"]
+  if type(statusline) ~= "table" then
     return ""
   end
   return statusline.component() or ""

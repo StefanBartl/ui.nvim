@@ -144,8 +144,16 @@ return function()
   cached_bufname = bufname
   cached_bucket = bucket
 
-  local ok_resolve, resolve = pcall(require, "casedesk.resolve")
-  if not ok_resolve then
+  -- `package.loaded`, not `require`: this is the very first gate this
+  -- render function hits, reached on the first statusline redraw too -- a
+  -- `require` here would pull casedesk.nvim in before it gets to load on
+  -- its own lazy trigger (see the identical fix/comment in
+  -- filetree_cwd_mode's render function). Everything below this point only
+  -- runs once casedesk is confirmed already loaded, so those `require`s are
+  -- not a fresh eager-load of the plugin itself (same reasoning `compute`'s
+  -- own comment already gives for `casedesk.meta`).
+  local resolve = package.loaded["casedesk.resolve"]
+  if type(resolve) ~= "table" then
     cached_text = ""
     return cached_text
   end
