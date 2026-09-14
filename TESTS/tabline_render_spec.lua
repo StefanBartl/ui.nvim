@@ -162,31 +162,51 @@ describe("ui.tabline.modules", function()
     -- overflow loop, once per buffer in vim.t.bufs -- pure waste, since
     -- nothing it measures (tree_offset/tabs/btns) depends on how many chips
     -- the loop has produced so far. Spying on nvim_eval_statusline (what
-    -- available_space calls) proves it now runs at most once regardless of
-    -- how many buffers are open.
-    local calls = 0
-    local original = vim.api.nvim_eval_statusline
-    vim.api.nvim_eval_statusline = function(...)
-      calls = calls + 1
-      return original(...)
+    -- available_space calls) proves the call count does not scale with the
+    -- number of open buffers, by comparing two buffer counts rather than
+    -- asserting a fixed number of calls -- style_buf()'s own close_width()
+    -- helper also calls nvim_eval_statusline, at most once per (modified,
+    -- not-modified) state for the whole process lifetime (cached after
+    -- that), so an absolute cap here would be coupled to whether some
+    -- earlier test already warmed that cache.
+    ---@param n integer
+    ---@return integer
+    local function eval_statusline_calls_for(n)
+      local calls = 0
+      local original = vim.api.nvim_eval_statusline
+      vim.api.nvim_eval_statusline = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+
+      local saved = vim.t.bufs
+      local bufs = {}
+      for _ = 1, n do
+        bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
+      end
+      vim.t.bufs = bufs
+
+      modules.buffers(default_cfg)
+
+      vim.api.nvim_eval_statusline = original
+      for _, b in ipairs(bufs) do
+        pcall(vim.api.nvim_buf_delete, b, { force = true })
+      end
+      vim.t.bufs = saved
+
+      return calls
     end
 
-    local saved = vim.t.bufs
-    local bufs = {}
-    for _ = 1, 5 do
-      bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
-    end
-    vim.t.bufs = bufs
+    local calls_5 = eval_statusline_calls_for(5)
+    local calls_10 = eval_statusline_calls_for(10)
 
-    modules.buffers(default_cfg)
-
-    vim.api.nvim_eval_statusline = original
-    for _, b in ipairs(bufs) do
-      pcall(vim.api.nvim_buf_delete, b, { force = true })
-    end
-    vim.t.bufs = saved
-
-    assert.is_true(calls <= 1, ("expected at most 1 call, got %d"):format(calls))
+    assert.is_true(
+      calls_10 <= calls_5,
+      ("expected the call count not to grow with buffer count, got %d for 5 buffers and %d for 10"):format(
+        calls_5,
+        calls_10
+      )
+    )
   end)
 
   --- Regression for the "only ~7 of 10 open buffers ever show, with visible
@@ -318,6 +338,54 @@ describe("ui.tabline.utils.style_buf", function()
     -- group opens -- independent of nvim-web-devicons being present, and of
     -- which glyph it picks.
     assert.is_true(chip:find("%s%%#UiTbIcon_") ~= nil, chip)
+  end)
+
+  --- Regression, found live: the first tab's icon and the head of its
+  --- filename got chopped off on a real host with several buffers open.
+  --- Root cause was here, not in Neovim's own tabline rendering --
+  --- `style_buf`'s padding used to fall back to a `math.max(2, ...)` floor
+  --- whenever the natural, width-fitting pad would have been smaller,
+  --- silently rendering a couple of columns WIDER than the `width` its own
+  --- caller (`ui.tabline.modules.buffers`) had already budgeted for it.
+  --- `M.buffers()`'s own overflow accounting trusts `style_buf`'s return
+  --- value to actually BE `width` columns wide -- narrow chips (many
+  --- buffers open, `bufwidth` near `MIN_BUFWIDTH`) silently overran that
+  --- budget by a column or two each, and the accumulated overflow across
+  --- every chip was what Neovim's own last-resort tabline truncation (no
+  --- `%<` marker anywhere in this tabline) then chopped off the FRONT of
+  --- the whole line -- exactly the first, leftmost chip's icon and head.
+  it("never renders wider than the requested width, even at the narrowest bufwidth", function()
+    local names = { "ROADMAP.md", "x.lua", "a-very-long-filename-indeed.lua", "no_ext" }
+    local widths = { 12, 13, 14, 15, 16, 18, 20, 24, 30 } -- MIN_BUFWIDTH..MAX_BUFWIDTH and a bit past
+
+    for _, name in ipairs(names) do
+      for _, modified in ipairs({ false, true }) do
+        local buf = vim.api.nvim_create_buf(true, false)
+        vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. "_" .. name)
+        if modified then
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "x" })
+        end
+        local saved = vim.t.bufs
+        vim.t.bufs = { buf }
+
+        for _, w in ipairs(widths) do
+          local chip = utils.style_buf(buf, 1, w)
+          local measured = vim.api.nvim_eval_statusline(chip, { use_tabline = true }).width
+          assert.is_true(
+            measured <= w,
+            ("%q modified=%s width=%d rendered %d columns -- over budget"):format(
+              name,
+              tostring(modified),
+              w,
+              measured
+            )
+          )
+        end
+
+        vim.t.bufs = saved
+        pcall(vim.api.nvim_buf_delete, buf, { force = true })
+      end
+    end
   end)
 end)
 
