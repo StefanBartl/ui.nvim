@@ -153,6 +153,14 @@ return {
     used_by = {},
   },
   {
+    key = "recommender_badge",
+    summary = 'Count of recommender.nvim alias suggestions open for the current buffer, e.g. "3 Alias-Vorschläge für diese Datei offen".',
+    requires = "recommender.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.recommender_badge",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
