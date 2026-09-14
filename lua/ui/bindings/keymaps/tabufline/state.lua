@@ -189,11 +189,17 @@ function M.close_buffer(bufnr)
   local idx = buf_index(bufnr)
   local bufhidden = vim.bo[bufnr].bufhidden
 
-  if api.nvim_win_get_config(0).zindex then
+  -- The window actually showing `bufnr`, not window 0 -- an explicit-bufnr
+  -- caller (close_all_bufs, close_n_buffers) can run with the current
+  -- window pointed at something else entirely (an LSP hover float, the
+  -- theme picker, ...), and checking window 0's zindex there would wipe
+  -- whatever float happens to be focused instead of `bufnr` itself.
+  local bufwin = vim.fn.bufwinid(bufnr)
+  if bufwin ~= -1 and api.nvim_win_get_config(bufwin).zindex then
     -- A floating window's buffer: force-close the window itself. Not a
     -- winfixbuf case -- destroying the window outright, not switching what
     -- buffer it shows.
-    vim.cmd("bw")
+    pcall(api.nvim_win_close, bufwin, true)
     return
   end
 
@@ -254,8 +260,13 @@ function M.close_all_bufs(include_cur_buf)
     end
   end
 
+  -- pcall'd per buffer, no notify here -- this module stays low-level (see
+  -- its own doc comment); the deferred caller (ui.tabline.utils) already
+  -- notifies on the whole batch failing. Without this, one already-invalid
+  -- or otherwise failing bufnr would abort the rest of a "close all" batch,
+  -- leaving everything after it in vim.t.bufs open.
   for _, bufnr in ipairs(bufs) do
-    M.close_buffer(bufnr)
+    pcall(M.close_buffer, bufnr)
   end
 end
 
