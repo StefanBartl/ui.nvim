@@ -1,6 +1,6 @@
 ---@module 'ui.bindings.usrcmds.themes.picker'
 --- Visual theme picker: every colorscheme `ui.theme.list_themes()` knows
---- about, in a `lib.nvim.ui.kit` floating list. The theme under the cursor
+--- about, in a `ui.kit` floating list. The theme under the cursor
 --- applies live as the list is navigated -- j/k, arrows, mouse wheel, all of
 --- it fires `CursorMoved`, which is all this needs to hook. Confirming
 --- (`<CR>`) keeps the highlighted theme; cancelling (`<Esc>`, `q`, a click
@@ -12,7 +12,7 @@
 --- <Tab-complete>` could never do -- is the entire point of this picker.
 
 local theme = require("ui.bindings.usrcmds.themes")
-local select = require("lib.nvim.ui.kit.select")
+local select = require("ui.kit.select")
 local autocmd = require("lib.nvim.bindings.autocmd")
 local debounce = require("lib.nvim.debounce")
 

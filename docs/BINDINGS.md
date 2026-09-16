@@ -26,7 +26,7 @@ theme list.
 | --- | --- | --- |
 | `:UI theme {name}` | completes over every colorscheme Neovim can see | `:colorscheme {name}` |
 | `:UI themes` | — | List the available themes, marking the active one |
-| `:UI picker` | — | Open a floating theme picker (`lib.nvim.ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
+| `:UI picker` | — | Open a floating theme picker (`ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs |
