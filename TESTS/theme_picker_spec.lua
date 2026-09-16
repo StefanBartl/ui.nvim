@@ -2,7 +2,7 @@
 ---@diagnostic disable: need-check-nil, undefined-field, discard-returns
 
 --- `ui.bindings.usrcmds.themes.picker` -- the visual theme picker added on
---- top of `:UI theme`/`:UI toggle`. Drives `lib.nvim.ui.kit.select`'s real
+--- top of `:UI theme`/`:UI toggle`. Drives `ui.kit.select`'s real
 --- floating window headless: opens the picker, moves the cursor with the
 --- actual Neovim API (firing a real `CursorMoved`, not a stubbed callback),
 --- and asserts the colorscheme changed live. No NvChad on the runtimepath --
