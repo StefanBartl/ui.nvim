@@ -28,14 +28,23 @@
 --- Skips when lib.nvim is not checked out beside this repo. CI always has
 --- it (`.deps/lib.nvim`, pinned to `ci-verified`), so this runs there.
 
+--- Built with `insert`, not as a literal with a possibly-nil first entry.
+--- `{ vim.env.LIB_NVIM_DIR, a, b }` is `{ nil, a, b }` when that variable
+--- is unset, and `ipairs` stops at the first nil -- so the loop saw no
+--- candidates at all and this whole spec skipped. It skipped in CI for
+--- exactly that reason while passing locally, where the variable is
+--- always set: a guard that is inert precisely where it is needed.
+---@return string|nil
 local function lib_root()
-  local candidates = {
-    vim.env.LIB_NVIM_DIR,
-    vim.fn.getcwd() .. "/.deps/lib.nvim",
-    vim.fs.dirname(vim.fn.getcwd()) .. "/lib.nvim",
-  }
+  local candidates = {}
+  if vim.env.LIB_NVIM_DIR and vim.env.LIB_NVIM_DIR ~= "" then
+    candidates[#candidates + 1] = vim.env.LIB_NVIM_DIR
+  end
+  candidates[#candidates + 1] = vim.fn.getcwd() .. "/.deps/lib.nvim"
+  candidates[#candidates + 1] = vim.fs.dirname(vim.fn.getcwd()) .. "/lib.nvim"
+
   for _, dir in ipairs(candidates) do
-    if dir and vim.fn.isdirectory(dir .. "/lua/lib/nvim/ui/kit") == 1 then
+    if vim.fn.isdirectory(dir .. "/lua/lib/nvim/ui/kit") == 1 then
       return dir
     end
   end
@@ -105,11 +114,18 @@ describe("ui.kit and lib.nvim's frozen copy", function()
   local lib_dir = lib_kit_dir()
 
   it("has lib.nvim available to compare against", function()
+    -- A contributor without a lib.nvim checkout still gets a useful
+    -- suite, so this is not a hard failure -- but CI must never be the
+    -- one skipping, which is what happened when `lib_root` returned nil
+    -- there and nothing said so loudly enough to notice.
     if not lib_dir then
-      -- Not a failure: a contributor without a lib.nvim checkout still
-      -- gets a useful suite. CI pins one, so the assertions below run
-      -- where it matters.
-      print("  (skipped: no lib.nvim checkout found)")
+      print("  (SKIPPED: no lib.nvim checkout -- the drift checks did NOT run)")
+    end
+    if vim.env.CI then
+      assert.is_not_nil(
+        lib_dir,
+        "CI must have lib.nvim at .deps/lib.nvim; the guard cannot skip here"
+      )
     end
     assert.is_true(true)
   end)
