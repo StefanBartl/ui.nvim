@@ -579,7 +579,12 @@ function M.setup()
     dispatcher({ args = "theme " .. opts.args })
   end, {
     nargs = "?",
-    ---@diagnostic disable-next-line: unused-local
+    -- The `unused-local` suppression that used to sit here covered exactly
+    -- one of the eleven `_`-prefixed unused parameters in this file and
+    -- carried no reason for being on that one (LLS-40). The `_` prefix is
+    -- this repo's marker for a parameter kept only for signature parity;
+    -- LuaLS still hints on it, uniformly, and that uniform hint is easier to
+    -- read than one arbitrarily silenced case.
     complete = function(arglead, _cmdline, _cursorpos)
       return filter(arglead, theme.list_themes())
     end,

@@ -27,6 +27,15 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 
 ---
 
+## Contents
+
+- [Around it](#around-it)
+- [Installation](#installation)
+- [Documentation](#documentation)
+- [License](#license)
+
+---
+
 ## Around it
 
 > **[casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim)**,
@@ -60,6 +69,58 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 > "Building your own module" pointers and in their own module headers under
 > [`lua/ui/kit/`](lua/ui/kit/) and
 > [`lua/ui/contextmenu/`](lua/ui/contextmenu/).
+
+---
+
+## Installation
+
+[lazy.nvim](https://github.com/folke/lazy.nvim):
+
+```lua
+{
+  "StefanBartl/ui.nvim",
+  lazy = false,
+  dependencies = { "StefanBartl/lib.nvim" },
+  config = function()
+    require("ui").setup({ all = true })
+  end,
+},
+```
+
+`lazy = false` rather than an event: this plugin owns `vim.o.statusline` and
+`vim.o.tabline`, so deferring it leaves the previous owner's frame on screen
+until the trigger fires.
+
+`setup()` takes no required options — `{ all = true }` turns on the keymaps
+and the `:UI` command, `setup()` with no argument leaves both off and enables
+nothing but the context menu. See
+[Configuration](docs/configuration.md) for the rest, and
+[Requirements](docs/requirements.md) for the one dependency and the optional
+integrations.
+
+With [packer.nvim](https://github.com/wbthomason/packer.nvim):
+
+```lua
+use({
+  "StefanBartl/ui.nvim",
+  requires = { "StefanBartl/lib.nvim" },
+  config = function()
+    require("ui").setup({ all = true })
+  end,
+})
+```
+
+Or with Neovim 0.12's built-in `vim.pack`:
+
+```lua
+vim.pack.add({
+  { src = "https://github.com/StefanBartl/lib.nvim" },
+  { src = "https://github.com/StefanBartl/ui.nvim" },
+})
+require("ui").setup({ all = true })
+```
+
+Then run `:checkhealth ui`.
 
 ---
 

@@ -98,7 +98,7 @@ return require("ui.config").setup()
 | `blocks` | `lsp`'s segments, drawn as gen_block chips |
 
 All four are generic on purpose: none of them assumes a plugin beyond this
-repo's own optional soft dependencies (`nvim-web-devicons`, `neotest`). If
+repo's own optional soft dependencies (`nvim-web-devicons`, `gitsigns.nvim`). If
 your own statusline needs a plugin-specific segment (your own case tracker,
 your own filetree fork, ...), see "Bringing your own variant" below instead
 of trying to fit it into one of these four — that is exactly the distinction

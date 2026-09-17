@@ -172,7 +172,10 @@ end
 
 --- Tab-page buttons: one per tab plus a "new tab" and a "collapse" button --
 --- rendered only when there is more than one tab, same as NvChad's own.
----@param cfg Ui.Tabline.Config
+--- Takes the config to match the `fun(cfg: Ui.Tabline.Config): string`
+--- shape every tabline module has, and ignores it -- tab buttons are not
+--- configurable through `Ui.Tabline.Config`.
+---@param _cfg Ui.Tabline.Config
 ---@return string
 function M.tabs(_cfg)
   local total = vim.fn.tabpagenr("$")
@@ -199,7 +202,8 @@ function M.tabs(_cfg)
 end
 
 --- The two right-aligned buttons: theme toggle, close all buffers.
----@param cfg Ui.Tabline.Config
+--- Same as `M.tabs`: takes the config for signature parity, ignores it.
+---@param _cfg Ui.Tabline.Config
 ---@return string
 function M.btns(_cfg)
   utils.register_click_handlers()
