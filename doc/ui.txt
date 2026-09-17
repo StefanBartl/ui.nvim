@@ -61,7 +61,10 @@ which-key, Treesitter, Telescope, and so on all needed their own separate
 plugin specs in that host once NvChad's own bundle stopped providing them).
 
 Soft, each blanking only its own statusline segment: `nvim-web-devicons`,
-`neotest`, `casedesk.nvim`.
+`gitsigns.nvim`, `casedesk.nvim`, `filetree.nvim`, `github_stats.nvim`,
+`runtime-analysis.nvim`, `recommender.nvim`, `sessions.nvim`, `sandbox.nvim`,
+`lazy.nvim`. `:checkhealth ui` reports each of them separately; the full
+table with links is docs/requirements.md.
 
 ==============================================================================
 3. SETUP                                                        *ui-setup*

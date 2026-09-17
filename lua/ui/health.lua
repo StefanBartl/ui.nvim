@@ -303,12 +303,21 @@ end
 --- kept in sync with `ui.statusline.catalog`'s `requires` field by hand,
 --- since the catalog itself doesn't carry the require path, only the
 --- human-readable plugin name.
+---
+--- That hand-sync had drifted: `gitsigns.nvim` and `casedesk.nvim` were both
+--- declared `requires` in the catalog and both missing here, so two shipped
+--- segments reported nothing at all. The list is a superset of the catalog's
+--- `requires` values, not an exact mirror -- `nvim-web-devicons` (the icon
+--- column, not a segment of its own) and `lazy` (read by `plugin_summary`
+--- without a `requires` entry) have no catalog counterpart to sync against.
 ---@return nil
 local function check_segments()
   health.start("Statusline segments")
 
   for _, entry in ipairs({
     { "nvim-web-devicons", "file type icons; without it the icon column is blank" },
+    { "gitsigns", "branch name + added/changed/removed counts (git, git_clickable)" },
+    { "casedesk.config", "case info + SLA urgency badge (casedesk)" },
     { "filetree", "cwd-mode badge (filetree_cwd_mode)" },
     { "github_stats.config", "weekly view-count badge (github_stats_badge)" },
     {
@@ -318,6 +327,7 @@ local function check_segments()
     { "recommender.config", "alias-suggestion count badge (recommender_badge)" },
     { "sessions.statusline", "active session name + dirty marker (session_status)" },
     { "sandbox.statusline", "ambient container summary (sandbox_ambient)" },
+    { "lazy", "own/external plugin count (plugin_summary)" },
   }) do
     if has(entry[1]) then
       health.ok(("%s -- %s"):format(entry[1], entry[2]))

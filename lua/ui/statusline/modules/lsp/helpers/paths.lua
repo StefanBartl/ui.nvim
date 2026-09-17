@@ -106,9 +106,13 @@ local function find_git_root(path)
   -- Cache key is per-directory, not per-file
   local dir = fn.fnamemodify(path, ":h")
   local cache_key = "git:" .. dir
+  -- `~= nil`, not a truthiness test: the "no root" result below is cached as
+  -- `false`, which a truthiness test reads as a cache miss -- so every file
+  -- outside a git repo re-ran the upward `.git` scan on every redraw, which
+  -- is exactly the case the negative entry exists to avoid.
   local cached = path_cache:get(cache_key)
-  if cached then
-    return cached
+  if cached ~= nil then
+    return cached or nil
   end
 
   local froot = nil

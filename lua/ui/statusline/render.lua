@@ -28,7 +28,7 @@ local M = {}
 --- Base module sets available as an `order` key's fallback, by theme name.
 --- Only `default` exists -- see `ui.statusline.themes.default`'s own doc
 --- comment for why `minimal`/`vscode`/`vscode_colored` are not ported.
----@type table<string, { build: fun(separator_style: any): table<string, fun(): string> }>
+---@type table<string, Ui.Statusline.ThemeModule>
 local THEMES = {
   default = require("ui.statusline.themes.default"),
 }

@@ -89,14 +89,17 @@ load it and make the report a lie.
 
 ## Statusline segments
 
-Seven soft dependencies, each blanking only its own segment when absent:
-`nvim-web-devicons` (file icons), `filetree` (the cwd-mode badge,
+Ten soft dependencies, each blanking only its own segment when absent:
+`nvim-web-devicons` (file icons), `gitsigns` (the branch name and
+added/changed/removed counts, `git`/`git_clickable`), `casedesk.config` (the
+case info and SLA badge, `casedesk`), `filetree` (the cwd-mode badge,
 `filetree_cwd_mode`), `github_stats.config` (the weekly view-count badge,
 `github_stats_badge`), `runtime-analysis.telemetry` (the health ampel,
 `runtime_analysis_ampel`), `recommender.config` (the alias-suggestion count,
 `recommender_badge`), `sessions.statusline` (the active session name,
-`session_status`) and `sandbox.statusline` (the ambient container summary,
-`sandbox_ambient`).
+`session_status`), `sandbox.statusline` (the ambient container summary,
+`sandbox_ambient`) and `lazy` (the own/external plugin count,
+`plugin_summary`).
 
 An `ℹ️ not installed` line here is never a problem — it is the report saying
 which part of the statusline will be empty and why.

@@ -81,6 +81,16 @@
 ---@field responsive? boolean # when true, `order` drops every non-essential key (see ui.statusline.catalog's `essential` field) while the statusline's own window is narrower than `responsive_width`; default false (opt-in)
 ---@field responsive_width? integer # column width below which `responsive` kicks in; default 80
 
+--- One entry of `ui.statusline.render`'s `THEMES` table: a module that builds
+--- a whole module set for one `separator_style`.
+---
+--- A named class rather than the inline `{ build: fun(...): ... }` this used
+--- to be written as: in an inline table type a `fun(): T` return swallows the
+--- comma and everything after it (LLS-11), so the type LuaLS actually saw was
+--- not the one written down.
+---@class Ui.Statusline.ThemeModule
+---@field build fun(separator_style?: string|{left: string, right: string}): table<string, fun(): string>
+
 --- The assembled shape `ui.tabline.render.generate()`/`enable()` consume --
 --- the `ui.tabline` half of what `ui.config.setup()` returns. One shipped
 --- config (`ui.config.tabline`), not a named-preset choice like
