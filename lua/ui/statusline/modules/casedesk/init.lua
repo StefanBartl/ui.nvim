@@ -1,169 +1,31 @@
 ---@module 'ui.statusline.modules.casedesk'
---- Statusline segment: current case's short number + company + how many
---- files sit in its Replies/ folder, plus an SLA badge when a P1/P2 clock
---- is urgent (docs/ROADMAP/casedesk/SLA.md §6C) — empty string whenever the
---- focused buffer isn't inside a known case (ROADMAP.md v7's
---- "Statusline-Badge").
+--- casedesk.nvim's own ready-made statusline component: the current case's
+--- short number, company and reply count, plus an SLA badge when a clock
+--- is urgent (docs/statusline.md in casedesk.nvim).
 ---
---- `casedesk.resolve.sync` is the same buffer -> case lookup
---- `:Case`'s routes use (registry membership, not a marker file), just
---- called for its synchronous half only — no kit.select fallback, a
---- statusline redraw can't prompt.
+--- Renders empty when casedesk.nvim is not installed, and empty again when
+--- the focused buffer is not inside a known case -- that plugin's own
+--- `status()` already returns "" for both, caches by buffer name and a
+--- coarse time bucket, and never raises, so this is a thin require rather
+--- than a reimplementation.
 ---
---- Cached by buffer name AND a coarse time bucket: the base label only
---- changes on a buffer switch (same "recompute only when the cheap key
---- changes" shape as the sibling `plugin_summary` module), but an SLA
---- deadline keeps ticking while you sit in the same buffer — without a
---- time component the badge would freeze at whatever it showed when you
---- last switched in, which defeats the point for a P1 case worked for an
---- hour straight. `SLA_REFRESH_SECONDS` bounds how stale it can get without
---- recomputing (meta read + a stream reparse) on every single redraw.
+--- It used to be the reimplementation: 169 lines here reaching into
+--- `casedesk.resolve`, `casedesk.meta`, `casedesk.sla` and
+--- `casedesk.config`, and re-stating four of that plugin's own design
+--- decisions -- which priorities get a badge, that it stays hidden until
+--- urgent, where the overdue line falls, which highlight groups to reuse.
+--- Moved to where those decisions belong (cross-feature report, finding
+--- E), the same shape `sandbox_ambient` and `session_status` already had.
 
-local primitives = require("ui.statusline.utils.primitives")
-
-local uv = vim.uv or vim.loop
-
-local SLA_REFRESH_SECONDS = 60
-
----@type string|nil bufname the cached text was last derived from
-local cached_bufname = nil
----@type integer time bucket the cached text was last derived from
-local cached_bucket = -1
-local cached_text = ""
-
----@param dir string
----@return integer
-local function count_files(dir)
-  local n = 0
-  local fd = uv.fs_scandir(dir)
-  if fd then
-    while true do
-      local name, typ = uv.fs_scandir_next(fd)
-      if not name then
-        break
-      end
-      if typ == "file" then
-        n = n + 1
-      end
-    end
-  end
-  return n
-end
-
---- SLA.md §6C: only P1/P2 (config.sla_active_priorities) and only once a
---- clock is under config.sla_warn_at of its budget — a badge that's always
---- on for a 6-week Korrekturmaßnahme budget is just noise, and stops being
---- looked at within a week (same reasoning SLA.md §6C gives for capping
---- active notifications to one per threshold).
---- The part of casedesk.nvim's registry entry this segment reads.
----
---- Declared here rather than named across the repository boundary: casedesk
---- is a soft dependency, so its types are not on this plugin's check path and
---- `Casedesk.RegistryEntry` resolves to nothing. A blanket suppression would
---- also hide a typo in a field name, which is the failure this shape catches.
----@class Ui.Casedesk.Entry
----@field dir string # Absolute path of the case directory
----@field short string # Short label shown in the badge
-
----@param entry Ui.Casedesk.Entry
 ---@return string
-local function sla_badge(entry)
-  local sla = require("ui.util.soft_require").try("casedesk.sla")
-  if not sla then
-    return ""
-  end
-  local ok_status, status = pcall(sla.status, entry)
-  if not ok_status or not status then
-    return ""
-  end
-
-  -- pcall like the `sla` require above: this segment is part of the
-  -- statusline framework, which lives in the configuration and has to keep
-  -- drawing on a machine that has no casedesk checkout at all.
-  local config = require("ui.util.soft_require").try("casedesk.config")
-  if not config then
-    return ""
-  end
-  local active = false
-  for _, p in ipairs(config.sla_active_priorities) do
-    if p == status.digit then
-      active = true
-      break
-    end
-  end
-  if not active then
-    return ""
-  end
-
-  local worst = sla.most_urgent(status)
-  if not worst or not sla.under_threshold(worst, config.sla_warn_at) then
-    return ""
-  end
-
-  -- IDEEN-statusline.md's "farbcodierter Countdown, grün -> gelb -> rot"
-  -- minus the green: the badge staying hidden until `under_threshold` is
-  -- SLA.md §6C's own explicit anti-noise design ("sonst ist es
-  -- Dauerrauschen"), not something this segment should override. What is a
-  -- genuine "weiterdenken" on top of it is the two-stage color inside that
-  -- already-visible window -- overdue is a materially different situation
-  -- from merely urgent, and a reader scanning the statusline shouldn't have
-  -- to read the duration text to tell them apart.
-  local overdue = worst.remaining < 0
-  local marker = overdue and "SLA!" or "SLA"
-  -- DiagnosticError/DiagnosticWarn: existing groups carrying the theme's
-  -- error/warning colors, same "no new highlight group" convention the base
-  -- label follows below.
-  local hl = overdue and "%#DiagnosticError#" or "%#DiagnosticWarn#"
-  return " " .. hl .. marker .. " " .. sla.format_duration(worst.remaining) .. " "
-end
-
----@param entry Ui.Casedesk.Entry
----@return string
-local function compute(entry)
-  -- Plain require, unlike the guarded ones above: `compute` only runs once
-  -- `resolve.sync` has returned an entry, which already proves casedesk is on
-  -- the runtimepath.
-  local meta = require("casedesk.meta")
-  local m = meta.read(entry.dir)
-
-  local label = (m and m.company) and (entry.short .. " " .. m.company) or entry.short
-  local count = count_files(entry.dir .. "/Replies")
-  local reply_word = count == 1 and "reply" or "replies"
-
-  -- Same highlight convention as the `lsp` segment (custom.lua) — no new
-  -- theme color, this reuses an existing group.
-  return " %#St_Lsp#" .. label .. " · " .. count .. " " .. reply_word .. " " .. sla_badge(entry)
-end
-
 return function()
-  local bufname = vim.api.nvim_buf_get_name(primitives.stbufnr())
-  local bucket = math.floor(os.time() / SLA_REFRESH_SECONDS)
-  if bufname == cached_bufname and bucket == cached_bucket then
-    return cached_text
+  -- `package.loaded`, not `require`: this render function runs on the very
+  -- first statusline redraw too -- a `require` here would pull
+  -- casedesk.nvim in before it gets to load on its own lazy trigger (see
+  -- the identical comment in filetree_cwd_mode's render function).
+  local statusline = package.loaded["casedesk.statusline"]
+  if type(statusline) ~= "table" then
+    return ""
   end
-  cached_bufname = bufname
-  cached_bucket = bucket
-
-  -- `package.loaded`, not `require`: this is the very first gate this
-  -- render function hits, reached on the first statusline redraw too -- a
-  -- `require` here would pull casedesk.nvim in before it gets to load on
-  -- its own lazy trigger (see the identical fix/comment in
-  -- filetree_cwd_mode's render function). Everything below this point only
-  -- runs once casedesk is confirmed already loaded, so those `require`s are
-  -- not a fresh eager-load of the plugin itself (same reasoning `compute`'s
-  -- own comment already gives for `casedesk.meta`).
-  local resolve = package.loaded["casedesk.resolve"]
-  if type(resolve) ~= "table" then
-    cached_text = ""
-    return cached_text
-  end
-
-  local ok_entry, entry = pcall(resolve.sync, nil)
-  if not ok_entry or not entry then
-    cached_text = ""
-    return cached_text
-  end
-
-  cached_text = compute(entry)
-  return cached_text
+  return statusline.status() or ""
 end
