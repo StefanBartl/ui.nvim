@@ -88,7 +88,7 @@ modules = {
 | `sandbox_ambient` | sandbox.nvim's ambient container summary, e.g. `"docker (2/5)"` | sandbox.nvim | `ui.statusline.modules.sandbox_ambient` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
-| `breadcrumbs` | Repo-relative path + LSP/Treesitter symbol context, mode-band coloured | — | `ui.statusline.modules.lsp` |
+| `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
 plugin isn't installed — none of these throw or need a guard in your own
@@ -310,3 +310,29 @@ build one from, not a module itself:
 
 `docs/examples/personal-statusline-example.lua` is a full example built
 entirely from these plus the table above — copy it as a starting point.
+
+## Who owns the breadcrumb's symbol context
+
+The async `textDocument/documentSymbol` engine behind `breadcrumbs` used to
+live here. It lives in `my.nvim` now, as
+`my.hl_config.breadcrumbs.ctx.providers.lsp_symbols` (cross-feature report,
+finding B1).
+
+Both plugins' roadmaps draw the same line: **`my.nvim` paints inside the
+window — breadcrumb content — and `ui.nvim` is the frame.** Symbol context
+is content, and having it here meant the frame plugin owned it while the
+content plugin's own LSP stage read a buffer variable nothing ever set. One
+feature in two places, with the working half on the wrong side.
+
+So the flow is one-directional now, and it mirrors `ui.winbar` exactly:
+
+| Surface | Produces the text | Places it |
+| --- | --- | --- |
+| winbar | `my.nvim` | `ui.nvim` (`ui.winbar.set`) |
+| statusline breadcrumb | `my.nvim` | `ui.nvim` (`modules.lsp`) |
+
+**Without `my.nvim` nothing breaks.** `ui.statusline.modules.lsp` falls back
+to its own Tree-sitter symbol module, which is the same graceful
+degradation `my.nvim` performs in the other direction when `ui.nvim` is
+absent and it writes the winbar itself. `:checkhealth ui` reports which of
+the two you are getting, under "Optional integrations".
