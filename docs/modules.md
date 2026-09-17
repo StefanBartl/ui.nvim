@@ -81,9 +81,9 @@ modules = {
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
-| `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"👁 42 diese Woche"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
+| `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"42 views this week"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
-| `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 Alias-Vorschläge für diese Datei offen"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
+| `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 alias suggestions open for this file"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
 | `session_status` | sessions.nvim's active session name, with a dirty marker (` *`) when the window/buffer layout changed since the last save or load | sessions.nvim | `ui.statusline.modules.session_status` |
 | `sandbox_ambient` | sandbox.nvim's ambient container summary, e.g. `"docker (2/5)"` | sandbox.nvim | `ui.statusline.modules.sandbox_ambient` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |

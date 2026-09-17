@@ -117,3 +117,24 @@ This section only reports whether `ui.winbar` is *available* — whether
 anything is actually contributing to it is `:checkhealth my`'s (or whichever
 content plugin's) job to report, the same split as the diagnostics
 ownership pattern this mirrors.
+
+---
+
+## Optional integrations
+
+Which foreign modules this plugin probes, and which of them resolve right
+now. The list itself lives in `ui.util.soft_require`'s `PROBED` table.
+
+| Line | Means |
+| --- | --- |
+| ✅ `N of M optional integrations resolve: …` | Those siblings/plugins are installed; their segments can render |
+| ℹ️ `0 of M optional integrations resolve — standalone install` | Nothing optional is installed. Perfectly fine: every segment behind one of them renders empty by design |
+| ℹ️ `not installed, and the matching segments render empty: …` | Names each missing module together with what it would have provided |
+
+A miss is never an error — standalone is the ordinary case. The section
+exists because the alternative is what actually happened once: the
+statusline's Tree-sitter breadcrumb fallback probed
+`nvim-treesitter.ts_utils`, nvim-treesitter deleted that module upstream,
+and the probe answered "absent" forever. The feature went quiet in every
+session with no error anywhere to say so. A probe list you can read is what
+makes that kind of rot visible.

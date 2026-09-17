@@ -203,8 +203,8 @@ M.file = function()
   local name = (path == "" and "Empty") or path:match("([^/\\]+)[/\\]*$")
 
   if name ~= "Empty" then
-    local ok, devicons = pcall(require, "nvim-web-devicons")
-    if ok then
+    local devicons = require("ui.util.soft_require").try("nvim-web-devicons")
+    if devicons then
       local ft_icon = devicons.get_icon(name)
       icon = (ft_icon ~= nil and ft_icon) or icon
     end

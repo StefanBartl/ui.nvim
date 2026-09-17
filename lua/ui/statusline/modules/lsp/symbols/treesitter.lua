@@ -138,16 +138,24 @@ end
 ---@nodiscard
 ---@return string|nil
 function M.symbol_context_ts()
-  -- Guard: Treesitter & ts_utils must be available
-  local ok_ts = pcall(require, "vim.treesitter")
-  local ok_utils, tsu = pcall(require, "nvim-treesitter.ts_utils")
-  if not ok_ts or not ok_utils or not tsu then
-    return nil
-  end
-
-  -- Node at cursor
-  local node = tsu.get_node_at_cursor()
-  if not node then
+  -- `vim.treesitter.get_node()`, not `nvim-treesitter.ts_utils`.
+  --
+  -- This used to resolve the node through `nvim-treesitter.ts_utils`, which
+  -- nvim-treesitter's main branch deleted. The `pcall` around it therefore
+  -- answered "absent" on every call, so this whole module returned nil
+  -- forever and the statusline's Tree-sitter breadcrumb fallback -- the one
+  -- that is supposed to cover every buffer with no LSP attached -- silently
+  -- contributed nothing, with no error anywhere to say so.
+  --
+  -- `vim.treesitter.get_node()` has been core since 0.9, so the soft
+  -- dependency is gone rather than repaired. Same defect and same fix as
+  -- `my.nvim@c622695` in the sibling breadcrumb pipeline; found by auditing
+  -- this plugin's soft-dependency probes after that one.
+  --
+  -- It still returns nil when the buffer has no parser, which is the
+  -- ordinary case for a filetype with no grammar installed.
+  local ok, node = pcall(vim.treesitter.get_node)
+  if not ok or not node then
     return nil
   end
 

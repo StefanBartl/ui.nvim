@@ -314,6 +314,45 @@ function M.close_all_bufs(include_cur_buf)
   end
 end
 
+--- Drop `bufnr` from one tab's `vim.t.bufs`, leaving every other tab alone.
+---
+--- The gap this closes: `lib.nvim.buf_win_tab.move_buffer_to_tab` (bound to
+--- the "move current buffer into a new tab" keymap) moves a buffer across
+--- tabs without deleting it. `BufEnter` in the destination tab adds it
+--- there, but nothing takes it out of the tab it came from -- only
+--- `BufDelete` does that, and the buffer is very much still alive. The
+--- result was a chip in the source tab's tabline for a buffer no longer in
+--- that tab, for the rest of the session.
+---
+--- `lib.nvim` cannot fix this itself: `vim.t.bufs` is this plugin's
+--- bookkeeping and the dependency only points one way, so the repair lives
+--- on this side of the boundary, next to the state it repairs.
+---
+--- A no-op when the tab is gone, when `M.setup()` never ran (no
+--- `vim.t.bufs` to speak of), or when the buffer was not listed there.
+---@param bufnr integer
+---@param tabpage integer # tabpage handle, as `nvim_get_current_tabpage()` returns
+---@return nil
+function M.forget_buffer(bufnr, tabpage)
+  if not api.nvim_tabpage_is_valid(tabpage) then
+    return
+  end
+
+  local bufs = vim.t[tabpage].bufs
+  if not bufs then
+    return
+  end
+
+  local idx = buf_index(bufnr, bufs)
+  if not idx then
+    return
+  end
+
+  table.remove(bufs, idx)
+  vim.t[tabpage].bufs = bufs
+  vim.cmd("redrawtabline")
+end
+
 --- Swap the current buffer with the neighbour `n` slots over in
 --- `vim.t.bufs` (wrapping at either end), and persist the reordered list.
 --- Ported from `nvchad.tabufline.move_buf`.

@@ -78,7 +78,6 @@ local function check_dependencies()
     "lib.nvim.debounce.buffer",
     "lib.nvim.notify",
     "lib.nvim.ui.hl",
-    "lib.nvim.ui.kit.select",
   }
   local missing = {}
   for _, mod in ipairs(lib_modules) do
@@ -358,6 +357,57 @@ local function check_winbar()
   health.ok("ui.winbar resolves -- available for a content plugin to contribute to")
 end
 
+--- Which optional sibling/third-party modules this plugin probes, and which
+--- of them currently resolve.
+---
+--- A miss is not a failure -- standalone is the ordinary case, and every
+--- segment behind a missing module renders empty by design. It is reported
+--- because the alternative is what actually happened: the statusline's
+--- Tree-sitter breadcrumb fallback probed `nvim-treesitter.ts_utils`,
+--- nvim-treesitter deleted that module upstream, and the probe answered
+--- "absent" forever with nothing anywhere to say the feature had gone quiet.
+--- A list you can read is what makes that visible.
+---@return nil
+local function check_soft_dependencies()
+  health.start("Optional integrations")
+
+  local soft = require("ui.util.soft_require")
+  local present, missing = {}, {}
+
+  for _, entry in ipairs(soft.report()) do
+    if entry.present then
+      present[#present + 1] = entry.mod
+    else
+      missing[#missing + 1] = ("%s (%s)"):format(entry.mod, entry.optional_for)
+    end
+  end
+
+  -- Reported in both directions, and always with the count: "none of them
+  -- resolve" is a perfectly ordinary standalone install, but it is also what
+  -- a rotted-away upstream module looks like, and a section that says
+  -- nothing at all cannot tell you which.
+  local total = #present + #missing
+  if #present > 0 then
+    health.ok(
+      ("%d of %d optional integrations resolve: %s"):format(
+        #present,
+        total,
+        table.concat(present, ", ")
+      )
+    )
+  else
+    health.info(("0 of %d optional integrations resolve -- standalone install"):format(total))
+  end
+
+  if #missing > 0 then
+    health.info(
+      ("not installed, and the matching segments render empty: %s"):format(
+        table.concat(missing, "; ")
+      )
+    )
+  end
+end
+
 --- Entry point for `:checkhealth ui`.
 ---@return nil
 function M.check()
@@ -373,6 +423,7 @@ function M.check()
   check_modules()
   check_segments()
   check_winbar()
+  check_soft_dependencies()
 end
 
 return M

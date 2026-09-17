@@ -227,13 +227,18 @@ describe("ui.statusline.modules.git_clickable", function()
     assert.is_false(select_called)
   end)
 
-  it("right click opens a lib.nvim.contextmenu", function()
+  -- `ui.contextmenu`, not `lib.nvim.contextmenu`. This module was the last
+  -- caller of the pre-migration copy anywhere in the fleet, which mattered
+  -- for more than tidiness: the lib copy has no `set_enabled`, so
+  -- `ui.setup({ menu = false })` did not reach this menu. The last
+  -- assertion is the regression guard for that.
+  it("right click opens a ui.contextmenu", function()
     ---@diagnostic disable-next-line: duplicate-set-field
     vim.fn.systemlist = function()
       return { "main" }
     end
 
-    local contextmenu = require("lib.nvim.contextmenu")
+    local contextmenu = require("ui.contextmenu")
     local original_open = contextmenu.open
     local opened_with = nil
     ---@diagnostic disable-next-line: duplicate-set-field
@@ -246,6 +251,29 @@ describe("ui.statusline.modules.git_clickable", function()
 
     assert.equals("table", type(opened_with))
     assert.is_true(#opened_with > 0)
+  end)
+
+  it("right click honours ui.setup({ menu = false })", function()
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.fn.systemlist = function()
+      return { "main" }
+    end
+
+    local contextmenu = require("ui.contextmenu")
+    local rendered = false
+    local original_menu = require("ui.kit.menu").open
+    ---@diagnostic disable-next-line: duplicate-set-field
+    require("ui.kit.menu").open = function(...)
+      rendered = true
+      return original_menu(...)
+    end
+
+    contextmenu.set_enabled(false)
+    clickable._dispatch(click_id, "r")
+    contextmenu.set_enabled(true)
+    require("ui.kit.menu").open = original_menu
+
+    assert.is_false(rendered)
   end)
 end)
 

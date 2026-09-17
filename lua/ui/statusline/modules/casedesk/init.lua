@@ -68,8 +68,8 @@ end
 ---@param entry Ui.Casedesk.Entry
 ---@return string
 local function sla_badge(entry)
-  local ok_sla, sla = pcall(require, "casedesk.sla")
-  if not ok_sla then
+  local sla = require("ui.util.soft_require").try("casedesk.sla")
+  if not sla then
     return ""
   end
   local ok_status, status = pcall(sla.status, entry)
@@ -80,8 +80,8 @@ local function sla_badge(entry)
   -- pcall like the `sla` require above: this segment is part of the
   -- statusline framework, which lives in the configuration and has to keep
   -- drawing on a machine that has no casedesk checkout at all.
-  local ok_config, config = pcall(require, "casedesk.config")
-  if not ok_config then
+  local config = require("ui.util.soft_require").try("casedesk.config")
+  if not config then
     return ""
   end
   local active = false

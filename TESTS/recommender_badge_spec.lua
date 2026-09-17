@@ -72,8 +72,8 @@ describe("ui.statusline.modules.recommender_badge", function()
 
     uninstall()
     pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.is_true(out:find("1 Alias-Vorschlag ", 1, true) ~= nil, out)
-    assert.is_nil(out:find("Alias-Vorschläge", 1, true))
+    assert.is_true(out:find("1 alias suggestion ", 1, true) ~= nil, out)
+    assert.is_nil(out:find("alias suggestions", 1, true))
   end)
 
   it("uses plural wording and shows the count for several suggestions", function()
@@ -92,7 +92,7 @@ describe("ui.statusline.modules.recommender_badge", function()
 
     uninstall()
     pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.is_true(out:find("2 Alias-Vorschläge für diese Datei offen", 1, true) ~= nil, out)
+    assert.is_true(out:find("2 alias suggestions open for this file", 1, true) ~= nil, out)
   end)
 
   it("passes the configured analyzer/threshold/custom_aliases/blacklist through", function()

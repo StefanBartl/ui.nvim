@@ -143,7 +143,7 @@ return {
   },
   {
     key = "github_stats_badge",
-    summary = 'This week\'s view count for the repo the buffer is in, e.g. "\xF0\x9F\x91\x81 42 diese Woche" -- only inside a repo github_stats.nvim tracks.',
+    summary = 'View count for this week for the repo the buffer is in, e.g. "42 views this week" -- only inside a repo github_stats.nvim tracks.',
     requires = "github_stats.nvim",
     builtin = false,
     source = "ui.statusline.modules.github_stats_badge",
@@ -159,7 +159,7 @@ return {
   },
   {
     key = "recommender_badge",
-    summary = 'Count of recommender.nvim alias suggestions open for the current buffer, e.g. "3 Alias-Vorschläge für diese Datei offen".',
+    summary = 'Count of recommender.nvim alias suggestions open for the current buffer, e.g. "3 alias suggestions open for this file".',
     requires = "recommender.nvim",
     builtin = false,
     source = "ui.statusline.modules.recommender_badge",

@@ -9,6 +9,37 @@ local M = {}
 local theme = require("ui.bindings.usrcmds.themes")
 local theme_picker = require("ui.bindings.usrcmds.themes.picker")
 local screenkey = require("ui.screenkey")
+local nerd_font = require("lib.nvim.ui.nerd_font")
+
+-- Icons for `:UI` output.
+--
+-- Resolved once through `lib.nvim.ui.nerd_font.glyph`, which gates on
+-- `vim.g.have_nerd_font` and refuses any glyph wider than one cell. These
+-- used to be raw emoji (U+2728, U+1F3A8, U+2328 U+FE0F) written straight
+-- into the message: emoji are commonly East-Asian-Wide, so they rendered
+-- two cells and shifted everything after them, and nothing checked whether
+-- the user had a font for them at all.
+--
+-- `""` is the fallback, and `prefix()` is what makes that safe: it drops
+-- the separating space along with the icon instead of leaving every
+-- message with a leading blank.
+---@type table<string, string>
+local ICON = {
+  theme = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
+  magic = nerd_font.glyph("f0d0", ""), -- nf-fa-magic
+  keyboard = nerd_font.glyph("f11c", ""), -- nf-fa-keyboard_o
+}
+
+---`icon .. " " .. text`, or bare `text` when no icon resolved.
+---@param icon string
+---@param text string
+---@return string
+local function prefix(icon, text)
+  if icon == "" then
+    return text
+  end
+  return icon .. " " .. text
+end
 
 -----------------------------------------------------------------------
 -- Helpers
@@ -47,7 +78,7 @@ local function ui_transparency(args)
   if action == "on" then
     local success = theme.set_transparency(true)
     if success then
-      notify.info("✨ Transparenz aktiviert")
+      notify.info(prefix(ICON.magic, "Transparency enabled"))
     end
     return
   end
@@ -55,14 +86,14 @@ local function ui_transparency(args)
   if action == "off" then
     local success = theme.set_transparency(false)
     if success then
-      notify.info("🎨 Transparenz deaktiviert")
+      notify.info(prefix(ICON.magic, "Transparency disabled"))
     end
     return
   end
 
   -- Toggle
   local new_state = theme.toggle_transparency()
-  notify.info(string.format("✨ Transparenz %s", new_state and "aktiviert" or "deaktiviert"))
+  notify.info(prefix(ICON.magic, ("Transparency %s"):format(new_state and "enabled" or "disabled")))
 end
 
 ---Handle screenkey command -- the in-editor keystroke HUD, off by default
@@ -75,18 +106,20 @@ local function ui_screenkey(args)
 
   if action == "on" then
     screenkey.enable()
-    notify.info("⌨️  Screenkey aktiviert")
+    notify.info(prefix(ICON.keyboard, "Screenkey enabled"))
     return
   end
 
   if action == "off" then
     screenkey.disable()
-    notify.info("⌨️  Screenkey deaktiviert")
+    notify.info(prefix(ICON.keyboard, "Screenkey disabled"))
     return
   end
 
   local now_enabled = screenkey.toggle()
-  notify.info(string.format("⌨️  Screenkey %s", now_enabled and "aktiviert" or "deaktiviert"))
+  notify.info(
+    prefix(ICON.keyboard, ("Screenkey %s"):format(now_enabled and "enabled" or "disabled"))
+  )
 end
 
 ---Handle theme command
@@ -110,11 +143,7 @@ local function ui_theme(args)
     local available = theme.list_themes()
     local available_str = table.concat(available, ", ")
     notify.error(
-      string.format(
-        "Theme '%s' nicht gefunden.\n\nVerfügbare Themes:\n%s",
-        theme_name,
-        available_str
-      )
+      string.format("Theme '%s' not found.\n\nAvailable themes:\n%s", theme_name, available_str)
     )
     return
   end
@@ -123,9 +152,9 @@ local function ui_theme(args)
   local success = theme.load_theme(theme_name)
 
   if success then
-    notify.info(string.format("🎨 Theme geändert zu: %s", theme_name))
+    notify.info(prefix(ICON.theme, ("Theme changed to: %s"):format(theme_name)))
   else
-    notify.error(string.format("Fehler beim Laden von Theme '%s'", theme_name))
+    notify.error(("Failed to load theme '%s'"):format(theme_name))
   end
 end
 
@@ -136,12 +165,12 @@ local function ui_themes(_args)
   local current = theme.get_current_theme()
 
   if #themes == 0 then
-    notify.error("Keine Themes gefunden!")
+    notify.error("No themes found!")
     return
   end
 
   -- Format themes list with current marker
-  local lines = { string.format("Verfügbare Themes (%d):", #themes), "" }
+  local lines = { ("Available themes (%d):"):format(#themes), "" }
 
   for _, theme_name in ipairs(themes) do
     local marker = (theme_name == current) and "✓ " or "  "
@@ -162,9 +191,9 @@ local function ui_status(_args)
   local lines = {
     "╭─ UI Status ─────────────────╮",
     string.format("│ Theme:        %-15s │", info.theme or "none"),
-    string.format("│ Transparenz:  %-15s │", info.transparency and "an" or "aus"),
-    string.format("│ Variante:     %-15s │", variant or "(unbenannt)"),
-    string.format("│ Tabline-Style:%-15s │", tabline_style),
+    string.format("│ Transparency: %-15s │", info.transparency and "on" or "off"),
+    string.format("│ Variant:      %-15s │", variant or "(unnamed)"),
+    string.format("│ Tabline style:%-15s │", tabline_style),
   }
 
   if info.toggle_themes and #info.toggle_themes > 0 then
@@ -212,8 +241,8 @@ local function ui_variant(args)
     local current = require("ui.config").get_variant()
     notify.info(
       string.format(
-        "Aktuelle Variante: %s\nNutze :UI variant <name> zum Wechseln",
-        current or "(unbenannt -- per Tabelle direkt übergeben)"
+        "Current variant: %s\nUse :UI variant <name> to switch",
+        current or "(unnamed -- passed directly as a table)"
       )
     )
     return
@@ -222,7 +251,7 @@ local function ui_variant(args)
   if not variants.exists(name) then
     notify.error(
       string.format(
-        "Variante '%s' nicht gefunden.\n\nVerfügbare Varianten:\n%s",
+        "Variant '%s' not found.\n\nAvailable variants:\n%s",
         name,
         table.concat(variants.list(), ", ")
       )
@@ -231,9 +260,9 @@ local function ui_variant(args)
   end
 
   if switch_variant(name) then
-    notify.info(string.format("🎨 Statusline-Variante geändert zu: %s", name))
+    notify.info(prefix(ICON.theme, ("Statusline variant changed to: %s"):format(name)))
   else
-    notify.error(string.format("Fehler beim Wechseln zu Variante '%s'", name))
+    notify.error(("Failed to switch to variant '%s'"):format(name))
   end
 end
 
@@ -244,7 +273,7 @@ local function ui_variants(_args)
   local names = variants.list()
   local current = require("ui.config").get_variant()
 
-  local lines = { string.format("Verfügbare Statusline-Varianten (%d):", #names), "" }
+  local lines = { ("Available statusline variants (%d):"):format(#names), "" }
 
   for _, name in ipairs(names) do
     local marker = (name == current) and "✓ " or "  "
@@ -288,10 +317,7 @@ local function ui_tabline_style(args)
     local cfg = require("ui.tabline.render").current()
     local current = (cfg and cfg.style) or "rounded"
     notify.info(
-      string.format(
-        "Aktueller Tabline-Style: %s\nNutze :UI tabline-style <name> zum Wechseln",
-        current
-      )
+      string.format("Current tabline style: %s\nUse :UI tabline-style <name> to switch", current)
     )
     return
   end
@@ -299,7 +325,7 @@ local function ui_tabline_style(args)
   if not styles.exists(name) then
     notify.error(
       string.format(
-        "Tabline-Style '%s' nicht gefunden.\n\nVerfügbare Styles:\n%s",
+        "Tabline style '%s' not found.\n\nAvailable styles:\n%s",
         name,
         table.concat(styles.list(), ", ")
       )
@@ -308,13 +334,10 @@ local function ui_tabline_style(args)
   end
 
   if switch_tabline_style(name) then
-    notify.info(string.format("🎨 Tabline-Style geändert zu: %s", name))
+    notify.info(prefix(ICON.theme, ("Tabline style changed to: %s"):format(name)))
   else
     notify.error(
-      string.format(
-        "Fehler beim Wechseln zu Tabline-Style '%s' (Tabline noch nicht aktiviert?)",
-        name
-      )
+      string.format("Failed to switch to tabline style '%s' (tabline not enabled yet?)", name)
     )
   end
 end
@@ -394,12 +417,9 @@ local function ui_toggle(_args)
   local next_theme = theme.toggle_theme()
 
   if next_theme then
-    notify.info(string.format("🎨 Theme geändert zu: %s", next_theme))
+    notify.info(prefix(ICON.theme, ("Theme changed to: %s"):format(next_theme)))
   else
-    notify.warn(
-      "Kein theme_toggle in chadrc konfiguriert.\n"
-        .. "Füge mindestens 2 Themes zu theme_toggle hinzu."
-    )
+    notify.warn("No theme_toggle configured.\n" .. "Add at least two themes to theme_toggle.")
   end
 end
 
@@ -407,39 +427,38 @@ end
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_help(_args)
   local help_text = [[
-╭─ UI Command Hilfe ──────────────────────────────────╮
+╭─ UI Command Help ────────────────────────────────────╮
 │                                                      │
-│  :UI transparency           Transparenz umschalten   │
-│  :UI transparency on        Transparenz aktivieren   │
-│  :UI transparency off       Transparenz deaktivieren │
+│  :UI transparency           Toggle transparency      │
+│  :UI transparency on        Enable transparency      │
+│  :UI transparency off       Disable transparency     │
 │                                                      │
-│  :UI screenkey              Screenkey-HUD umschalten │
-│  :UI screenkey on           Screenkey aktivieren     │
-│  :UI screenkey off          Screenkey deaktivieren   │
+│  :UI screenkey              Toggle the screenkey HUD │
+│  :UI screenkey on           Enable screenkey         │
+│  :UI screenkey off          Disable screenkey        │
 │                                                      │
-│  :UI theme                  Aktuelles Theme zeigen   │
-│  :UI theme <name>           Theme setzen             │
-│  :UI themes                 Alle Themes auflisten    │
-│  :UI picker                 Visuellen Theme-Picker   │
-│                             öffnen (Live-Vorschau)   │
-│  :UI toggle                 Zwischen Themes wechseln │
+│  :UI theme                  Show the current theme   │
+│  :UI theme <name>           Set a theme              │
+│  :UI themes                 List all themes          │
+│  :UI picker                 Open the visual theme    │
+│                             picker (live preview)    │
+│  :UI toggle                 Switch between themes    │
 │                                                      │
-│  :UI variant                Aktuelle Variante zeigen │
-│  :UI variant <name>         Variante wechseln        │
-│  :UI variants               Alle Varianten auflisten │
+│  :UI variant                Show the current variant │
+│  :UI variant <name>         Switch variant           │
+│  :UI variants               List all variants        │
 │                                                      │
-│  :UI tabline-style          Aktuellen Style zeigen   │
-│  :UI tabline-style <name>   Tabline-Style wechseln   │
-│  :UI tabline-styles         Alle Styles auflisten    │
+│  :UI tabline-style          Show the current style   │
+│  :UI tabline-style <name>   Switch tabline style     │
+│  :UI tabline-styles         List all styles          │
 │                                                      │
-│  :UI modules                Verfügbare Segmente      │
-│                             auflisten                │
-│  :UI status                 Aktuelle Config zeigen   │
-│  :UI help                   Diese Hilfe anzeigen     │
+│  :UI modules                List available segments  │
+│  :UI status                 Show the current config  │
+│  :UI help                   Show this help           │
 │                                                      │
 ╰──────────────────────────────────────────────────────╯
 
-Siehe auch: ui/bindings/usrcmds/themes/README.md für technische Details
+See also: ui/bindings/usrcmds/themes/README.md for technical details
 ]]
   notify.info(help_text)
 end
@@ -493,10 +512,10 @@ local function dispatcher(opts)
   if action then
     local ok, err = pcall(action, args)
     if not ok then
-      notify.error(string.format("UI %s Fehler: %s", sub, tostring(err)))
+      notify.error(("UI %s error: %s"):format(sub, tostring(err)))
     end
   else
-    notify.error(string.format("Unbekannter Befehl: '%s'\nNutze :UI help für Hilfe", sub))
+    notify.error(("Unknown command: '%s'\nUse :UI help for help"):format(sub))
   end
 end
 
