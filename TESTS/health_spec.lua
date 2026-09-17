@@ -108,6 +108,39 @@ describe("ui.health", function()
   -- The section exists because a soft dependency that rots away upstream
   -- otherwise disables a feature in total silence -- which is exactly what
   -- `nvim-treesitter.ts_utils` did to the Tree-sitter breadcrumb fallback.
+  -- A health check must describe the session, not change it. Reporting
+  -- with `require` would load every lazy plugin it asks about -- and then
+  -- report them all as present, because it had just made them so.
+  it("does not load the optional plugins it reports on", function()
+    local soft = require("ui.util.soft_require")
+
+    -- The probed modules are all absent in this suite, so asserting over
+    -- them proves nothing: `require` fails and nothing gets loaded either
+    -- way. A real, findable, currently-unloaded module is injected
+    -- instead, which is the only shape that tells the two implementations
+    -- apart.
+    local probe
+    for _, candidate in ipairs({
+      "lib.nvim.ui.list",
+      "lib.lua.uuid",
+      "lib.nvim.ui.nerd_font",
+    }) do
+      if package.loaded[candidate] == nil and soft.available(candidate) then
+        probe = candidate
+        break
+      end
+    end
+    assert.is_not_nil(probe, "need a findable, unloaded module to make this test mean anything")
+
+    local original = soft.PROBED
+    soft.PROBED = { { mod = probe, optional_for = "spec" } }
+    local report = soft.report()
+    soft.PROBED = original
+
+    assert.is_true(report[1].present, "a findable module is reported present")
+    assert.is_nil(package.loaded[probe], "...without report() having loaded it")
+  end)
+
   it("reports the optional integrations it probes", function()
     local calls = capture()
     local seen = false
