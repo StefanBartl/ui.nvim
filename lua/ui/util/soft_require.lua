@@ -46,6 +46,10 @@ M.PROBED = {
   { mod = "sessions.statusline", optional_for = "the session-status segment" },
   { mod = "github_stats.analytics", optional_for = "the github-stats view badge" },
   { mod = "filetree", optional_for = "the filetree cwd-mode segment" },
+  {
+    mod = "my.hl_config.breadcrumbs.ctx.providers.lsp_symbols",
+    optional_for = "LSP symbols in the breadcrumb (Tree-sitter only without it)",
+  },
 }
 
 --- The module, or nil when it is not installed.
