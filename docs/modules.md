@@ -336,3 +336,46 @@ to its own Tree-sitter symbol module, which is the same graceful
 degradation `my.nvim` performs in the other direction when `ui.nvim` is
 absent and it writes the winbar itself. `:checkhealth ui` reports which of
 the two you are getting, under "Optional integrations".
+
+## Where a sibling's segment is built
+
+Seven sibling plugins feed segments here, and they split into two shapes.
+
+**The sibling ships the component; this plugin places it.** Six of the
+seven, each a ~24-line adapter here:
+
+| Segment | Provided by |
+| --- | --- |
+| `sandbox_ambient` | `sandbox.statusline` |
+| `session_status` | `sessions.statusline` |
+| `recommender_badge` | `recommender.statusline` |
+| `github_stats_badge` | `github_stats.statusline` |
+| `runtime_analysis_ampel` | `runtime-analysis.statusline` |
+| `casedesk` | `casedesk.statusline` |
+
+Four of those six used to be built here instead — 494 lines reaching into
+`recommender.config`, `github_stats.analytics`, `casedesk.resolve/meta/sla`
+and so on, with each plugin's own design decisions restated in this
+repository and no test in theirs to hold them. They moved to the plugins
+that own the data (cross-feature report, finding E). Each ships a
+`docs/statusline.md` covering lualine, heirline and the native statusline
+as well, so the component is not ui.nvim-specific.
+
+**This plugin builds it, from a documented API.** One of the seven:
+
+`filetree_cwd_mode` calls `filetree.feature("cwd_mode").badge()` — the
+external-statusline API filetree.nvim documents for exactly this, next to
+its `component()` sibling. It reaches into nothing internal. What the
+remaining lines here do is *this* plugin's own presentation: the bg-filled
+capsule, `ui.theme.palette` accents, `get_separators()`, the `St_*`
+highlight groups, and the history-dots option, which is a ui.nvim feature
+rather than a filetree concept.
+
+That one is deliberately **not** moved. Pushing it into filetree.nvim would
+make that plugin depend on this one's palette and separator vocabulary and
+emit ui.nvim-specific statusline syntax — coupling in the wrong direction.
+The line count made it look like the other four; the call sites do not.
+
+The pattern that beats both, where it applies: `plugin_progress` reads
+`lib.nvim.progress`'s shared registry and names no plugin at all, so a new
+one needs no change here.

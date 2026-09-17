@@ -1,146 +1,61 @@
 -- See TESTS/config_spec.lua for what these suppressions cover and why.
 ---@diagnostic disable: need-check-nil, undefined-field, discard-returns
 
---- `ui.statusline.modules.recommender_badge` -- a count of recommender.nvim
---- alias suggestions open for the current buffer, from
---- IDEEN-statusline.md's "Segmente, die dieses Ökosystem einzigartig
---- machen" bucket. recommender.nvim is not on this suite's runtimepath (a
---- soft dependency, same contract as casedesk/filetree_cwd_mode/
---- github_stats_badge/runtime_analysis_ampel), so every "installed" test
---- injects fake `recommender.config`/`recommender.analyzers.<name>` modules.
+--- `ui.statusline.modules.recommender_badge` -- a thin require of
+--- recommender.nvim's own ready-made `recommender.statusline.status()`.
+---
+--- It used to be 79 lines reaching into `recommender.config` and
+--- `recommender.analyzers.*`, and this spec used to assert the wording and
+--- the per-buffer caching by injecting fakes for both. Logic and tests
+--- moved into recommender.nvim (cross-feature report, finding E), where
+--- they run against the real analyzer instead of a stub of it. What
+--- remains here is the adapter contract -- the same shape
+--- `sandbox_ambient_spec` and `session_status_spec` check.
+---
+--- recommender.nvim is not on this suite's runtimepath, so the "installed"
+--- cases inject a fake module.
 
-local badge = require("ui.statusline.modules.recommender_badge")
+local recommender_badge = require("ui.statusline.modules.recommender_badge")
 
----@param cfg table
-local function install_config(cfg)
-  package.loaded["recommender.config"] = {
-    get = function()
-      return cfg
-    end,
-  }
-end
-
----@param name string
----@param analyze_fn fun(threshold, custom_aliases, blacklist): table[]
-local function install_analyzer(name, analyze_fn)
-  package.loaded["recommender.analyzers." .. name] = { analyze = analyze_fn }
-end
-
-local function uninstall(name)
-  package.loaded["recommender.config"] = nil
-  package.loaded["recommender.analyzers." .. (name or "regex")] = nil
+local function uninstall()
+  package.loaded["recommender.statusline"] = nil
 end
 
 describe("ui.statusline.modules.recommender_badge", function()
+  after_each(uninstall)
+
   it("renders empty when recommender.nvim is not installed", function()
     uninstall()
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    local out = badge()
-
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.equals("", out)
+    assert.equals("", recommender_badge())
   end)
 
-  it("renders empty when there are zero suggestions", function()
-    install_config({ analyzer = "regex", threshold = 3 })
-    install_analyzer("regex", function()
-      return {}
-    end)
-
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    local out = badge()
-
-    uninstall()
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.equals("", out)
+  it("renders empty when there is nothing to suggest", function()
+    package.loaded["recommender.statusline"] = {
+      status = function()
+        return ""
+      end,
+    }
+    assert.equals("", recommender_badge())
   end)
 
-  it("uses singular wording for exactly one suggestion", function()
-    install_config({ analyzer = "regex", threshold = 3 })
-    install_analyzer("regex", function()
-      return { { chain = "vim.api.nvim_buf_get_lines", count = 3, alias = "local x = y" } }
-    end)
-
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    local out = badge()
-
-    uninstall()
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.is_true(out:find("1 alias suggestion ", 1, true) ~= nil, out)
-    assert.is_nil(out:find("alias suggestions", 1, true))
+  it("passes recommender.nvim's own badge through unchanged", function()
+    package.loaded["recommender.statusline"] = {
+      status = function()
+        return " 3 alias suggestions open for this file "
+      end,
+    }
+    assert.equals(" 3 alias suggestions open for this file ", recommender_badge())
   end)
 
-  it("uses plural wording and shows the count for several suggestions", function()
-    install_config({ analyzer = "regex", threshold = 3 })
-    install_analyzer("regex", function()
-      return {
-        { chain = "vim.api.nvim_buf_get_lines", count = 3, alias = "" },
-        { chain = "vim.api.nvim_buf_set_lines", count = 4, alias = "" },
-      }
-    end)
-
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    local out = badge()
-
-    uninstall()
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.is_true(out:find("2 alias suggestions open for this file", 1, true) ~= nil, out)
-  end)
-
-  it("passes the configured analyzer/threshold/custom_aliases/blacklist through", function()
-    local custom_aliases = { ["vim.api"] = "api" }
-    local blacklist = { "vim.fn" }
-    install_config({
-      analyzer = "treesitter",
-      threshold = 5,
-      custom_aliases = custom_aliases,
-      blacklist = blacklist,
-    })
-    install_analyzer("treesitter", function(threshold, aliases, bl)
-      assert.equals(5, threshold)
-      assert.equals(custom_aliases, aliases)
-      assert.equals(blacklist, bl)
-      return {}
-    end)
-
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    badge()
-
-    uninstall("treesitter")
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-  end)
-
-  it("caches the analysis per buffer until the buffer changes", function()
-    install_config({ analyzer = "regex", threshold = 3 })
-    local calls = 0
-    install_analyzer("regex", function()
-      calls = calls + 1
-      return { { chain = "a.b.c", count = 3, alias = "" } }
-    end)
-
-    local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_set_current_buf(buf)
-
-    badge()
-    badge()
-    badge()
-    assert.equals(1, calls)
-
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "changed" })
-    badge()
-
-    uninstall()
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    assert.equals(2, calls)
+  -- The adapter must not assume the sibling returns a string: a plugin
+  -- mid-refactor returning nil should leave the statusline alone rather
+  -- than concatenating nil into it.
+  it("renders empty when the sibling returns nothing", function()
+    package.loaded["recommender.statusline"] = {
+      status = function()
+        return nil
+      end,
+    }
+    assert.equals("", recommender_badge())
   end)
 end)
