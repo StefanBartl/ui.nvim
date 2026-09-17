@@ -97,8 +97,8 @@ local function devicon_for_path(path)
 
   -- Lazy-load devicons
   if not devicons_mod then
-    local ok, mod = pcall(require, "nvim-web-devicons")
-    if ok then
+    local mod = require("ui.util.soft_require").try("nvim-web-devicons")
+    if mod then
       devicons_mod = mod
     else
       -- Cache failure result

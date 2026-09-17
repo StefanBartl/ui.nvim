@@ -133,10 +133,24 @@ function M.setup(opts)
         mode = "n",
         desc = "move current buffer into a new tab",
         rhs = function()
+          -- Captured before the move: `move_buf_tab` switches tabs, so by
+          -- the time it returns neither the source tab nor the buffer that
+          -- left it can be read off the current state any more.
+          local source_tab = vim.api.nvim_get_current_tabpage()
+          local moved = vim.api.nvim_get_current_buf()
+
           local ok2, err2 = pcall(move_buf_tab)
           if not ok2 then
             notify.warn("[ui.bindings.keymaps] Move buffer to tab failed: " .. tostring(err2))
+            return
           end
+
+          -- The lib helper moves the buffer but knows nothing about
+          -- `vim.t.bufs`, and the buffer is not deleted, so the `BufDelete`
+          -- handler that would normally clean up never fires -- the source
+          -- tab kept a chip for a buffer that is no longer in it. See
+          -- `tabufline.state.forget_buffer`.
+          tabufline_state.forget_buffer(moved, source_tab)
         end,
       },
       toggle_theme = {

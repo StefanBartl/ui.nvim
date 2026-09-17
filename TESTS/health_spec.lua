@@ -101,7 +101,22 @@ describe("ui.health", function()
       "Modules",
       "Statusline segments",
       "Winbar",
+      "Optional integrations",
     }, starts)
+  end)
+
+  -- The section exists because a soft dependency that rots away upstream
+  -- otherwise disables a feature in total silence -- which is exactly what
+  -- `nvim-treesitter.ts_utils` did to the Tree-sitter breadcrumb fallback.
+  it("reports the optional integrations it probes", function()
+    local calls = capture()
+    local seen = false
+    for _, c in ipairs(calls) do
+      if c.msg and c.msg:find("optional integrations", 1, true) then
+        seen = true
+      end
+    end
+    assert.is_true(seen)
   end)
 
   it("reports its own render entrypoint as resolving and rendering", function()

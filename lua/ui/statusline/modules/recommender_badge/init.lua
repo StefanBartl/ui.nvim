@@ -1,5 +1,5 @@
 ---@module 'ui.statusline.modules.recommender_badge'
---- "N Alias-Vorschläge für diese Datei offen" -- recommender.nvim's own
+--- "N alias suggestions open for this file" -- recommender.nvim's own
 --- count of repeated dotted chains it would suggest aliasing in the CURRENT
 --- buffer, without opening its suggestion float or typing `:Recommender`.
 --- From IDEEN-statusline.md's "Segmente, die dieses Ökosystem einzigartig
@@ -74,6 +74,6 @@ return function()
     return ""
   end
 
-  local label = count == 1 and "Alias-Vorschlag" or "Alias-Vorschläge"
-  return (" %d %s für diese Datei offen "):format(count, label)
+  local label = count == 1 and "alias suggestion" or "alias suggestions"
+  return (" %d %s open for this file "):format(count, label)
 end

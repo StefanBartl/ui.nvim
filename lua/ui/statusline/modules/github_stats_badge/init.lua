@@ -1,5 +1,5 @@
 ---@module 'ui.statusline.modules.github_stats_badge'
---- "👁 42 diese Woche" -- github_stats.nvim's view count for the CURRENT
+--- "👁 42 this week" -- github_stats.nvim's view count for the CURRENT
 --- repo, this week, shown only when the current buffer sits inside one of
 --- the repos github_stats.nvim actually tracks. Personal, low-utility by
 --- design (IDEEN-statusline.md's own framing: "kein Nutzen für irgendjemand
@@ -7,6 +7,7 @@
 --- everywhere else, including when github_stats.nvim is not installed.
 
 local primitives = require("ui.statusline.utils.primitives")
+local nerd_font = require("lib.nvim.ui.nerd_font")
 
 local dir_to_slug = require("lib.lua.memo.lru").new(64)
 
@@ -16,6 +17,12 @@ local dir_to_slug = require("lib.lua.memo.lru").new(64)
 -- and nothing caches the final view count either -- both would otherwise
 -- redo real work (a `git remote get-url` shell-out, a query_metric call) on
 -- every statusline redraw, which fires on nearly every event.
+
+-- Resolved once: neither `vim.g.have_nerd_font` nor a glyph's rendered
+-- width changes mid-session, and this module renders on nearly every
+-- redraw. nf-fa-eye (U+F06E).
+local EYE = nerd_font.glyph("f06e", "")
+
 local STATS_TTL_SECONDS = 60
 ---@type table<string, { count: integer, expires_at: integer }>
 local stats_cache = {}
@@ -102,5 +109,17 @@ return function()
     return ""
   end
 
-  return " \xF0\x9F\x91\x81 " .. count .. " diese Woche "
+  -- The icon used to be a raw U+1F441 emoji with no check of any kind.
+  -- Emoji are commonly East-Asian-Wide, so it rendered two cells and
+  -- shifted every segment after it. `nerd_font.glyph` is the shared probe
+  -- that answers both questions at once: is a Nerd Font declared, and is
+  -- the glyph one cell wide.
+  --
+  -- `""` as its fallback is deliberate, and safe only because the empty
+  -- case is handled right here rather than concatenated blindly -- which
+  -- is the trap that module's own doc warns about.
+  if EYE == "" then
+    return (" %d views this week "):format(count)
+  end
+  return (" %s %d this week "):format(EYE, count)
 end

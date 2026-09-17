@@ -255,7 +255,7 @@ enable()`d tabline config directly, then `:redrawtabline` makes it visible.
 >vim
     :checkhealth ui
 <
-Seven sections: dependencies (lib.nvim required; NvChad presence reported as
+Eight sections: dependencies (lib.nvim required; NvChad presence reported as
 information, not a dependency check, since step 4; `nvchad.tabufline` gone
 from this list entirely at step 5, `base46`/`base46.themes` gone the same way
 at step 6), this plugin's own statusline render entrypoint (resolves?
@@ -263,8 +263,14 @@ renders the "default" theme's fallback modules without NvChad?), the tabline
 render entrypoint (same shape, one option later), the assembled
 configuration, which submodules `setup()` turned on (buffer/tab navigation
 included, under `keymaps`), the soft dependencies each statusline segment
-needs, and whether `ui.winbar` resolves for a content plugin to contribute
-its breadcrumb line to.
+needs, whether `ui.winbar` resolves for a content plugin to contribute its
+breadcrumb line to, and which optional integrations currently resolve.
+
+That last section lists the foreign modules this plugin probes (see
+`ui.util.soft_require`). A missing one is never an error -- standalone is
+the ordinary case and the matching segment renders empty by design -- but
+the list is printed because a soft dependency that disappears upstream
+otherwise disables a feature in complete silence.
 
 The dependency section returns early only if lib.nvim itself is missing or
 incomplete -- everything below it needs lib.nvim, and a missing NvChad no

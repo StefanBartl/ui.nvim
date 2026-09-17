@@ -30,8 +30,8 @@ local function compute_text(total)
 end
 
 return function()
-  local ok_lazy, lazy = pcall(require, "lazy")
-  if not ok_lazy then
+  local lazy = require("ui.util.soft_require").try("lazy")
+  if not lazy then
     return ""
   end
 

@@ -115,8 +115,8 @@ end
 
 ---@return string
 return function()
-  local ok, telemetry = pcall(require, "runtime-analysis.telemetry")
-  if not ok then
+  local telemetry = require("ui.util.soft_require").try("runtime-analysis.telemetry")
+  if not telemetry then
     return ""
   end
 

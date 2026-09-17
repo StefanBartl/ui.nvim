@@ -51,16 +51,23 @@ end
 
 local SEP_HEX = "f0058"
 
--- SEP_HEX never changes at runtime, so resolve its glyph and displayable-ness
--- once here instead of re-decoding + re-measuring it (via a fresh closure) on
--- every single breadcrumb render.
-local SEP_GLYPH = require("lib.lua.strings.convert.hex_to_string")(SEP_HEX)
-local SEP_GLYPH_USABLE = SEP_GLYPH ~= "" and vim.fn.strdisplaywidth(SEP_GLYPH) == 1
+-- SEP_HEX never changes at runtime, so resolve its glyph once here instead
+-- of re-decoding + re-measuring it on every single breadcrumb render.
+--
+-- `lib.nvim.ui.nerd_font.glyph` rather than a hand-rolled decode plus width
+-- measurement: it is the same check, plus the `vim.g.have_nerd_font` gate
+-- this used to skip -- which is what kept a Nerd Font glyph on screen for
+-- users who never declared one.
+--
+-- `""` is a sentinel here, not a rendered fallback: the real fallback
+-- depends on `columns`, which changes on resize, so it cannot be resolved
+-- until render time.
+local SEP_GLYPH = require("lib.nvim.ui.nerd_font").glyph(SEP_HEX, "")
 
 ---@return string
 local function breadcrumb_sep()
   return " "
-    .. (SEP_GLYPH_USABLE and SEP_GLYPH or ((vim.o.columns >= 100) and "⟶" or "›"))
+    .. (SEP_GLYPH ~= "" and SEP_GLYPH or ((vim.o.columns >= 100) and "⟶" or "›"))
     .. " "
 end
 
