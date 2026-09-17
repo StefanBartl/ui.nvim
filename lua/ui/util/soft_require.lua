@@ -67,12 +67,31 @@ function M.try(name)
   return nil
 end
 
---- Which of `M.PROBED` currently resolve. Consumed by `ui.health`.
+--- Is `name` installed and on the runtimepath, WITHOUT loading it?
+---
+--- `vim.loader.find` resolves the module to a file and stops there. That
+--- distinction is the whole point of this function: `require` would answer
+--- the same question by executing the module, and a health check that
+--- loads ten lazy plugins to find out whether they exist has changed the
+--- session it was asked to describe -- registering their autocmds, keymaps
+--- and user commands as a side effect, and then reporting them all as
+--- "present" because it just made them so.
+---@param name string
+---@return boolean
+function M.available(name)
+  local ok, found = pcall(vim.loader.find, name)
+  return ok and type(found) == "table" and #found > 0
+end
+
+--- Which of `M.PROBED` are installed. Consumed by `ui.health`.
 ---
 --- A miss is not a failure -- it is the standalone case -- so this returns
 --- data rather than notifying. Reading it is also the only way to notice a
 --- soft dependency that has rotted away upstream rather than being
 --- deliberately uninstalled.
+---
+--- Uses `M.available`, not `M.try`: see that function for why a health
+--- check must not be the thing that loads the plugin it is reporting on.
 ---@return { mod: string, optional_for: string, present: boolean }[]
 function M.report()
   local out = {}
@@ -80,7 +99,7 @@ function M.report()
     out[i] = {
       mod = entry.mod,
       optional_for = entry.optional_for,
-      present = M.try(entry.mod) ~= nil,
+      present = M.available(entry.mod),
     }
   end
   return out

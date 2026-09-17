@@ -131,8 +131,16 @@ now. The list itself lives in `ui.util.soft_require`'s `PROBED` table.
 | ℹ️ `0 of M optional integrations resolve — standalone install` | Nothing optional is installed. Perfectly fine: every segment behind one of them renders empty by design |
 | ℹ️ `not installed, and the matching segments render empty: …` | Names each missing module together with what it would have provided |
 
-A miss is never an error — standalone is the ordinary case. The section
-exists because the alternative is what actually happened once: the
+A miss is never an error — standalone is the ordinary case.
+
+**The check does not load anything.** It resolves each module with
+`vim.loader.find`, which finds the file and stops. Using `require` would
+have made `:checkhealth ui` load every lazy plugin it asks about —
+registering their autocmds, keymaps and commands as a side effect, and
+then reporting them all as present because the check had just made them
+so. A health report describes the session; it does not change it.
+
+The section exists because the alternative is what actually happened once: the
 statusline's Tree-sitter breadcrumb fallback probed
 `nvim-treesitter.ts_utils`, nvim-treesitter deleted that module upstream,
 and the probe answered "absent" forever. The feature went quiet in every
