@@ -50,12 +50,12 @@ local _hl_built = {}
 
 local Autocmd = require("lib.nvim.bindings.autocmd")
 
-Autocmd.create("ColorScheme", function()
+-- A colour-derived cache is the same problem as a highlight definition,
+-- so it goes through the same helper -- and picks up `OptionSet background`
+-- with it. `immediate = false`: there is nothing to drop at registration.
+require("lib.nvim.ui.hl").persist(function()
   _hl_built = {}
-end, {
-  group = Autocmd.group("UiCwdModeBadgeHl", true),
-  desc = "Rebuild the filetree cwd-mode badge highlights for the new theme's palette",
-})
+end, { name = "UiCwdModeBadgeHl", immediate = false })
 
 ---@param color_key string  A palette semantic key, or a literal "#rrggbb".
 ---@return string group

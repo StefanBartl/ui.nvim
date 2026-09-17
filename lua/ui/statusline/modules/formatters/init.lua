@@ -5,7 +5,6 @@ local M = {}
 
 -- Use lib.strings for all string operations
 local lib_strings = require("lib.lua.strings")
-local Autocmd = require("lib.nvim.bindings.autocmd")
 
 -- Lazy-load config
 local config_module
@@ -22,12 +21,9 @@ local escape_cache = require("lib.lua.memo.lru").new(128)
 local ellipsize_cache = require("lib.lua.memo.lru").new(64)
 
 -- Clear on colorscheme change
-Autocmd.create("ColorScheme", function()
+require("lib.nvim.ui.hl").persist(function()
   escape_cache = require("lib.lua.memo.lru").new(128)
-end, {
-  group = Autocmd.group("UiFormattersCache", true),
-  desc = "Clear formatters cache on colorscheme change",
-})
+end, { name = "UiFormattersCache", immediate = false })
 
 ---@nodiscard
 ---@param s string

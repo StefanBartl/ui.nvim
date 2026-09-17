@@ -100,13 +100,9 @@ function M.ensure()
   end
   ensured = true
 
-  M.apply()
-
-  local autocmd = require("lib.nvim.bindings.autocmd")
-  autocmd.create("ColorScheme", M.apply, {
-    group = autocmd.group("ui_tabline_highlights", true),
-    desc = "ui.tabline: re-derive UiTb* groups from the active colorscheme",
-  })
+  -- See `ui.statusline.highlights` for why this is `hl.persist` and not a
+  -- hand-written pair: the `OptionSet background` half was missing here too.
+  require("lib.nvim.ui.hl").persist(M.apply, { name = "ui_tabline_highlights" })
 end
 
 return M

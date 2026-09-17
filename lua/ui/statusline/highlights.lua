@@ -141,13 +141,12 @@ function M.ensure()
   end
   ensured = true
 
-  M.apply()
-
-  local autocmd = require("lib.nvim.bindings.autocmd")
-  autocmd.create("ColorScheme", M.apply, {
-    group = autocmd.group("ui_statusline_highlights", true),
-    desc = "ui.statusline: re-derive St_*/ST_EmptySpace groups from the active colorscheme",
-  })
+  -- `hl.persist` rather than a hand-written apply-plus-autocmd: it also
+  -- covers `OptionSet background`, which this block did not. Switching
+  -- background selects the other half of a light/dark palette without
+  -- necessarily re-sourcing the colorscheme, so the statusline could keep
+  -- the old palette's derived colours until the next real theme change.
+  require("lib.nvim.ui.hl").persist(M.apply, { name = "ui_statusline_highlights" })
 end
 
 return M
