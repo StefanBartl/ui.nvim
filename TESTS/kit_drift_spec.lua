@@ -28,18 +28,23 @@
 --- Skips when lib.nvim is not checked out beside this repo. CI always has
 --- it (`.deps/lib.nvim`, pinned to `ci-verified`), so this runs there.
 
-local function lib_kit_dir()
+local function lib_root()
   local candidates = {
-    vim.env.LIB_NVIM_DIR and (vim.env.LIB_NVIM_DIR .. "/lua/lib/nvim/ui/kit") or nil,
-    vim.fn.getcwd() .. "/.deps/lib.nvim/lua/lib/nvim/ui/kit",
-    vim.fs.dirname(vim.fn.getcwd()) .. "/lib.nvim/lua/lib/nvim/ui/kit",
+    vim.env.LIB_NVIM_DIR,
+    vim.fn.getcwd() .. "/.deps/lib.nvim",
+    vim.fs.dirname(vim.fn.getcwd()) .. "/lib.nvim",
   }
   for _, dir in ipairs(candidates) do
-    if dir and vim.fn.isdirectory(dir) == 1 then
+    if dir and vim.fn.isdirectory(dir .. "/lua/lib/nvim/ui/kit") == 1 then
       return dir
     end
   end
   return nil
+end
+
+local function lib_kit_dir()
+  local root = lib_root()
+  return root and (root .. "/lua/lib/nvim/ui/kit") or nil
 end
 
 --- ui.nvim spelling -> lib.nvim spelling, applied in a single pass.
@@ -52,7 +57,7 @@ end
 local SUBS = {
   { "lua/ui/kit/", "lua/lib/nvim/ui/kit/" },
   { "ui%.contextmenu", "lib.nvim.contextmenu" },
-  { "Ui%.Contextmenu", "Lib.Contextmenu" },
+  { "Ui%.ContextMenu", "Lib.ContextMenu" },
   { "ui%.kit", "lib.nvim.ui.kit" },
   { "Ui%.Kit", "Lib.UI.Kit" },
 }
@@ -148,6 +153,64 @@ describe("ui.kit and lib.nvim's frozen copy", function()
         .. table.concat(drifted, ", ")
         .. " -- a fix made here has to be ported there too, or lib.nvim's "
         .. "own call sites keep the bug. See this spec's header."
+    )
+  end)
+end)
+
+--- `contextmenu` is duplicated the same way, but the right check for it is
+--- weaker, and deliberately so.
+---
+--- It moved with the kit and lib.nvim's copy is frozen on the same terms.
+--- Here, though, the divergence is entirely a *feature*: `set_enabled` /
+--- `is_enabled`, the gate behind `ui.setup({ menu = false })`, exist only
+--- in this copy. 36 added lines, zero changed ones -- which is exactly
+--- what "no new features over there" is supposed to look like, so demanding
+--- equality would fail on a decision rather than on a defect.
+---
+--- What must still hold is that lib.nvim's copy contains no line this one
+--- has since corrected. So: every line over there must still be present
+--- here. A fix rewrites a line, which makes the old one vanish from this
+--- side and trips the check; an addition here only adds, and does not.
+describe("ui.contextmenu and lib.nvim's frozen copy", function()
+  local lib_dir = lib_root()
+  if not lib_dir then
+    return
+  end
+
+  local ui_dir = vim.fn.getcwd() .. "/lua/ui/contextmenu"
+  local their_dir = lib_dir .. "/lua/lib/nvim/contextmenu"
+
+  ---@param text string
+  ---@return table<string, true>
+  local function line_set(text)
+    local out = {}
+    for line in text:gmatch("[^\n]+") do
+      local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
+      if trimmed ~= "" then
+        out[trimmed] = true
+      end
+    end
+    return out
+  end
+
+  it("has kept every line lib.nvim's copy still relies on", function()
+    local lost = {}
+
+    for _, rel in ipairs({ "init.lua", "@types/init.lua" }) do
+      local mine = line_set(as_lib(read(ui_dir .. "/" .. rel)))
+      for line in pairs(line_set(read(their_dir .. "/" .. rel))) do
+        if not mine[line] then
+          lost[#lost + 1] = rel .. ": " .. line
+        end
+      end
+    end
+
+    assert.same(
+      {},
+      lost,
+      "lib.nvim's contextmenu has lines this copy no longer has, which means "
+        .. "a fix landed here only: "
+        .. table.concat(lost, " | ")
     )
   end)
 end)
