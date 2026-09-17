@@ -4,7 +4,6 @@
 local M = {}
 
 local api = vim.api
-local Autocmd = require("lib.nvim.bindings.autocmd")
 
 -- Lazy-load dependencies
 local hl_module
@@ -231,12 +230,9 @@ function M.file_icon_segment_lsp()
 end
 
 -- Clear cache on colorscheme change
-Autocmd.create("ColorScheme", function()
+require("lib.nvim.ui.hl").persist(function()
   icon_cache = require("lib.lua.memo.lru").new(256)
   hl_built = {}
-end, {
-  group = Autocmd.group("UiDeviconsCache", true),
-  desc = "Clear devicons cache on colorscheme change",
-})
+end, { name = "UiDeviconsCache", immediate = false })
 
 return M

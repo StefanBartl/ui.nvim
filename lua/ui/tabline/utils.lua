@@ -455,12 +455,9 @@ end
 
 -- Clear both caches on a colorscheme change: devicon colors are absolute
 -- hex, and the UiTbBufOn/Off groups they were built against just changed.
-require("lib.nvim.bindings.autocmd").create("ColorScheme", function()
+require("lib.nvim.ui.hl").persist(function()
   icon_cache = require("lib.lua.memo.lru").new(256)
   hl_built = {}
-end, {
-  group = require("lib.nvim.bindings.autocmd").group("ui_tabline_utils_cache", true),
-  desc = "ui.tabline: clear the icon/highlight caches on colorscheme change",
-})
+end, { name = "ui_tabline_utils_cache", immediate = false })
 
 return M

@@ -10,8 +10,6 @@
 --- repository's README already draws elsewhere. A plugin's own float
 --- highlighting stays that plugin's job.
 
-local autocmd = require("lib.nvim.bindings.autocmd")
-
 local M = {}
 
 ---@type string[]
@@ -72,14 +70,14 @@ end
 --- calls out ("a theme change leaving half the statusline in the old
 --- palette"). Re-strip immediately after, rather than leaving transparency
 --- silently lost until the next manual toggle.
-autocmd.create("ColorScheme", function()
+--- Through `hl.persist`, which adds the `OptionSet background` case this
+--- block was missing: a light/dark flip repaints the same groups and would
+--- have left transparency off until the next explicit toggle.
+require("lib.nvim.ui.hl").persist(function()
   if _enabled then
     _enabled = false
     M.set(true)
   end
-end, {
-  group = autocmd.group("UiTransparencyReapply", true),
-  desc = "Keep this plugin's transparency active across a colorscheme switch",
-})
+end, { name = "UiTransparencyReapply", immediate = false })
 
 return M

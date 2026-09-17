@@ -45,13 +45,11 @@ end
 --- Apply once now, then re-apply after every colorscheme change.
 ---@return nil
 function M.setup()
-  M.apply()
-
-  local autocmd = require("lib.nvim.bindings.autocmd")
-  autocmd.create("ColorScheme", M.apply, {
-    group = autocmd.group("ui_highlights_diagnostics", true),
-    desc = "ui.highlights: re-clear diagnostic virtual-text backgrounds",
-  })
+  -- Was the one module here with no re-registration at all, then gained a
+  -- hand-written one; `hl.persist` is that same pair plus the
+  -- `OptionSet background` case, and is now what every highlight module in
+  -- this plugin uses.
+  require("lib.nvim.ui.hl").persist(M.apply, { name = "ui_highlights_diagnostics" })
 end
 
 return M
