@@ -1,6 +1,19 @@
 std = "luajit"
 cache = true
 
+-- `luacheck .` is the documented command, here and in CI, and without this
+-- it walks directories that are not this plugin's source. CI installs its
+-- own luacheck through luarocks into `.luarocks/` in the workspace and
+-- checks out lib.nvim and plenary under `.deps/`; locally, `.claude/`
+-- holds sibling worktrees. All of it is other people's Lua, and scanning
+-- it turned `luacheck .` into 259 warnings from luarocks' own sources --
+-- enough noise to keep this job red without anyone reading why.
+exclude_files = {
+  ".luarocks/",
+  ".deps/",
+  ".claude/",
+}
+
 -- "vim" itself is mutable (plugins assign vim.g.* freely), so it must live in
 -- `globals`, not `read_globals`.
 globals = {
