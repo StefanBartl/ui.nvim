@@ -379,3 +379,31 @@ The line count made it look like the other four; the call sites do not.
 The pattern that beats both, where it applies: `plugin_progress` reads
 `lib.nvim.progress`'s shared registry and names no plugin at all, so a new
 one needs no change here.
+
+## The kit exists twice, on purpose
+
+`ui.kit` is also present in lib.nvim, as `lib.nvim.ui.kit`. That is not a
+leftover: `PLAN-ui-kit-migration.md` step 6 decided it deliberately. Eleven
+of lib.nvim's own call sites use the kit — `viewer` for five debug and
+report views, `select`, `menu`, `surface` under `progress`'s kit style —
+and lib.nvim cannot require `ui.nvim` without inverting the dependency
+direction the whole fleet rests on. So both copies stay, and lib.nvim's is
+frozen: no new features, only what is here already.
+
+**"Frozen" does not mean "keeps known bugs", and for a while it did.** By
+2026-09-17 three fixes and a security note lived only here, while the copy
+lib.nvim actually runs still leaked an augroup per popup, left a picker
+debounce timer running past its picker, and mis-anchored a submenu near the
+bottom of the screen. Nothing compared the two, so nobody noticed for
+weeks.
+
+[`TESTS/kit_drift_spec.lua`](../TESTS/kit_drift_spec.lua) compares them
+now, on every CI run — this repository already checks lib.nvim out at
+`ci-verified` for its other specs — and fails naming the file that differs.
+
+**So: a fix made in `lua/ui/kit/` has to be mirrored into lib.nvim's copy**,
+with the rename applied (`ui.kit` → `lib.nvim.ui.kit`, `Ui.Kit` →
+`Lib.UI.Kit`). The spec ignores whitespace, because undoing the rename
+lengthens lines — `ui.kit.sync` becomes `lib.nvim.ui.kit.sync` — and pushes
+one `error()` past the shared 100-column budget, so stylua wraps it on one
+side only. Byte-identity is not achievable; identical code is.
