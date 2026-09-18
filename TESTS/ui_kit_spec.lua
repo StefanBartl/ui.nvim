@@ -39,6 +39,21 @@ local function harness_ok(v, msg)
   assert.is_true(v and true or false, msg)
 end
 
+--- wait_for(cond) -- poll `cond` every 10ms for up to `timeout` (default
+--- 1000ms) instead of sleeping a fixed duration and hoping some async
+--- effect (a debounce timer, a flash extmark, a menu action) landed inside
+--- that window. Six call sites in this file used to hand-roll this exact
+--- `vim.wait(1000, function() ... end, 10)` shape; a flat `vim.wait(N)`
+--- always burns the full N ms and, worse, races real wall-clock scheduling
+--- jitter against whatever fixed N was guessed -- see the live_input
+--- section below for the flake that caused.
+---@param cond fun(): boolean
+---@param timeout integer|nil
+---@return nil
+local function wait_for(cond, timeout)
+  vim.wait(timeout or 1000, cond, 10)
+end
+
 local H = { eq = harness_eq, ok = harness_ok }
 
 describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
@@ -337,18 +352,14 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     ok(li:is_valid(), "live_input float valid")
     vim.api.nvim_buf_set_lines(li.bufnr, 0, 1, false, { "h" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li.bufnr })
-    -- Poll for the debounce timer actually firing rather than sleeping a
-    -- fixed duration and hoping it landed inside that window: the timer is
-    -- real wall-clock (vim.uv), so a flat `vim.wait(60)` after a 20ms
-    -- debounce is a race against OS scheduling jitter, not a guarantee.
-    vim.wait(1000, function()
+    wait_for(function()
       return #li_changes >= 1
-    end, 10)
+    end)
     vim.api.nvim_buf_set_lines(li.bufnr, 0, 1, false, { "he" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li.bufnr })
-    vim.wait(1000, function()
+    wait_for(function()
       return #li_changes >= 2
-    end, 10)
+    end)
     eq(table.concat(li_changes, ","), "h,he", "on_change fires once per debounce window, in order")
     li:close()
 
@@ -370,9 +381,9 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li2.bufnr })
     vim.api.nvim_buf_set_lines(li2.bufnr, 0, 1, false, { "hel" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li2.bufnr })
-    vim.wait(1000, function()
+    wait_for(function()
       return #li_coalesced >= 1
-    end, 10)
+    end)
     eq(#li_coalesced, 1, "rapid edits within the debounce window fire on_change only once")
     eq(li_coalesced[1], "hel", "the coalesced on_change carries the final value")
     li2:close()
@@ -439,9 +450,9 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     )
     vim.api.nvim_buf_set_lines(li4.bufnr, 0, 1, false, { "x" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li4.bufnr })
-    vim.wait(1000, function()
+    wait_for(function()
       return #li_popup_changes >= 1
-    end, 10)
+    end)
     eq(li_popup_changes[1], "x", 'kit.popup({ type = "live_input" }) routes to live_input')
     li4:close()
 
@@ -969,9 +980,9 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
       1,
       "menu lights exactly the row that was picked"
     )
-    vim.wait(1000, function()
+    wait_for(function()
       return ran ~= nil
-    end, 10)
+    end)
     eq(ran, "delete", "menu runs the picked item's action")
 
     -- Row geometry: the window is exactly as wide as a padded row (no slack
@@ -1091,10 +1102,10 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     vim.api.nvim_win_set_cursor(ns.winid, { assert(deeper, "Deeper row"), 0 })
     chooser.submit()
     -- Held back for the length of the pick flash, as above.
-    vim.wait(1000, function()
+    wait_for(function()
       local first = vim.api.nvim_buf_get_lines(ns.bufnr, 0, 1, false)[1]
       return first ~= nil and first:match("◂ Back") ~= nil
-    end, 10)
+    end)
     local nrows = vim.api.nvim_buf_get_lines(ns.bufnr, 0, -1, false)
     ok(nrows[1]:match("◂ Back") ~= nil, "menu back entry leads a nested level")
     ok(nrows[1]:match("│") == nil, "menu back entry is not framed as a section of its own")
