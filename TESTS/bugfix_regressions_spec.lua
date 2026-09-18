@@ -383,3 +383,97 @@ describe("bug: git()'s branch name was not %-escaped for 'statusline'", function
     assert.is_nil(out:find("50%-done", 1, true))
   end)
 end)
+
+describe(
+  "bug: ellipsize_middle measured and cut its budget in bytes, not display columns",
+  function()
+    -- `max` here is a statusline column budget. The old code compared it
+    -- against `#s` (byte count) and cut with `string.sub` (byte offsets) --
+    -- correct for ASCII, wrong for any multi-byte character (umlauts, CJK,
+    -- emoji), which either eats more of the budget than it should or gets
+    -- sliced in half, leaving a dangling UTF-8 continuation/lead byte in the
+    -- rendered statusline. A German filename with umlauts is an everyday
+    -- case for this codebase's own primary user, not an exotic one.
+    local formatters = require("ui.statusline.modules.formatters")
+    local utf8 = require("lib.lua.strings.utf8")
+
+    --- Every codepoint of `s` decodes cleanly and re-encodes byte-for-byte
+    --- back to `s`. A mid-character byte split breaks this: the orphaned
+    --- lead/continuation byte decodes to a *different* codepoint than the
+    --- one it was originally part of, so re-encoding it does not reproduce
+    --- the original bytes.
+    ---@param s string
+    ---@return boolean
+    local function is_clean_utf8(s)
+      local rebuilt = {}
+      for cp in utf8.iter(s) do
+        rebuilt[#rebuilt + 1] = utf8.encode(cp)
+      end
+      return table.concat(rebuilt) == s
+    end
+
+    it("never splits a multi-byte character even when the budget lands mid-character", function()
+      -- Every character is 2 bytes ("ä" = 0xC3 0xA4), so any byte-based cut
+      -- at an odd offset used to land inside one.
+      local s = string.rep("ä", 30)
+
+      for _, max in ipairs({ 5, 9, 11, 15, 21 }) do
+        local out = formatters.ellipsize_middle(s, max)
+        assert.is_true(is_clean_utf8(out), ("max=%d produced invalid UTF-8: %q"):format(max, out))
+        assert.is_true(
+          vim.fn.strdisplaywidth(out) <= max,
+          ("max=%d but rendered width is %d: %q"):format(max, vim.fn.strdisplaywidth(out), out)
+        )
+      end
+    end)
+
+    it("uses the full display-column budget instead of under-filling it by byte count", function()
+      -- Regression check for the measurement half of the bug, not just the
+      -- split: budget 21 over 2-byte characters used to leave room for only
+      -- ~10 characters total (21 bytes / 2), not the ~20 the display-column
+      -- budget actually allows (minus 1 for the ellipsis).
+      local s = string.rep("ä", 30)
+      local out = formatters.ellipsize_middle(s, 21)
+      assert.equals(21, vim.fn.strdisplaywidth(out))
+    end)
+
+    it(
+      "still ellipsizes plain ASCII exactly as before (no behavior change for the common case)",
+      function()
+        local s = string.rep("x", 30)
+        local out = formatters.ellipsize_middle(s, 11)
+        assert.equals(11, vim.fn.strdisplaywidth(out))
+        assert.is_true(out:find("…", 1, true) ~= nil, out)
+      end
+    )
+  end
+)
+
+describe(
+  "bug: ellipsize_path_components budgeted its `room`/`target` in bytes, not columns",
+  function()
+    -- Same root cause as ellipsize_middle above, in the path-shortening
+    -- function `ui.statusline.modules.lsp`'s breadcrumb actually calls.
+    -- Components are only ever cut at a "/" boundary here, so this cannot
+    -- corrupt a character the way ellipsize_middle could -- but a
+    -- non-ASCII component was still judged "too wide" by its byte count
+    -- instead of its rendered width, silently discarding more of a path
+    -- than the real column budget required.
+    local formatters = require("ui.statusline.modules.formatters")
+
+    it("keeps a CJK path within its display-column budget rather than its byte budget", function()
+      local p = "C:/Users/bartl/项目/日本語のフォルダ名/开发文档/配置文件.txt"
+      local out = formatters.ellipsize_path_components(p, 25)
+      assert.is_true(
+        vim.fn.strdisplaywidth(out) <= 25,
+        ("display width %d exceeds budget 25: %q"):format(vim.fn.strdisplaywidth(out), out)
+      )
+      -- The old byte-budgeted version could only fit "C:/…/配置文件.txt"
+      -- (17 columns) into a 25-column budget; the fixed version fits more.
+      assert.is_true(
+        vim.fn.strdisplaywidth(out) > vim.fn.strdisplaywidth("C:/…/配置文件.txt"),
+        out
+      )
+    end)
+  end
+)
