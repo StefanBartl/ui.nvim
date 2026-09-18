@@ -337,10 +337,18 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     ok(li:is_valid(), "live_input float valid")
     vim.api.nvim_buf_set_lines(li.bufnr, 0, 1, false, { "h" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li.bufnr })
-    vim.wait(60)
+    -- Poll for the debounce timer actually firing rather than sleeping a
+    -- fixed duration and hoping it landed inside that window: the timer is
+    -- real wall-clock (vim.uv), so a flat `vim.wait(60)` after a 20ms
+    -- debounce is a race against OS scheduling jitter, not a guarantee.
+    vim.wait(1000, function()
+      return #li_changes >= 1
+    end, 10)
     vim.api.nvim_buf_set_lines(li.bufnr, 0, 1, false, { "he" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li.bufnr })
-    vim.wait(60)
+    vim.wait(1000, function()
+      return #li_changes >= 2
+    end, 10)
     eq(table.concat(li_changes, ","), "h,he", "on_change fires once per debounce window, in order")
     li:close()
 
@@ -362,7 +370,11 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li2.bufnr })
     vim.api.nvim_buf_set_lines(li2.bufnr, 0, 1, false, { "hel" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li2.bufnr })
-    vim.wait(120)
+    vim.wait(1000, function()
+      return #li_coalesced >= 1
+    end, 10)
+    vim.wait(200)
+    print("DEBUG li_coalesced len=" .. #li_coalesced .. " content=" .. vim.inspect(li_coalesced))
     eq(#li_coalesced, 1, "rapid edits within the debounce window fire on_change only once")
     eq(li_coalesced[1], "hel", "the coalesced on_change carries the final value")
     li2:close()
@@ -429,7 +441,9 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     )
     vim.api.nvim_buf_set_lines(li4.bufnr, 0, 1, false, { "x" })
     vim.api.nvim_exec_autocmds("TextChangedI", { buffer = li4.bufnr })
-    vim.wait(60)
+    vim.wait(1000, function()
+      return #li_popup_changes >= 1
+    end, 10)
     eq(li_popup_changes[1], "x", 'kit.popup({ type = "live_input" }) routes to live_input')
     li4:close()
 
