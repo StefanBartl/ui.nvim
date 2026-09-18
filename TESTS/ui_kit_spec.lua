@@ -373,8 +373,6 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     vim.wait(1000, function()
       return #li_coalesced >= 1
     end, 10)
-    vim.wait(200)
-    print("DEBUG li_coalesced len=" .. #li_coalesced .. " content=" .. vim.inspect(li_coalesced))
     eq(#li_coalesced, 1, "rapid edits within the debounce window fire on_change only once")
     eq(li_coalesced[1], "hel", "the coalesced on_change carries the final value")
     li2:close()
