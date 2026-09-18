@@ -45,6 +45,13 @@ function M.stl_escape(s)
 end
 
 ---@nodiscard
+--- `max` is a display-column budget (statusline space), not a byte count:
+--- `#s`/`string.sub` would measure and cut in bytes, which for any
+--- multi-byte character (umlauts, CJK, emoji -- all ordinary in filenames
+--- and LSP symbol names) either mis-measures the budget or slices a
+--- character in half, leaving a dangling UTF-8 continuation byte in the
+--- rendered statusline. Walked in codepoints via `lib.lua.strings` so both
+--- the head and tail cuts land on a character boundary.
 ---@param s string
 ---@param max integer
 ---@return string
@@ -53,7 +60,7 @@ function M.ellipsize_middle(s, max)
     return ""
   end
 
-  if max <= 0 or #s <= max then
+  if max <= 0 or lib_strings.display_width(s) <= max then
     return s
   end
 
@@ -63,29 +70,74 @@ function M.ellipsize_middle(s, max)
     return cached
   end
 
-  local head = math.floor((max - 1) / 2)
-  local tail = max - head - 1
+  -- One forward pass over the codepoints, each paired with its byte start,
+  -- so the head walk (forward) and tail walk (backward) below can both
+  -- find a safe cut point without re-decoding.
+  local chars = {}
+  for cp, byte_index in lib_strings.utf8_iter(s) do
+    chars[#chars + 1] = { cp = cp, start = byte_index }
+  end
+  local n = #chars
 
-  -- Build efficiently without intermediate strings
-  local parts = {
-    string.sub(s, 1, head),
-    "…",
-    string.sub(s, #s - tail + 1, #s),
-  }
+  ---@param i integer
+  ---@return integer # byte index of the last byte of chars[i]
+  local function char_end(i)
+    return (i < n) and (chars[i + 1].start - 1) or #s
+  end
 
-  local result = table.concat(parts, "")
+  local ellipsis_w = lib_strings.display_width("…")
+  local head_budget = math.floor((max - ellipsis_w) / 2)
+  local tail_budget = max - ellipsis_w - head_budget
+
+  local head_end, col = 0, 0
+  for i = 1, n do
+    local w = lib_strings.char_width(chars[i].cp)
+    if col + w > head_budget then
+      break
+    end
+    col = col + w
+    head_end = char_end(i)
+  end
+
+  local tail_start, col2 = #s + 1, 0
+  for i = n, 1, -1 do
+    local w = lib_strings.char_width(chars[i].cp)
+    if col2 + w > tail_budget then
+      break
+    end
+    col2 = col2 + w
+    tail_start = chars[i].start
+  end
+
+  -- A very tight budget can make the two walks meet or cross (e.g. `max`
+  -- barely bigger than the ellipsis itself) -- never let the tail repeat
+  -- bytes the head already kept.
+  if tail_start <= head_end then
+    tail_start = head_end + 1
+  end
+
+  local result = s:sub(1, head_end) .. "…" .. s:sub(tail_start)
   ellipsize_cache:put(cache_key, result)
   return result
 end
 
 ---@nodiscard
---- Component-aware path ellipsization with proper Windows/POSIX support
+--- Component-aware path ellipsization with proper Windows/POSIX support.
+---
+--- `max` is a display-column budget, same as `ellipsize_middle` above --
+--- every `#x` below against `max`/`room`/`target` measures display width,
+--- not bytes, so a path with umlauts/CJK components is not judged "too
+--- long" more harshly than it actually renders. Table lengths (`#parts`,
+--- `#right`, the component array itself) are left as-is; those count
+--- entries, not string bytes, and are unaffected either way. Cuts still
+--- only ever happen at a `/` component boundary, so unlike
+--- `ellipsize_middle` there is no mid-character byte-split risk here.
 ---@param path string
 ---@param max integer
 ---@return string
 function M.ellipsize_path_components(path, max)
   -- Fast path
-  if max <= 0 or #path <= max then
+  if max <= 0 or lib_strings.display_width(path) <= max then
     return path
   end
 
@@ -130,7 +182,7 @@ function M.ellipsize_path_components(path, max)
   end
 
   local full = join_all()
-  if #full <= max then
+  if lib_strings.display_width(full) <= max then
     return full
   end
 
@@ -146,9 +198,9 @@ function M.ellipsize_path_components(path, max)
   local min_parts = { prefix, first, "/…/", last }
   local min_s = table.concat(min_parts, "")
 
-  if #min_s > max then
+  if lib_strings.display_width(min_s) > max then
     local alt = (prefix ~= "" and (prefix .. "…/" .. last)) or ("…/" .. last)
-    if #alt <= max then
+    if lib_strings.display_width(alt) <= max then
       return alt
     end
     return M.ellipsize_middle(full, max)
@@ -156,11 +208,11 @@ function M.ellipsize_path_components(path, max)
 
   -- Greedy addition from right
   local right = {}
-  local cur = #min_s
+  local cur = lib_strings.display_width(min_s)
   local i = #parts - 1
 
   while i >= 2 do
-    local cand_len = cur + 1 + #parts[i]
+    local cand_len = cur + 1 + lib_strings.display_width(parts[i])
     if cand_len > max then
       break
     end
@@ -179,7 +231,14 @@ function M.ellipsize_path_components(path, max)
 end
 
 ---@nodiscard
---- Build compact breadcrumb line with intelligent path shortening
+--- Build compact breadcrumb line with intelligent path shortening.
+---
+--- `target`/`room` are display-column budgets (`vim.o.columns`-derived),
+--- so the length checks against them below measure display width, same
+--- reasoning as `ellipsize_path_components` above -- `ctx` is LSP/
+--- Tree-sitter symbol text and just as capable of holding non-ASCII
+--- identifiers as a path component is. `#ctx > 0` stays a plain
+--- emptiness check: byte-empty and display-empty are the same string.
 ---@param rel string
 ---@param ctx string|nil
 ---@param sep string
@@ -197,7 +256,7 @@ function M.compact_breadcrumb_line(rel, ctx, sep, total_maxw)
   end
 
   if ctx and #ctx > 0 then
-    local static_len = #sep + #ctx
+    local static_len = lib_strings.display_width(sep) + lib_strings.display_width(ctx)
     local room = target - static_len
 
     if options.path_max_chars then
@@ -214,7 +273,7 @@ function M.compact_breadcrumb_line(rel, ctx, sep, total_maxw)
       local parts = { rel_compact, sep, ctx }
       local candidate = table.concat(parts, "")
 
-      if #candidate <= target then
+      if lib_strings.display_width(candidate) <= target then
         return candidate
       else
         return M.ellipsize_middle(candidate, target)
@@ -229,7 +288,7 @@ function M.compact_breadcrumb_line(rel, ctx, sep, total_maxw)
     local limit = options.path_max_chars or target
     local compact = M.ellipsize_path_components(rel, limit)
 
-    if #compact > target then
+    if lib_strings.display_width(compact) > target then
       compact = M.ellipsize_middle(compact, target)
     end
 
