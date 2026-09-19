@@ -100,8 +100,22 @@ local function devicon_for_path(path)
     if mod then
       devicons_mod = mod
     else
-      -- Cache failure result
+      -- No plugin: lib.nvim's own icon table (a curated devicons subset)
+      -- instead of one generic glyph for every file. `prefer_plugin =
+      -- false` because this branch already knows the plugin is absent, and
+      -- `fallback` keeps the old generic glyph for a host without a Nerd
+      -- Font declaration -- the column used to show that glyph regardless.
       local result = { icon = "󰈙", color = nil }
+      local ok_lib, lib_icons = pcall(require, "lib.nvim.ui.icons")
+      if ok_lib then
+        local ok_get, icon, color = pcall(lib_icons.get, filename, nil, {
+          prefer_plugin = false,
+          fallback = "󰈙",
+        })
+        if ok_get and icon and icon ~= "" then
+          result = { icon = icon, color = color }
+        end
+      end
       icon_cache:put(cache_key, result)
       return result.icon, result.color
     end

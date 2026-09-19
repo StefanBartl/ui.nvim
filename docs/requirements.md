@@ -18,7 +18,7 @@ published, or renders nothing.
 
 | | |
 | --- | --- |
-| `nvim-web-devicons` | File icons; without it the icon column is blank |
+| `nvim-web-devicons` | File icons; without it `lib.nvim.ui.icons` (a curated devicons subset shipped as data) fills the column |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) | Branch name and added/changed/removed counts (`git`, `git_clickable`) |
 | [casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim) | Case info plus the SLA urgency badge (`casedesk`) |
 | [filetree.nvim](https://github.com/StefanBartl/filetree.nvim) | The cwd-mode badge (`filetree_cwd_mode`) |

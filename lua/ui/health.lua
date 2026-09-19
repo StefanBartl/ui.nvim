@@ -314,7 +314,7 @@ local function check_segments()
   health.start("Statusline segments")
 
   for _, entry in ipairs({
-    { "nvim-web-devicons", "file type icons; without it the icon column is blank" },
+    { "nvim-web-devicons", "file type icons; without it lib.nvim.ui.icons' own table (a devicons subset) fills the column" },
     { "gitsigns", "branch name + added/changed/removed counts (git, git_clickable)" },
     { "casedesk.config", "case info + SLA urgency badge (casedesk)" },
     { "filetree", "cwd-mode badge (filetree_cwd_mode)" },
