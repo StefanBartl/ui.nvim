@@ -127,7 +127,7 @@ describe("ui.screenkey", function()
     assert.equals("hjk", current_text())
   end)
 
-  it("join_chars spells a short repeat out inside the run, keeps a held key as key×N", function()
+  it("join_chars spells a short repeat out, keeps a held key as key\xC3\x97N", function()
     screenkey.setup({ join_chars = true })
     screenkey.enable()
     feed_each({ "h", "j", "j", "k" })
@@ -142,7 +142,7 @@ describe("ui.screenkey", function()
     vim.wait(200, function()
       return current_text() ~= ""
     end)
-    assert.equals("h j×4 k", current_text())
+    assert.equals("h j\xC3\x974 k", current_text())
   end)
 
   it("join_chars keeps a keycode apart from the characters around it", function()
