@@ -33,6 +33,7 @@ require("ui").setup({
   usrcmds = true,  -- the :UI command and theme management
   menu = false,    -- opt out of ui.contextmenu's renderer/trigger
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
+  notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
 })
 ```
 
@@ -44,6 +45,13 @@ tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20 }`) to
 override them; `:UI context` toggles it for the session either way.
+
+`notify` is explicit-only for the same reason: it replaces `vim.notify`, and
+a host that routes notifications through noice or snacks should not lose
+that to `all = true`. `true` installs `ui.notify` with the shipped tunables;
+a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
+{ [vim.log.levels.ERROR] = 8000 }, titles = { ... } }`) overrides them.
+`:UI notify off` puts the previous handler back.
 
 Nothing here is on by default, with one deliberate exception: `menu` is
 opt-**out**, not opt-in. `ui.contextmenu`'s `open`/`bind_buffer` already work

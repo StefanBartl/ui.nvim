@@ -45,5 +45,6 @@ return {
     keymaps = false,
     usrcmds = false,
     context = false,
+    notify = false,
   },
 }

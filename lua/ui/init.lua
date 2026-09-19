@@ -33,6 +33,11 @@ local M = {}
 --- `bind_buffer`) -- omitting it, or `opts.all`, leaves the menu at its
 --- already-working default rather than needing to ask for it.
 ---
+--- `opts.notify` is explicit-only as well: `true` (or a `Ui.Notify.Opts`
+--- table) makes `vim.notify` render as `ui.notify`'s toasts with a history,
+--- replacing whatever handler the host had -- not something `all = true`
+--- should do behind a host that routes notifications elsewhere.
+---
 --- `opts.context` is explicit-only: neither `opts.all` nor its absence turns
 --- the sticky code-context overlay (`ui.context`) on, because it draws over
 --- the buffer's first rows and a host asking for "the keymaps and the
@@ -71,6 +76,19 @@ function M.setup(opts)
     end)
     if not ok then
       notify.error("context setup failed: " .. tostring(err))
+    end
+  end
+
+  if opts.notify then
+    local ok, err = pcall(function()
+      local ui_notify = require("ui.notify")
+      if type(opts.notify) == "table" then
+        ui_notify.setup(opts.notify)
+      end
+      ui_notify.enable()
+    end)
+    if not ok then
+      notify.error("notify setup failed: " .. tostring(err))
     end
   end
 
