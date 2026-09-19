@@ -136,7 +136,12 @@ ownership pattern this mirrors.
 
 `ui.screenkey.setup()` rejects an invalid value (wrong type, or below its
 minimum) instead of accepting it and keeps whatever `cfg` already had; this
-section surfaces what the last call rejected.
+section surfaces what the last call rejected. That covers the integer
+tunables (`width`, `height`, `margin`, `max_entries`, `fade_ms`) as well as
+`labels` (a table mapping `keytrans()` names to replacement text, e.g.
+`{ ["<Space>"] = "â£" }`; a non-string entry is dropped) and
+`join_chars` (a boolean: run plain characters together into one chip per
+typed word while `<Esc>`, `<C-…>` and repeat counts stay apart).
 
 | Line | Means |
 | --- | --- |
