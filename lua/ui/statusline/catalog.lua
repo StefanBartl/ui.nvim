@@ -202,6 +202,14 @@ return {
     source = "ui.statusline.modules.lsp",
     used_by = {},
   },
+  {
+    key = "matchup_offscreen",
+    summary = "vim-matchup's offscreen-match source line, as a segment instead of vim-matchup's own whole-statusline takeover.",
+    requires = "vim-matchup",
+    builtin = false,
+    source = "ui.statusline.modules.matchup_offscreen",
+    used_by = {},
+  },
 
   -- Clickable modules -- ui.statusline.utils.clickable.wrap() on top of an
   -- existing segment or a new one. See docs/modules.md's own "Clickable
