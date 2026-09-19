@@ -47,22 +47,37 @@ local cfg = {
   yank_register = '"',
 }
 
----@type table<string, string>  hex -> highlight group name
-local hl_cache = {}
+-- Highlight groups are keyed by fixed SCREEN SLOT (row, col), not by hex:
+-- the picker's grid, hue row and shades row occupy a small, constant set of
+-- cell positions, so redefining each slot's one group on every repaint
+-- keeps the total group count bounded regardless of how many distinct
+-- colours pass through a session -- unlike a name keyed by hex, which
+-- would mint one new, never-reclaimed Neovim highlight group per distinct
+-- colour ever picked (Neovim has no API to delete one).
+---@type table<string, string>  "row,col" -> highlight group name
+local slot_groups = {}
+---@type table<string, string>  "row,col" -> the hex last painted there
+local slot_hex = {}
 
 ---@internal
----A highlight group whose background is `hex` (and whose foreground reads
----on it), created once per colour.
+---The highlight group for screen slot `(row, col)`, whose background is
+---`hex` (foreground picked to read on it). The group is created once per
+---slot and only redefined when that slot's colour actually changed.
+---@param row integer
+---@param col integer
 ---@param hex string
 ---@return string group
-local function hl_for(hex)
-  local group = hl_cache[hex]
-  if group then
-    return group
+local function hl_for(row, col, hex)
+  local key = row .. "," .. col
+  local group = slot_groups[key]
+  if not group then
+    group = ("UiColorpicker_%d_%d"):format(row, col)
+    slot_groups[key] = group
   end
-  group = "UiColorpicker_" .. hex:sub(2)
-  api.nvim_set_hl(0, group, { bg = hex, fg = color.contrast(hex) })
-  hl_cache[hex] = group
+  if slot_hex[key] ~= hex then
+    api.nvim_set_hl(0, group, { bg = hex, fg = color.contrast(hex) })
+    slot_hex[key] = hex
+  end
   return group
 end
 
@@ -173,7 +188,7 @@ local function paint(state)
     for _, cell in ipairs(cells) do
       api.nvim_buf_set_extmark(buf, NS, row, cell.col, {
         end_col = cell.col + #CELL,
-        hl_group = hl_for(cell.hex),
+        hl_group = hl_for(row, cell.col, cell.hex),
       })
     end
   end
@@ -182,7 +197,7 @@ local function paint(state)
     NS,
     row_info(),
     0,
-    { end_col = #state.pick, hl_group = hl_for(state.pick) }
+    { end_col = #state.pick, hl_group = hl_for(row_info(), 0, state.pick) }
   )
   api.nvim_buf_set_extmark(buf, NS, row_info() + 1, 0, { line_hl_group = "Comment" })
 end
@@ -409,7 +424,8 @@ function M.setup(opts)
       cfg[k] = v
     end
   end
-  hl_cache = {}
+  slot_groups = {}
+  slot_hex = {}
 end
 
 ---@return Ui.Colorpicker.Config

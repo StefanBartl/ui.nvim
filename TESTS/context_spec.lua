@@ -220,6 +220,29 @@ describe("ui.context", function()
     assert.equals(3, context.refresh(win))
   end)
 
+  it("redraws when the enclosing declaration is edited in place", function()
+    if not has_lua_parser then
+      pending("no Lua parser available")
+      return
+    end
+    local win, buf = open_source()
+    context.enable()
+    scroll_to(win, 7)
+    context.refresh(win)
+    local lines = overlay_lines(win)
+    assert.truthy(lines[1]:find("local function outer"))
+    -- Rename the enclosing function in place: same row (0), same node
+    -- type, so a cache keyed only on context row numbers + window width
+    -- would (wrongly) skip the redraw and keep showing the old name.
+    vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "local function outer_RENAMED(a, b)" })
+    context.refresh(win)
+    lines = overlay_lines(win)
+    assert.truthy(
+      lines[1]:find("outer_RENAMED"),
+      "overlay did not pick up the in-place rename: " .. lines[1]
+    )
+  end)
+
   it("go_to_context jumps to the innermost, then outer, enclosing scope", function()
     if not has_lua_parser then
       pending("no Lua parser available")

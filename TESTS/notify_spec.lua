@@ -87,4 +87,50 @@ describe("ui.notify", function()
     assert.is_false(notify.toggle())
     assert.equals(original, vim.notify)
   end)
+
+  it("does not recurse without bound when showing a toast itself fails", function()
+    notify.enable()
+    local orig_open = toast.open
+    local open_calls = 0
+    -- Simulate a toast float that cannot be created (e.g. no room to open
+    -- a window) reporting its own failure back through vim.notify -- the
+    -- exact re-entrant path that used to recurse until the stack blew.
+    toast.open = function(_)
+      open_calls = open_calls + 1
+      vim.notify("could not open a toast float", vim.log.levels.ERROR)
+      return nil
+    end
+    local ok = pcall(vim.notify, "trigger", vim.log.levels.WARN)
+    toast.open = orig_open
+    assert.is_true(ok, "vim.notify must not raise even when show() itself fails")
+    -- Exactly one nested attempt: the guard stops the second (re-entrant)
+    -- call from trying to open its own toast.
+    assert.equals(1, open_calls)
+  end)
+
+  it("keeps the true original handler across a foreign wrapper disable/enable cycle", function()
+    notify.enable()
+    local ours = vim.notify
+    -- Another plugin wraps vim.notify after we enabled -- still calling
+    -- through to us, which disable() cannot fully unhook from.
+    local wrapper_calls = 0
+    vim.notify = function(...)
+      wrapper_calls = wrapper_calls + 1
+      ours(...)
+    end
+    notify.disable()
+    assert.is_false(notify.is_enabled())
+    -- vim.notify was left as the wrapper (disable() could not restore
+    -- through it), but the handler itself must now be inert: a call
+    -- reaching M.handler through the wrapper must not grow the history.
+    local before = #notify.history()
+    vim.notify("still routed through the wrapper", vim.log.levels.INFO)
+    assert.equals(1, wrapper_calls)
+    assert.equals(before, #notify.history(), "disabled handler must not record")
+    -- The true original (from before enable()) must still be recoverable.
+    vim.notify = original
+    notify.enable()
+    notify.disable()
+    assert.equals(original, vim.notify)
+  end)
 end)

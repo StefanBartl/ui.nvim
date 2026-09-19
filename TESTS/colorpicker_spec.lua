@@ -53,6 +53,14 @@ describe("ui.colorpicker.color", function()
     assert.equals("#fff", (color.hex_at(line, 21)))
     assert.is_nil((color.hex_at(line, 2)))
     assert.is_nil((color.hex_at("#12345g", 3)))
+    -- Regression: a 3-digit literal before a later 6-digit one on the same
+    -- line used to be skipped -- the scan tried the 6-digit pattern across
+    -- the whole remainder first and only fell back to 3-digit search from
+    -- wherever THAT left off, jumping straight past the earlier match.
+    local hex2, s2, e2 = color.hex_at("bg = #abc, fg = #112233", 6)
+    assert.equals("#abc", hex2)
+    assert.equals(5, s2)
+    assert.equals(9, e2)
   end)
 end)
 
@@ -124,5 +132,30 @@ describe("ui.colorpicker", function()
     picker.setup({ hues = 12 })
     assert.equals(12, picker.config().hues)
     picker.setup({ hues = 24 })
+  end)
+
+  it("keeps the highlight-group count bounded across many distinct colours", function()
+    vim.cmd("new")
+    local surf = picker.open({ hex = "#123456" })
+    local function count()
+      local n = 0
+      for name in pairs(vim.api.nvim_get_hl(0, {})) do
+        if name:find("^UiColorpicker_") then
+          n = n + 1
+        end
+      end
+      return n
+    end
+    local before = count()
+    -- Sweeping the hue row picks 24 distinct hues, each rebuilding the
+    -- whole saturation/lightness grid (84 cells) with a fresh hex per
+    -- cell -- the exact pattern that used to mint one never-reclaimed
+    -- Neovim highlight group per distinct hex forever.
+    for col = 0, 46, 2 do
+      vim.api.nvim_win_set_cursor(surf.winid, { 1, col })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = surf.bufnr })
+    end
+    local after = count()
+    assert.is_true(after <= before + 5, ("group count grew from %d to %d"):format(before, after))
   end)
 end)

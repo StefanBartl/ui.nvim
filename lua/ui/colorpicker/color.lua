@@ -202,9 +202,17 @@ function M.hex_at(line, col)
   end
   local init = 1
   while true do
-    local s, e = line:find("#%x%x%x%x%x%x%f[^%x]", init)
-    if not s then
-      s, e = line:find("#%x%x%x%f[^%x]", init)
+    -- Both patterns are tried from the same `init` and the leftmost match
+    -- wins -- searching the 6-digit pattern across the whole remainder
+    -- first would jump straight past an earlier 3-digit literal (it is
+    -- never found once `init` has advanced beyond it).
+    local s6, e6 = line:find("#%x%x%x%x%x%x%f[^%x]", init)
+    local s3, e3 = line:find("#%x%x%x%f[^%x]", init)
+    local s, e
+    if s6 and (not s3 or s6 <= s3) then
+      s, e = s6, e6
+    else
+      s, e = s3, e3
     end
     if not s then
       return nil, nil, nil
