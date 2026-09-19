@@ -1397,3 +1397,40 @@ describe("bug: kit.form stalled with no on_cancel when a field's surface failed 
     assert.is_false(submitted, "on_submit must not fire on a failed open")
   end)
 end)
+
+describe(
+  "bug: kit.prompt (text) stalled with no on_answer when its surface failed to open",
+  function()
+    -- Same shape as the kit.form case above: `ui.kit.input` is a module-level
+    -- upvalue in `ui.kit.prompt`, so the fake must be in place before
+    -- `ui.kit.prompt` is (re)required.
+    it("calls on_answer(nil) instead of silently stalling when input.open() returns nil", function()
+      package.loaded["ui.kit.prompt"] = nil
+      local saved_input = package.loaded["ui.kit.input"]
+      package.loaded["ui.kit.input"] = {
+        open = function()
+          return nil
+        end,
+      }
+
+      local prompt = require("ui.kit.prompt")
+      local answered, answer = false, "unset"
+      local returned = prompt.open({
+        question = "Q?",
+        answer_type = "text",
+        on_answer = function(a)
+          answered = true
+          answer = a
+        end,
+      })
+
+      package.loaded["ui.kit.input"] = saved_input
+      package.loaded["ui.kit.prompt"] = nil
+      require("ui.kit.prompt") -- restore the real module for any later spec
+
+      assert.is_nil(returned)
+      assert.is_true(answered, "on_answer must fire when the surface never opened")
+      assert.is_nil(answer, "on_answer must receive nil, matching the on_cancel path")
+    end)
+  end
+)
