@@ -124,11 +124,15 @@ end
 --- typed text reads as text while `<Esc>`, `<C-w>` and repeat counts still
 --- stand apart. A label counts as text too: `<Space>` shown as U+2423
 --- joins its neighbours, an unlabelled `<Space>` does not.
+--- A short repeat ("pp" in "app", "ee" in "see") is spelled out inside the
+--- run; from JOIN_REPEAT_MAX + 1 on it is a held key and stays a `key×N`
+--- chip of its own, so "jjjjjjjj" does not paint a wall of j.
 ---@param display string
 ---@param count integer
 ---@return boolean
+local JOIN_REPEAT_MAX = 3
 local function joinable(display, count)
-  return cfg.join_chars and count == 1 and display:match("^<.+>$") == nil
+  return cfg.join_chars and count <= JOIN_REPEAT_MAX and display:match("^<.+>$") == nil
 end
 
 local function build_text()
@@ -137,10 +141,11 @@ local function build_text()
   for _, e in ipairs(entries) do
     local display = label_of(e.key)
     if joinable(display, e.count) then
+      local run = display:rep(e.count)
       if open then
-        parts[#parts] = parts[#parts] .. display
+        parts[#parts] = parts[#parts] .. run
       else
-        parts[#parts + 1] = display
+        parts[#parts + 1] = run
         open = true
       end
     else
