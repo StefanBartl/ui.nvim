@@ -12,6 +12,7 @@ local screenkey = require("ui.screenkey")
 local context = require("ui.context")
 local colorpicker = require("ui.colorpicker")
 local zen = require("ui.zen")
+local ui_notify = require("ui.notify")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -34,6 +35,7 @@ local ICON = {
   context = nerd_font.glyph("f121", ""), -- nf-fa-code
   color = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
   zen = nerd_font.glyph("f10c", ""), -- nf-fa-circle_o
+  bell = nerd_font.glyph("f0f3", ""), -- nf-fa-bell
 }
 
 ---`icon .. " " .. text`, or bare `text` when no icon resolved.
@@ -160,6 +162,35 @@ local function ui_zen(args)
   if not now_open then
     notify.info(prefix(ICON.zen, "Zen off"))
   end
+end
+
+---Handle notify command -- `vim.notify` as toasts with a history
+---(`ui.notify`). `on`/`off` set an explicit state, `history` opens the
+---viewer, `clear` forgets the recorded entries, no argument toggles.
+---@param args string[]
+local function ui_notify_cmd(args)
+  local action = args[2]
+  if action == "on" then
+    ui_notify.enable()
+    notify.info(prefix(ICON.bell, "Notify toasts enabled"))
+    return
+  end
+  if action == "off" then
+    ui_notify.disable()
+    notify.info(prefix(ICON.bell, "Notify toasts disabled"))
+    return
+  end
+  if action == "history" then
+    ui_notify.show_history()
+    return
+  end
+  if action == "clear" then
+    ui_notify.clear_history()
+    notify.info(prefix(ICON.bell, "Notification history cleared"))
+    return
+  end
+  local now = ui_notify.toggle()
+  notify.info(prefix(ICON.bell, ("Notify toasts %s"):format(now and "enabled" or "disabled")))
 end
 
 ---Handle context command -- the sticky code-context overlay, off by default
@@ -521,6 +552,11 @@ local function ui_help(_args)
 │  :UI zen on                 Enter zen                │
 │  :UI zen off                Leave zen                │
 │                                                      │
+│  :UI notify                 Toggle notify toasts     │
+│  :UI notify on|off          Explicit state           │
+│  :UI notify history         Open the history         │
+│  :UI notify clear           Forget the history       │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -559,6 +595,7 @@ local SUBCOMMANDS = {
   { name = "context", fn = ui_context },
   { name = "color", fn = ui_color },
   { name = "zen", fn = ui_zen },
+  { name = "notify", fn = ui_notify_cmd },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
@@ -653,6 +690,10 @@ local function complete(arglead, cmdline, _cursorpos)
 
     if subcmd == "zen" then
       return filter(arglead, { "on", "off" })
+    end
+
+    if subcmd == "notify" then
+      return filter(arglead, { "on", "off", "history", "clear" })
     end
 
     if subcmd == "theme" then
