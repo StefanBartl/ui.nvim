@@ -20,6 +20,7 @@
 local surface = require("ui.kit.surface")
 local debounce = require("lib.nvim.debounce")
 local normalize = require("lib.nvim.normalize")
+local autocmd = require("lib.nvim.bindings.autocmd")
 
 local NS = vim.api.nvim_create_namespace("ui_screenkey")
 
@@ -183,14 +184,37 @@ local function corner_geometry()
 end
 
 ---@internal
+--- Reposition the live HUD at its current corner -- the editor may have been
+--- resized since it was opened (PERF-92: geometry must never stay pinned to
+--- the size it happened to open at). No-op while closed.
+---@return nil
+local function reposition()
+  if not (surf and surf:is_valid()) then
+    return
+  end
+  local row, col = corner_geometry()
+  pcall(vim.api.nvim_win_set_config, surf.winid, {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = cfg.width,
+    height = cfg.height,
+  })
+end
+
+---@internal
 --- Open the float on first render, `set_lines` on every one after -- mirrors
 --- `ui.kit.toast`'s own open-once-then-update shape, minus the stacking (one
---- screenkey HUD, not several).
+--- screenkey HUD, not several). Repositions the existing float every time
+--- too, so a `VimResized` while the HUD is up (it can stay up for as long as
+--- keys keep coming) is reflected on the very next keystroke rather than
+--- leaving it pinned to stale coordinates (PERF-92).
 ---@return nil
 local function render()
   local text = build_text()
 
   if surf and surf:is_valid() then
+    reposition()
     surf:set_lines({ text })
     return
   end
@@ -330,7 +354,10 @@ function M.health_issues()
   return vim.deepcopy(setup_issues)
 end
 
----Turn the HUD on: registers the `vim.on_key()` hook. Idempotent.
+---Turn the HUD on: registers the `vim.on_key()` hook and a `VimResized`
+---repositioner (the HUD can sit open, updated in place, for as long as keys
+---keep coming -- a resize during that window must not leave it pinned to
+---stale coordinates; PERF-92). Idempotent.
 ---@return nil
 function M.enable()
   if enabled then
@@ -339,6 +366,11 @@ function M.enable()
   enabled = true
   entries = {}
   vim.on_key(on_key, NS)
+  local group = autocmd.group("ui_screenkey_resize", true)
+  autocmd.create("VimResized", reposition, {
+    group = group,
+    desc = "ui.screenkey: keep the HUD pinned to its corner",
+  })
 end
 
 ---Turn the HUD off: detaches the hook and closes/clears the float.
@@ -350,6 +382,7 @@ function M.disable()
   end
   enabled = false
   vim.on_key(nil, NS)
+  pcall(vim.api.nvim_del_augroup_by_name, "ui_screenkey_resize")
   fader.cancel()
   clear()
 end
