@@ -131,7 +131,10 @@ function M.get_info()
   return {
     theme = M.get_current_theme(),
     transparency = M.get_transparency(),
-    toggle_themes = active_theme_cfg().theme_toggle or {},
+    -- Copied, not handed out live: `active_theme_cfg()` can resolve to the
+    -- module-singleton DEFAULTS table before the first setup(), and a caller
+    -- mutating this array in place must not reach it (ERR-54).
+    toggle_themes = vim.deepcopy(active_theme_cfg().theme_toggle or {}),
   }
 end
 

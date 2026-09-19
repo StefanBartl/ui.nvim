@@ -114,4 +114,15 @@ describe("ui.bindings.usrcmds.themes", function()
     assert.is_boolean(info.transparency)
     assert.equals("table", type(info.toggle_themes))
   end)
+
+  it("get_info's toggle_themes is a copy, not the live config array (ERR-54)", function()
+    local first = themes.get_info()
+    table.insert(first.toggle_themes, "mutated-in-place")
+
+    local second = themes.get_info()
+    assert.is_false(
+      vim.tbl_contains(second.toggle_themes, "mutated-in-place"),
+      "mutating a previous get_info() result must not leak into the next call"
+    )
+  end)
 end)
