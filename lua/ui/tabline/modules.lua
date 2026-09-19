@@ -5,10 +5,48 @@
 --- (unlike the statusline's `modules/` tree): all four share `cfg` and
 --- `available_space()`, and NvChad's own upstream keeps them together too.
 
+local notify = require("lib.nvim.notify").create("[ui.tabline.modules]")
 local utils = require("ui.tabline.utils")
 local api = vim.api
 
 local M = {}
+
+-- Which of `bufwidth`/`bufwidth_min`/`bufwidth_max` has already warned about
+-- an invalid value this session -- `M.buffers()` runs on nearly every
+-- tabline redraw, so this dedups the same way `ui.tabline.render`'s own
+-- `warn_once` does for `order` keys.
+---@type table<string, true>
+local width_warned = {}
+
+--- ERR-22: `bufwidth`/`bufwidth_min`/`bufwidth_max` are documented as
+--- positive integers, but `M.buffers()` used to only guard `bufwidth` with
+--- `if not bufwidth then` (catches an absent/`false` value, not a wrong
+--- type) and read `bufwidth_min`/`bufwidth_max` with a bare `... or
+--- MIN_BUFWIDTH` (same gap). A wrong-type value reached the chip-width
+--- arithmetic below unguarded -- e.g. `cfg.bufwidth = "20"` (a realistic
+--- typo: a string that reads like the column count it should have been).
+---@param value any
+---@param field "bufwidth"|"bufwidth_min"|"bufwidth_max"
+---@return boolean # true when `value` is present but not a usable positive number
+local function is_invalid_width(value, field)
+  if value == nil then
+    return false
+  end
+  if type(value) ~= "number" or value <= 0 then
+    if not width_warned[field] then
+      width_warned[field] = true
+      notify.warn(
+        ("ui.tabline.modules: cfg.%s must be a positive number, got %s (%s) -- ignoring it"):format(
+          field,
+          tostring(value),
+          type(value)
+        )
+      )
+    end
+    return true
+  end
+  return false
+end
 
 -- Bounds for the auto-computed chip width (`M.buffers` below) -- the elastic
 -- range that lets the bar fill itself instead of leaving a leftover strip
@@ -133,9 +171,22 @@ function M.buffers(cfg)
   local space = available_space(cfg)
 
   local bufwidth = cfg.bufwidth
+  if is_invalid_width(bufwidth, "bufwidth") then
+    bufwidth = nil
+  end
   if not bufwidth then
-    local min_w = cfg.bufwidth_min or MIN_BUFWIDTH
-    local max_w = cfg.bufwidth_max or MAX_BUFWIDTH
+    local min_w = cfg.bufwidth_min
+    if is_invalid_width(min_w, "bufwidth_min") then
+      min_w = nil
+    end
+    min_w = min_w or MIN_BUFWIDTH
+
+    local max_w = cfg.bufwidth_max
+    if is_invalid_width(max_w, "bufwidth_max") then
+      max_w = nil
+    end
+    max_w = max_w or MAX_BUFWIDTH
+
     local per_buf = math.floor(space / math.max(1, #bufs))
     bufwidth = math.max(min_w, math.min(max_w, per_buf))
   end

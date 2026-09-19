@@ -49,7 +49,7 @@ describe("ui.screenkey", function()
   -- float into the next one.
   after_each(function()
     screenkey.disable()
-    screenkey.setup({ labels = {}, join_chars = false })
+    screenkey.setup({ labels = {}, join_chars = false, width = 40 })
   end)
 
   it("is off by default -- no float, no hook", function()
@@ -143,6 +143,23 @@ describe("ui.screenkey", function()
       return current_text() ~= ""
     end)
     assert.equals("h j\xC3\x974 k", current_text())
+  end)
+
+  it("clips an overlong joined run by characters, never inside a multi-byte glyph", function()
+    -- U+2423 as the Space label: three bytes, one column. Width 8 leaves 6
+    -- columns inside the border; a byte clip of "hjâ£hj..." could land
+    -- between those three bytes.
+    screenkey.setup({ join_chars = true, width = 8, labels = { ["<Space>"] = "â£" } })
+    screenkey.enable()
+    feed_each({ "h", "j", "<Space>", "h", "j", "<Space>", "h", "j", "<Space>", "h" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    local text = current_text()
+    assert.is_true(vim.fn.strdisplaywidth(text) <= 6, text)
+    assert.equals(vim.fn.strchars(text), vim.fn.strchars(text, true), "valid UTF-8, no stray bytes")
+    assert.is_true(text:sub(-1) == "h", text)
   end)
 
   it("join_chars keeps a keycode apart from the characters around it", function()

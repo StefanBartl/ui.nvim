@@ -78,6 +78,12 @@ local function is_essential(key)
   return known
 end
 
+-- Whether an invalid `responsive_width` has already warned this session --
+-- `should_go_compact` runs on every redraw, so this dedups the same way
+-- `warn_once` below does for `order`/theme keys; kept as its own flag rather
+-- than reordering this module to put that helper first.
+local responsive_width_warned = false
+
 ---@param cfg Ui.Statusline.Config
 ---@return boolean
 local function should_go_compact(cfg)
@@ -89,7 +95,33 @@ local function should_go_compact(cfg)
   if not ok then
     return false
   end
-  return width < (cfg.responsive_width or 80)
+
+  -- ERR-22: `responsive_width` is documented as a positive integer column
+  -- count (docs/modules.md's "Responsive mode"), but `width < (cfg
+  -- .responsive_width or 80)` only ever caught an ABSENT value -- a wrong
+  -- type (or a non-positive number) reached this comparison unguarded.
+  -- That matters more here than for a broken segment inside `M.generate`'s
+  -- own `order` walk: every one of those calls is wrapped in its own
+  -- `pcall` and blanks itself with a one-time warning, but `M.render()` --
+  -- the zero-argument entrypoint Neovim's `'%!'` statusline option actually
+  -- calls -- runs `should_go_compact` before any of that, with no pcall of
+  -- its own. An invalid value here used to throw straight out of Neovim's
+  -- statusline callback on every single redraw instead of degrading.
+  local threshold = cfg.responsive_width
+  if type(threshold) ~= "number" or threshold <= 0 then
+    if threshold ~= nil and not responsive_width_warned then
+      responsive_width_warned = true
+      notify.warn(
+        ("ui.statusline.render: responsive_width must be a positive number, got %s (%s) -- using the default (80)"):format(
+          tostring(threshold),
+          type(threshold)
+        )
+      )
+    end
+    threshold = 80
+  end
+
+  return width < threshold
 end
 
 ---@param message string

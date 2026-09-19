@@ -14,6 +14,7 @@ local colorpicker = require("ui.colorpicker")
 local zen = require("ui.zen")
 local ui_notify = require("ui.notify")
 local ui_keys = require("ui.keys")
+local windowpicker = require("ui.windowpicker")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -37,6 +38,7 @@ local ICON = {
   color = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
   zen = nerd_font.glyph("f10c", ""), -- nf-fa-circle_o
   bell = nerd_font.glyph("f0f3", ""), -- nf-fa-bell
+  window = nerd_font.glyph("f0db", ""), -- nf-fa-columns
 }
 
 ---`icon .. " " .. text`, or bare `text` when no icon resolved.
@@ -162,6 +164,17 @@ local function ui_zen(args)
   local now_open = zen.toggle()
   if not now_open then
     notify.info(prefix(ICON.zen, "Zen off"))
+  end
+end
+
+---Handle winpick command -- pick a window by letter (`ui.windowpicker`) and
+---jump to it. A no-op (nothing happens, no error) when nothing qualifies or
+---the pick is cancelled.
+---@param _ string[]
+local function ui_winpick(_)
+  local win = windowpicker.pick()
+  if win then
+    vim.api.nvim_set_current_win(win)
   end
 end
 
@@ -577,6 +590,9 @@ local function ui_help(_args)
 │  :UI zen on                 Enter zen                │
 │  :UI zen off                Leave zen                │
 │                                                      │
+│  :UI winpick                Pick a window by letter, │
+│                             jump to it                │
+│                                                      │
 │  :UI notify                 Toggle notify toasts     │
 │  :UI notify on|off          Explicit state           │
 │  :UI notify history         Open the history         │
@@ -622,6 +638,7 @@ local SUBCOMMANDS = {
   { name = "context", fn = ui_context },
   { name = "color", fn = ui_color },
   { name = "zen", fn = ui_zen },
+  { name = "winpick", fn = ui_winpick },
   { name = "notify", fn = ui_notify_cmd },
   { name = "keys", fn = ui_keys_cmd },
   { name = "theme", fn = ui_theme },
