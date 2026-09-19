@@ -346,7 +346,17 @@ local function switch_variant(name)
     return false
   end
 
-  require("ui.statusline.render").enable(assembled.ui.statusline)
+  -- `render.enable()`'s `cfg` is non-optional (Ui.Statusline.Config), but a
+  -- host-registered variant shaped `{ statusline = {...} }` instead of
+  -- `{ ui = { statusline = {...} } }` makes `assembled.ui.statusline` nil --
+  -- enable(nil) would blank the statusline with no error anywhere. Fail the
+  -- switch instead of reporting success for it (PRIN-20).
+  local stl_cfg = assembled.ui and assembled.ui.statusline
+  if not stl_cfg then
+    return false
+  end
+
+  require("ui.statusline.render").enable(stl_cfg)
   return true
 end
 

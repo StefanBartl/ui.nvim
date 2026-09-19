@@ -115,4 +115,29 @@ describe(":UI variant / :UI variants", function()
       vim.cmd("UI variants")
     end)
   end)
+
+  it(
+    "does not blank the statusline when a registered variant has the wrong shape (PRIN-20)",
+    function()
+      -- Malformed on purpose: `statusline` at the top level instead of
+      -- nested under `ui` -- `assembled.ui.statusline` (what render.enable()
+      -- requires) comes back nil for this shape.
+      local variants = require("ui.config.variants")
+      variants.register("bad_shape_variant", { statusline = { order = {}, modules = {} } })
+
+      vim.cmd("UI variant minimal")
+      local render = require("ui.statusline.render")
+      assert.is_not_nil(render.current())
+
+      -- notify.error() surfaces as a thrown error under the test harness's
+      -- notify backend, same as the "unknown variant" case above.
+      pcall(vim.cmd, "UI variant bad_shape_variant")
+
+      -- The failed switch must not have enable()d a nil config over the
+      -- previously active one.
+      assert.is_not_nil(render.current())
+
+      variants.unregister("bad_shape_variant")
+    end
+  )
 end)
