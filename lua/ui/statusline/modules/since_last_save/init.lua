@@ -16,6 +16,7 @@
 --- else would ever prune a deleted buffer's entry.
 
 local Autocmd = require("lib.nvim.bindings.autocmd")
+local notify = require("lib.nvim.notify").create("[ui.statusline.modules.since_last_save]")
 local primitives = require("ui.statusline.utils.primitives")
 
 ---@type table<integer, integer> bufnr -> epoch when it was first observed modified since its last save
@@ -55,6 +56,48 @@ end
 --- its own right (the color carries that).
 local GLYPH = "\xE2\x97\x8F"
 
+-- Which of `warn_after_seconds`/`critical_after_seconds` has already warned
+-- about an invalid value this session -- the returned function runs on
+-- nearly every statusline redraw (any modified normal buffer), so this
+-- dedups the same way `ui.statusline.render`'s own `responsive_width`
+-- guard does.
+---@type table<string, true>
+local opt_warned = {}
+
+--- ERR-22: both fields were documented as a duration in seconds (this
+--- file's own doc comment above, docs/modules.md's "since_last_save"
+--- section) but read with a bare `opts.field or default` -- catching only
+--- an ABSENT value, not a wrong type. `elapsed >= critical_after` then ran
+--- unguarded on every redraw of a modified buffer; a caller passing the
+--- wrong type (a realistic slip: `warn_after_seconds = "60"`, a string
+--- that reads like the number it should have been) threw "attempt to
+--- compare number with string" straight out of the segment, on every
+--- single redraw until the buffer was saved.
+---@param value any
+---@param field "warn_after_seconds"|"critical_after_seconds"
+---@param default integer
+---@return integer
+local function valid_seconds(value, field, default)
+  if value == nil then
+    return default
+  end
+  if type(value) ~= "number" or value < 0 then
+    if not opt_warned[field] then
+      opt_warned[field] = true
+      notify.warn(
+        ("ui.statusline.modules.since_last_save: opts.%s must be a non-negative number, got %s (%s) -- using the default (%d)"):format(
+          field,
+          tostring(value),
+          type(value),
+          default
+        )
+      )
+    end
+    return default
+  end
+  return value
+end
+
 ---@param opts { warn_after_seconds?: integer, critical_after_seconds?: integer }?
 ---  warn_after_seconds: elapsed time (unsaved) after which the color steps
 ---                       up from muted to DiagnosticWarn. Default 60.
@@ -63,8 +106,8 @@ local GLYPH = "\xE2\x97\x8F"
 ---@return string
 return function(opts)
   opts = opts or {}
-  local warn_after = opts.warn_after_seconds or 60
-  local critical_after = opts.critical_after_seconds or 300
+  local warn_after = valid_seconds(opts.warn_after_seconds, "warn_after_seconds", 60)
+  local critical_after = valid_seconds(opts.critical_after_seconds, "critical_after_seconds", 300)
 
   local buf = primitives.stbufnr()
   if vim.bo[buf].buftype ~= "" then

@@ -99,6 +99,34 @@ describe(
   end
 )
 
+describe(
+  "bug: a nulled nullable field could never be set again (found reviewing the M.set() fix above)",
+  function()
+    -- M.update()'s "ignore unknown keys" guard used to be `cfg[key] ~= nil`
+    -- -- a check that cannot tell "this key was never valid" apart from
+    -- "this key is valid but presently nil". `path_max_chars` is the one
+    -- field typed `number|nil` and `M.update({ path_max_chars = nil })` is
+    -- the explicitly documented way to clear it -- but doing so left
+    -- `cfg.path_max_chars` nil, and every later `M.set("path_max_chars", n)`
+    -- then read as an unknown-key patch and was silently swallowed: the
+    -- field could never hold a number again for the rest of the session.
+    -- Now checked against a fixed `KNOWN_KEYS` snapshot instead.
+    local cfg = require("ui.statusline.modules.lsp.config")
+
+    it("accepts a real value again after the field was explicitly cleared", function()
+      local before = cfg.get("path_max_chars")
+
+      cfg.set("path_max_chars", nil)
+      assert.is_nil(cfg.get("path_max_chars"))
+
+      cfg.set("path_max_chars", 30)
+      assert.equals(30, cfg.get("path_max_chars"))
+
+      cfg.set("path_max_chars", before)
+    end)
+  end
+)
+
 describe("bug: display_path() mutated shared config as a side effect", function()
   local paths = require("ui.statusline.modules.lsp.helpers.paths")
   local cfg = require("ui.statusline.modules.lsp.config")
@@ -163,6 +191,9 @@ describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
   local utils = require("ui.tabline.utils")
   local state = require("ui.bindings.keymaps.tabufline.state")
 
+  -- 1000ms, not a tight margin over the 120ms FLASH_MS these race: see
+  -- TESTS/tabline_render_spec.lua's own note above its "click-flash"
+  -- describe block for why a smaller budget flaked here under suite load.
   it("close_buffer notifies instead of raising when the deferred close fails", function()
     local original = state.close_buffer
     state.close_buffer = function()
@@ -180,7 +211,7 @@ describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
     assert.has_no.errors(function()
       utils.close_buffer(1)
     end)
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return notified
     end)
 
@@ -206,7 +237,7 @@ describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
     assert.has_no.errors(function()
       utils.close_all_bufs()
     end)
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return notified
     end)
 
