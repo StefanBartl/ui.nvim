@@ -1361,3 +1361,39 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     eq(kit.popup({ type = "does-not-exist" }), nil, "unknown type returns nil (no throw)")
   end)
 end)
+
+describe("bug: kit.form stalled with no on_cancel when a field's surface failed to open", function()
+  -- `ui.kit.input` is captured as a module-level upvalue in `ui.kit.form`
+  -- (`local input = require("ui.kit.input")`), so simulating a genuine
+  -- `surface.open` failure (e.g. `nvim_open_win` erroring) means swapping
+  -- what `ui.kit.form` sees BEFORE it is required, then reloading both.
+  it("calls on_cancel instead of silently stalling when input.open() returns nil", function()
+    package.loaded["ui.kit.form"] = nil
+    local saved_input = package.loaded["ui.kit.input"]
+    package.loaded["ui.kit.input"] = {
+      open = function()
+        return nil
+      end,
+    }
+
+    local form = require("ui.kit.form")
+    local submitted, cancelled = false, false
+    local returned = form.open({
+      fields = { { name = "a", label = "A" } },
+      on_submit = function()
+        submitted = true
+      end,
+      on_cancel = function()
+        cancelled = true
+      end,
+    })
+
+    package.loaded["ui.kit.input"] = saved_input
+    package.loaded["ui.kit.form"] = nil
+    require("ui.kit.form") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(cancelled, "on_cancel must fire when the field's surface never opened")
+    assert.is_false(submitted, "on_submit must not fire on a failed open")
+  end)
+end)
