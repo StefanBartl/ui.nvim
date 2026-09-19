@@ -1464,3 +1464,64 @@ describe("bug: kit.live_input stalled with no on_cancel when its surface failed 
     assert.is_true(cancelled, "on_cancel must fire when the surface never opened")
   end)
 end)
+
+describe("bug: kit.confirm stalled with no on_answer when its surface failed to open", function()
+  -- `ui.kit.surface` is a module-level upvalue in `ui.kit.confirm`, so the
+  -- fake must be in place before `ui.kit.confirm` is (re)required.
+  it("calls on_answer(false) for the default Yes/No case", function()
+    package.loaded["ui.kit.confirm"] = nil
+    local saved_surface = package.loaded["ui.kit.surface"]
+    package.loaded["ui.kit.surface"] = {
+      open = function()
+        return nil
+      end,
+    }
+
+    local confirm = require("ui.kit.confirm")
+    local answered, answer = false, "unset"
+    local returned = confirm.open({
+      question = "Q?",
+      on_answer = function(a)
+        answered = true
+        answer = a
+      end,
+    })
+
+    package.loaded["ui.kit.surface"] = saved_surface
+    package.loaded["ui.kit.confirm"] = nil
+    require("ui.kit.confirm") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(answered, "on_answer must fire when the surface never opened")
+    assert.is_false(answer, "default confirm's no-answer value is false, matching cancel()")
+  end)
+
+  it("calls on_answer(nil) for a custom choice list", function()
+    package.loaded["ui.kit.confirm"] = nil
+    local saved_surface = package.loaded["ui.kit.surface"]
+    package.loaded["ui.kit.surface"] = {
+      open = function()
+        return nil
+      end,
+    }
+
+    local confirm = require("ui.kit.confirm")
+    local answered, answer = false, "unset"
+    local returned = confirm.open({
+      question = "Q?",
+      choices = { "A", "B" },
+      on_answer = function(a)
+        answered = true
+        answer = a
+      end,
+    })
+
+    package.loaded["ui.kit.surface"] = saved_surface
+    package.loaded["ui.kit.confirm"] = nil
+    require("ui.kit.confirm") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(answered, "on_answer must fire when the surface never opened")
+    assert.is_nil(answer, "custom confirm's no-answer value is nil, matching cancel()")
+  end)
+end)
