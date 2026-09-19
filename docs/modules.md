@@ -89,6 +89,7 @@ modules = {
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
+| `matchup_offscreen` | vim-matchup's offscreen-match source line (syntax-highlighted, gutter stripped), as one segment | vim-matchup, with `matchup_matchparen_offscreen = { method = "status_manual" }` | `ui.statusline.modules.matchup_offscreen` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
 plugin isn't installed — none of these throw or need a guard in your own
