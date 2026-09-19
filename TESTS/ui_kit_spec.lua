@@ -1525,3 +1525,82 @@ describe("bug: kit.confirm stalled with no on_answer when its surface failed to 
     assert.is_nil(answer, "custom confirm's no-answer value is nil, matching cancel()")
   end)
 end)
+
+describe("bug: kit.prompt's list-based confirm branch never called on_answer on cancel", function()
+  -- `ui.kit.select` is a module-level upvalue in `ui.kit.prompt`, so the fake
+  -- must be in place before `ui.kit.prompt` is (re)required. Faking
+  -- `select.open` to synchronously invoke whatever on_cancel it was given
+  -- targets prompt.lua's forwarding directly, without a real chooser float
+  -- (select.lua's own on_cancel firing on Esc/q, an empty list, and a failed
+  -- surface open is already covered by that module's own tests).
+  it("fires on_answer(false) for the default Yes/No case", function()
+    package.loaded["ui.kit.prompt"] = nil
+    local saved_select = package.loaded["ui.kit.select"]
+    package.loaded["ui.kit.select"] = {
+      open = function(opts)
+        if opts.on_cancel then
+          opts.on_cancel()
+        end
+        return nil
+      end,
+    }
+
+    local prompt = require("ui.kit.prompt")
+    local answered, answer = false, "unset"
+    local returned = prompt.open({
+      question = "Q?",
+      answer_type = "confirm",
+      on_answer = function(a)
+        answered = true
+        answer = a
+      end,
+    })
+
+    package.loaded["ui.kit.select"] = saved_select
+    package.loaded["ui.kit.prompt"] = nil
+    require("ui.kit.prompt") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(answered, "on_answer must fire when select.open cancels")
+    assert.is_false(
+      answer,
+      "default confirm's no-answer value is false, matching kit.confirm's contract"
+    )
+  end)
+
+  it("fires on_answer(nil) for a custom choice list", function()
+    package.loaded["ui.kit.prompt"] = nil
+    local saved_select = package.loaded["ui.kit.select"]
+    package.loaded["ui.kit.select"] = {
+      open = function(opts)
+        if opts.on_cancel then
+          opts.on_cancel()
+        end
+        return nil
+      end,
+    }
+
+    local prompt = require("ui.kit.prompt")
+    local answered, answer = false, "unset"
+    local returned = prompt.open({
+      question = "Q?",
+      answer_type = "confirm",
+      choices = { "A", "B" },
+      on_answer = function(a)
+        answered = true
+        answer = a
+      end,
+    })
+
+    package.loaded["ui.kit.select"] = saved_select
+    package.loaded["ui.kit.prompt"] = nil
+    require("ui.kit.prompt") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(answered, "on_answer must fire when select.open cancels")
+    assert.is_nil(
+      answer,
+      "custom confirm's no-answer value is nil, matching kit.confirm's contract"
+    )
+  end)
+end)
