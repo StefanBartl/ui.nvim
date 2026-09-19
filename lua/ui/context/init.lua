@@ -326,12 +326,24 @@ end
 ---@param buf integer
 ---@param entries Ui.Context.Entry[]
 local function draw(win, buf, entries)
-  local key = table.concat(
-    vim.tbl_map(function(e)
-      return tostring(e.row)
-    end, entries),
-    ","
-  ) .. "|" .. vim.api.nvim_win_get_width(win)
+  -- The row list alone is not enough: editing the enclosing declaration in
+  -- place (e.g. renaming a function) does not change which row it starts
+  -- on, so a key built only from row numbers would keep the old text
+  -- cached. The buffer's changedtick makes any edit anywhere in it
+  -- invalidate the cache -- broader than strictly necessary, but draw()
+  -- is cheap and refresh() upstream is already debounced.
+  local key = buf
+    .. "@"
+    .. vim.api.nvim_buf_get_changedtick(buf)
+    .. "|"
+    .. table.concat(
+      vim.tbl_map(function(e)
+        return tostring(e.row)
+      end, entries),
+      ","
+    )
+    .. "|"
+    .. vim.api.nvim_win_get_width(win)
   local f = floats[win]
   if f and f.key == key and vim.api.nvim_win_is_valid(f.win) then
     return

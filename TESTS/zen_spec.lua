@@ -72,6 +72,26 @@ describe("ui.zen", function()
     assert.equals(2, vim.o.laststatus)
   end)
 
+  it("does not close a new session opened before the deferred teardown runs", function()
+    vim.o.laststatus = 2
+    open_buffer()
+    local winA = zen.open()
+    -- Close externally, matching :q/<C-w>c: WinClosed fires synchronously
+    -- and schedules its own restore, but does not run it yet.
+    vim.api.nvim_win_close(winA, true)
+    -- Reopen before the event loop drains the scheduled teardown -- the
+    -- stale callback used to re-read the shared module state and tear
+    -- down whichever session was current by the time it finally ran.
+    local winB = zen.open()
+    assert.is_true(zen.is_open())
+    assert.not_equals(winA, winB)
+    -- No condition: wait out the full interval so the loop is actually
+    -- processed and any pending vim.schedule callback gets to run.
+    vim.wait(80)
+    assert.is_true(zen.is_open(), "a stale scheduled teardown closed the new session")
+    assert.equals(winB, zen.win())
+  end)
+
   it("toggles, and setup() changes the width live", function()
     open_buffer()
     assert.is_true(zen.toggle())

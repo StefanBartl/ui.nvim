@@ -235,7 +235,14 @@ function M.open()
   pcall(api.nvim_win_set_cursor, win, cursor)
 
   local augroup = api.nvim_create_augroup("UiZen", { clear = true })
-  state = {
+  -- `session` is this specific M.open() call's own state table, captured
+  -- by the WinClosed closure below. The restore it schedules must act on
+  -- THIS session and no other: if the window is closed externally and
+  -- M.open() is called again before the deferred teardown runs, the
+  -- module-level `state` by then points at a newer session, and comparing
+  -- against `session` (not re-reading `state`) is what stops the stale
+  -- callback from tearing down a session it was never scheduled for.
+  local session = {
     win = win,
     backdrop = backdrop,
     origin = origin,
@@ -244,17 +251,24 @@ function M.open()
     saved = saved,
     augroup = augroup,
   }
+  state = session
   api.nvim_create_autocmd("WinClosed", {
     group = augroup,
     pattern = tostring(win),
     once = true,
     callback = function()
-      if state and state.win == win then
-        state.cursor = pcall(api.nvim_win_get_cursor, win) and api.nvim_win_get_cursor(win)
-          or state.cursor
-        state.buf = api.nvim_win_get_buf(win)
-        vim.schedule(teardown)
+      if state ~= session then
+        -- Superseded by a newer session already; nothing here to close.
+        return
       end
+      state.cursor = pcall(api.nvim_win_get_cursor, win) and api.nvim_win_get_cursor(win)
+        or state.cursor
+      state.buf = api.nvim_win_get_buf(win)
+      vim.schedule(function()
+        if state == session then
+          teardown()
+        end
+      end)
     end,
     desc = "ui.zen: restore everything when the zen window closes",
   })

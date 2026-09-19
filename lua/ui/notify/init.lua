@@ -162,11 +162,47 @@ local function show(entry)
   end
 end
 
+---@internal
+---True while a `show()` call is on the stack. A toast that itself fails to
+---open (e.g. `make_scratch` erroring) reports that failure through
+---`lib.nvim.notify`, which calls the very `vim.notify` this module just
+---replaced -- routing straight back into `M.handler` from inside the
+---`show()` call that is still on the stack. Without this guard that
+---re-entrant call would try to show ITS OWN toast, fail the same way, and
+---recurse until the stack is exhausted.
+---@type boolean
+local showing = false
+
+---@internal
+---Render one entry as a toast, guarded against the re-entrant recursion
+---described above. Never raises: a notification must not.
+---@param entry Ui.Notify.Entry
+local function show_guarded(entry)
+  if showing then
+    return
+  end
+  showing = true
+  pcall(show, entry)
+  showing = false
+end
+
 ---The `vim.notify` replacement. Exposed so a host can call it directly.
 ---@param msg any
 ---@param level any
 ---@param opts table|nil
 function M.handler(msg, level, opts)
+  if not enabled then
+    -- Disabled, but something may still be routing calls through us -- a
+    -- foreign wrapper installed after enable() ran, that this module was
+    -- never able to fully unwind from (see disable()'s own comment).
+    -- Forward straight to whatever handler we would have restored instead
+    -- of recording/showing anything, so "disabled" is not just cosmetic.
+    local fallback = previous
+    if fallback and fallback ~= M.handler then
+      fallback(msg, level, opts)
+    end
+    return
+  end
   local entry = {
     time = os.time(),
     level = norm_level(level),
@@ -178,10 +214,10 @@ function M.handler(msg, level, opts)
     -- Notifications arrive from fast contexts too; the float has to wait.
     if vim.in_fast_event() then
       vim.schedule(function()
-        show(entry)
+        show_guarded(entry)
       end)
     else
-      show(entry)
+      show_guarded(entry)
     end
   end
 end
@@ -193,8 +229,16 @@ function M.enable()
   end
   enabled = true
   ensure_groups()
-  previous = vim.notify
-  vim.notify = M.handler
+  -- Keep the oldest known original handler across an enable/disable cycle
+  -- where disable() could not fully unhook (see disable()'s own comment) --
+  -- re-capturing `vim.notify` here would otherwise overwrite it with our
+  -- own handler (reached through a foreign wrapper) and lose it for good.
+  if previous == nil then
+    previous = vim.notify
+  end
+  if vim.notify ~= M.handler then
+    vim.notify = M.handler
+  end
 end
 
 ---Put the previous `vim.notify` back. Idempotent.
@@ -205,8 +249,13 @@ function M.disable()
   enabled = false
   if vim.notify == M.handler then
     vim.notify = previous or vim.notify
+    previous = nil
   end
-  previous = nil
+  -- else: a foreign wrapper now owns vim.notify (installed after enable()
+  -- ran) and still calls through to M.handler -- keep `previous` rather
+  -- than discard it, so a later disable() can still recover the true
+  -- original, and so M.handler's own `not enabled` branch has something
+  -- to forward to instead of acting.
 end
 
 ---@return boolean now_enabled
