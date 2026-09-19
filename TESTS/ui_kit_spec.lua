@@ -1434,3 +1434,33 @@ describe(
     end)
   end
 )
+
+describe("bug: kit.live_input stalled with no on_cancel when its surface failed to open", function()
+  -- `ui.kit.surface` is a module-level upvalue in `ui.kit.live_input`, so
+  -- the fake must be in place before `ui.kit.live_input` is (re)required.
+  it("calls on_cancel instead of silently stalling when surface.open() returns nil", function()
+    package.loaded["ui.kit.live_input"] = nil
+    local saved_surface = package.loaded["ui.kit.surface"]
+    package.loaded["ui.kit.surface"] = {
+      open = function()
+        return nil
+      end,
+    }
+
+    local live_input = require("ui.kit.live_input")
+    local cancelled = false
+    local returned = live_input.open({
+      on_change = function() end,
+      on_cancel = function()
+        cancelled = true
+      end,
+    })
+
+    package.loaded["ui.kit.surface"] = saved_surface
+    package.loaded["ui.kit.live_input"] = nil
+    require("ui.kit.live_input") -- restore the real module for any later spec
+
+    assert.is_nil(returned)
+    assert.is_true(cancelled, "on_cancel must fire when the surface never opened")
+  end)
+end)
