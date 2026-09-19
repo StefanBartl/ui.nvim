@@ -13,6 +13,7 @@ local context = require("ui.context")
 local colorpicker = require("ui.colorpicker")
 local zen = require("ui.zen")
 local ui_notify = require("ui.notify")
+local ui_keys = require("ui.keys")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -191,6 +192,20 @@ local function ui_notify_cmd(args)
   end
   local now = ui_notify.toggle()
   notify.info(prefix(ICON.bell, ("Notify toasts %s"):format(now and "enabled" or "disabled")))
+end
+
+---Handle keys command -- the mappings under a prefix as a menu
+---(`ui.keys`). The prefix is everything after `keys`, joined back with
+---spaces, so `:UI keys <leader>s` and `:UI keys <C-w>` both work; no
+---argument uses the configured default prefix.
+---@param args string[]
+local function ui_keys_cmd(args)
+  local arg = table.concat(vim.list_slice(args, 2), " ")
+  if not ui_keys.open(arg ~= "" and arg or nil) then
+    notify.info(
+      prefix(ICON.keyboard, "no mappings under " .. (arg ~= "" and arg or "the default prefix"))
+    )
+  end
 end
 
 ---Handle context command -- the sticky code-context overlay, off by default
@@ -557,6 +572,8 @@ local function ui_help(_args)
 │  :UI notify history         Open the history         │
 │  :UI notify clear           Forget the history       │
 │                                                      │
+│  :UI keys [prefix]          Mappings under a prefix  │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -596,6 +613,7 @@ local SUBCOMMANDS = {
   { name = "color", fn = ui_color },
   { name = "zen", fn = ui_zen },
   { name = "notify", fn = ui_notify_cmd },
+  { name = "keys", fn = ui_keys_cmd },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
