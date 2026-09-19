@@ -101,6 +101,7 @@ describe("ui.health", function()
       "Modules",
       "Statusline segments",
       "Winbar",
+      "Context",
       "Optional integrations",
     }, starts)
   end)

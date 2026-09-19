@@ -9,6 +9,7 @@
 | Winbar | Owns the `vim.wo.winbar` write (`ui.winbar.set`) — a content plugin (breadcrumbs, typically) keeps producing the string and hands it over instead of writing the surface itself |
 | UI Kit | `ui.kit` (`lua/ui/kit/README.md`) — a themed, composable popup/menu/prompt toolkit (note, toast, input, select, form, menu, confirm, compare, an interactive picker, a layout engine); `ui.contextmenu` (`lua/ui/contextmenu/README.md`) — right-click menu item builders and a renderer on top of it. Freshly ported from `lib.nvim.ui.kit`/`lib.nvim.contextmenu` — usable on its own (`require("ui.kit")`/`require("ui.contextmenu")`), but the ~30 repos that consume the `lib.nvim` originals have not moved over yet, and there is no install-spec toggle wiring it in or out yet either |
 | Screenkey | `ui.screenkey` — an in-editor keystroke HUD for recording demos/GIFs (`vim.on_key()` + `vim.fn.keytrans()`, rendered in a `ui.kit.surface` corner float). Off by default; `:UI screenkey` toggles it for the session |
+| Context | `ui.context` — a sticky code-context overlay: the enclosing function/class/loop lines that scrolled off the top, pinned over the window's first rows (Tree-sitter ancestor walk from the first visible line, node types matched by pattern rather than per-grammar queries, drawn in a non-focusable `relative="win"` float with the source line numbers in the gutter). Off by default; `ui.setup({ context = true })` or `:UI context` |
 
 The dividing line this repository draws is worth stating plainly:
 

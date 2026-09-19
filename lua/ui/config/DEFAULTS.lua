@@ -44,5 +44,6 @@ return {
     all = false,
     keymaps = false,
     usrcmds = false,
+    context = false,
   },
 }
