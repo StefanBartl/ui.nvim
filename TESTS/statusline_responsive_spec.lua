@@ -137,4 +137,31 @@ describe("ui.statusline.render responsive mode", function()
     restore()
     assert.equals("MG", out)
   end)
+
+  it(
+    "degrades to the documented default (80) instead of crashing on a wrong-type responsive_width (ERR-22)",
+    function()
+      -- `should_go_compact()` used to read `cfg.responsive_width or 80`,
+      -- which only caught an ABSENT value -- a wrong type reached the `<`
+      -- comparison unguarded, and `M.render()` (the zero-argument
+      -- entrypoint Neovim's own `'%!'` statusline option calls) has no
+      -- pcall of its own around that call, unlike every per-module call
+      -- inside `M.generate`'s `order` walk.
+      local _, restore = narrow_window(50)
+
+      local ok, out = pcall(render.generate, {
+        order = { "mode", "git" },
+        modules = FAKE_MODULES,
+        responsive = true,
+        responsive_width = "not-a-number", -- wrong type: documented as an integer
+      })
+
+      restore()
+      assert.is_true(ok, tostring(out))
+      -- 50 < the degraded default (80) -> compact mode, same as an absent
+      -- responsive_width would produce -- not "never go compact", and not
+      -- a thrown error either.
+      assert.equals("M", out)
+    end
+  )
 end)
