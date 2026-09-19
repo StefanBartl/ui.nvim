@@ -594,6 +594,15 @@ describe("ui.tabline.modules.buffers boundary styles", function()
   end)
 end)
 
+-- Every `vim.wait` budget below is generous on purpose: FLASH_MS (the
+-- production timer these tests race) is 120ms, but a headless suite this
+-- far into a full run -- hundreds of buffers/autocmds/highlight groups
+-- already touched -- occasionally pushes one `vim.defer_fn` well past a
+-- tight 300ms margin with no actual bug involved, just scheduler load.
+-- Found live: "close_buffer flashes the target immediately, closes it only
+-- after the flash" intermittently failed at 300ms while the real close
+-- still landed a beat later. 1000ms keeps these assertive (still fails on
+-- an actually-stuck flash/close) without being a coin flip under load.
 describe("ui.tabline.utils click-flash", function()
   local utils = require("ui.tabline.utils")
 
@@ -609,7 +618,7 @@ describe("ui.tabline.utils click-flash", function()
     utils.flash(buf)
     assert.is_true(utils.is_flashing(buf))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not utils.is_flashing(buf)
     end)
     assert.is_false(utils.is_flashing(buf))
@@ -625,7 +634,7 @@ describe("ui.tabline.utils click-flash", function()
     utils.flash(buf)
     local chip = utils.style_buf(buf, 1, 21)
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not utils.is_flashing(buf)
     end)
     vim.t.bufs = saved
@@ -654,7 +663,7 @@ describe("ui.tabline.utils click-flash", function()
     local flash_chip = utils.style_buf(buf, 1, 21)
     local flash_group = flash_chip:match("%%#(UiTbIcon_[%w_]-)#")
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not utils.is_flashing(buf)
     end)
     vim.t.bufs = saved
@@ -690,7 +699,7 @@ describe("ui.tabline.utils click-flash", function()
     assert.equals(buf, vim.api.nvim_get_current_buf())
     assert.is_true(utils.is_flashing(buf))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not utils.is_flashing(buf)
     end)
     vim.t.bufs = saved
@@ -725,7 +734,7 @@ describe("ui.tabline.utils.close_buffer", function()
     assert.is_true(utils.is_flashing(buf))
     assert.is_true(vim.api.nvim_buf_is_loaded(buf))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not vim.api.nvim_buf_is_loaded(buf)
     end)
 
@@ -744,7 +753,7 @@ describe("ui.tabline.utils.close_buffer", function()
 
     assert.is_true(utils.is_flashing(buf))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not vim.api.nvim_buf_is_loaded(buf)
     end)
     assert.is_false(vim.api.nvim_buf_is_loaded(buf))
@@ -776,7 +785,7 @@ describe("ui.tabline.utils.close_all_bufs", function()
     assert.is_true(vim.api.nvim_buf_is_loaded(a))
     assert.is_true(vim.api.nvim_buf_is_loaded(b))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not vim.api.nvim_buf_is_loaded(a) and not vim.api.nvim_buf_is_loaded(b)
     end)
 
@@ -808,7 +817,7 @@ describe("ui.bindings.keymaps.tabufline.close_n_buffers", function()
     assert.is_true(utils.is_flashing(buf))
     assert.is_true(vim.api.nvim_buf_is_loaded(buf))
 
-    vim.wait(300, function()
+    vim.wait(1000, function()
       return not vim.api.nvim_buf_is_loaded(buf)
     end)
     assert.is_false(vim.api.nvim_buf_is_loaded(buf))

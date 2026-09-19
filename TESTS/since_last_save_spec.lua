@@ -123,6 +123,32 @@ describe("ui.statusline.modules.since_last_save", function()
     assert.is_nil(out:find("DiagnosticError", 1, true))
   end)
 
+  it(
+    "degrades to the documented defaults instead of crashing on wrong-type opts (ERR-22)",
+    function()
+      -- `elapsed >= critical_after` used to run on `opts.field or default`,
+      -- which only caught an ABSENT value -- a wrong type (a realistic
+      -- slip: `warn_after_seconds = "60"`, a string that reads like the
+      -- number it should have been) reached that comparison unguarded and
+      -- threw "attempt to compare number with string" on every redraw of a
+      -- modified buffer.
+      local buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_set_current_buf(buf)
+      vim.bo[buf].modified = true
+
+      local ok, out = pcall(since_last_save, {
+        warn_after_seconds = "not-a-number",
+        critical_after_seconds = "also-not-a-number",
+      })
+
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+      assert.is_true(ok, tostring(out))
+      -- Falls back to the documented defaults (60/300), same as an absent
+      -- opts table -- muted at 0s elapsed, not a thrown error.
+      assert.is_true(out:find("%#Comment#", 1, true) ~= nil, out)
+    end
+  )
+
   it("does not throw when a tracked buffer is deleted", function()
     local buf = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_set_current_buf(buf)
