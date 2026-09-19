@@ -272,7 +272,14 @@ function M.display_path(cfg, path_or_buf)
   local config_mod = require("ui.statusline.modules.lsp.config")
 
   local mode = (type(cfg) == "table" and cfg.path_mode) or config_mod.get("path_mode") or "auto"
-  local home_tilde_override = type(cfg) == "table" and cfg.path_home_tilde or nil
+  -- cfg.path_home_tilde can legitimately be `false`; `and/or` would collapse
+  -- that to `nil` and silently fall back to the live config (ERR-60).
+  local home_tilde_override
+  if type(cfg) == "table" then
+    home_tilde_override = cfg.path_home_tilde
+  else
+    home_tilde_override = nil
+  end
 
   local abs = M.path_absolute(path_or_buf)
   if abs == "" then

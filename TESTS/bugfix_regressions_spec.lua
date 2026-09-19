@@ -90,6 +90,30 @@ describe("bug: display_path() mutated shared config as a side effect", function(
   end)
 end)
 
+describe(
+  "bug: display_path() collapsed an explicit path_home_tilde=false override to nil",
+  function()
+    local paths = require("ui.statusline.modules.lsp.helpers.paths")
+    local cfg = require("ui.statusline.modules.lsp.config")
+
+    it("honors an explicit false override even when the live config default is true", function()
+      local home = vim.uv.os_homedir() or vim.loop.os_homedir()
+      local under_home = home .. "/some/project/file.lua"
+      local before_tilde = cfg.get("path_home_tilde")
+      cfg.set("path_home_tilde", true)
+
+      local with_default = paths.display_path({ path_mode = "home" }, under_home)
+      local with_override =
+        paths.display_path({ path_mode = "home", path_home_tilde = false }, under_home)
+
+      cfg.set("path_home_tilde", before_tilde)
+
+      assert.equals("~", with_default:sub(1, 1))
+      assert.is_not.equals("~", with_override:sub(1, 1))
+    end)
+  end
+)
+
 describe("bug: ui.tabline.utils deferred close was not pcall'd", function()
   -- close_buffer()/close_all_bufs() defer the real state.close_buffer()/
   -- state.close_all_bufs() call behind the click-flash (see their own doc
