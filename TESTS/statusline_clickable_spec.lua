@@ -275,6 +275,61 @@ describe("ui.statusline.modules.git_clickable", function()
 
     assert.is_false(rendered)
   end)
+
+  -- ERR-11: "git succeeded but the repo is genuinely empty" and "git itself
+  -- failed" used to collapse into the same warning. `vim.v.shell_error` is
+  -- read-only from Lua, so a real `git` call in a real temp directory (not
+  -- a systemlist stub) is what actually distinguishes the two cases here.
+  describe("the two distinct 'no branches' cases (ERR-11)", function()
+    ---@param dir string
+    local function goto_dir(dir)
+      local saved_cwd = vim.fn.getcwd()
+      vim.cmd("lcd " .. vim.fn.fnameescape(dir))
+      return saved_cwd
+    end
+
+    ---@return string
+    local function capture_warning()
+      local warned
+      local original_notify = vim.notify
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.notify = function(msg)
+        warned = tostring(msg)
+      end
+      clickable._dispatch(click_id, "l")
+      vim.notify = original_notify
+      assert.is_not_nil(warned, "expected switch_branch() to warn")
+      return warned
+    end
+
+    it("warns 'no commits yet' when git succeeds on a genuinely empty repo", function()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      vim.fn.system({ "git", "init", dir })
+
+      local saved_cwd = goto_dir(dir)
+      local warned = capture_warning()
+      vim.cmd("lcd " .. vim.fn.fnameescape(saved_cwd))
+      vim.fn.delete(dir, "rf")
+
+      assert.is_true(warned:find("no commits yet", 1, true) ~= nil, warned)
+    end)
+
+    it("warns with the underlying git error text when the git command itself fails", function()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p") -- a real directory, deliberately not a git repo
+
+      local saved_cwd = goto_dir(dir)
+      local warned = capture_warning()
+      vim.cmd("lcd " .. vim.fn.fnameescape(saved_cwd))
+      vim.fn.delete(dir, "rf")
+
+      assert.is_true(warned:find("not a git repo", 1, true) ~= nil, warned)
+      -- The real defect this closes: the two "empty" cases used to be
+      -- indistinguishable from one another.
+      assert.is_nil(warned:find("no commits yet", 1, true), warned)
+    end)
+  end)
 end)
 
 describe("ui.statusline.modules.variant", function()

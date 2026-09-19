@@ -11,19 +11,23 @@ local clickable = require("ui.statusline.utils.clickable")
 local notify = require("lib.nvim.notify").create("[ui.statusline.modules.git_clickable]")
 
 --- Every local branch, plus the current one if `git` reports one cleanly.
---- Empty list (not an error) outside a git repo or without `git` on `$PATH`
---- -- `vim.v.shell_error` is the only signal `systemlist` gives for that.
+--- An empty list is not by itself an error -- a repository with no commits
+--- yet is empty and fine. When `git` itself failed (not a repo, not on
+--- `$PATH`, ...), `err` carries what it printed (`systemlist` captures it
+--- the same way `checkout()` below already relies on) so the two "empty"
+--- cases stay distinguishable instead of colliding on the same bare `{}`.
 ---@return string[] branches
 ---@return string|nil current
+---@return string|nil err # non-nil only when the `git branch` call itself failed
 local function list_branches()
   local branches = vim.fn.systemlist({ "git", "branch", "--format=%(refname:short)" })
   if vim.v.shell_error ~= 0 then
-    return {}, nil
+    return {}, nil, table.concat(branches, "\n")
   end
 
   local current_out = vim.fn.systemlist({ "git", "branch", "--show-current" })
   local current = (vim.v.shell_error == 0 and current_out[1] ~= "") and current_out[1] or nil
-  return branches, current
+  return branches, current, nil
 end
 
 ---@param name string
@@ -43,9 +47,13 @@ end
 --- `:colorscheme` preview can.
 ---@return nil
 local function switch_branch()
-  local branches, current = list_branches()
+  local branches, current, err = list_branches()
   if #branches == 0 then
-    notify.warn("No git branches found (not a git repo, or git not on $PATH)")
+    if err then
+      notify.warn(("No git branches found (not a git repo, or git not on $PATH): %s"):format(err))
+    else
+      notify.warn("No git branches found (repository has no commits yet)")
+    end
     return
   end
 
