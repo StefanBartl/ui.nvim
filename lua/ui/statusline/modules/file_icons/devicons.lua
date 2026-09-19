@@ -96,7 +96,8 @@ local function devicon_for_path(path)
 
   -- Lazy-load devicons
   if not devicons_mod then
-    local mod = require("ui.util.soft_require").try("nvim-web-devicons")
+    local soft_require = require("ui.util.soft_require")
+    local mod = soft_require.try("nvim-web-devicons")
     if mod then
       devicons_mod = mod
     else
@@ -116,7 +117,13 @@ local function devicon_for_path(path)
           result = { icon = icon, color = color }
         end
       end
-      icon_cache:put(cache_key, result)
+      -- Only cache this fallback when devicons is confirmed absent
+      -- (PERF-42): while it is merely not lazy-loaded YET, `try()` above
+      -- would also return nil, and caching here would keep serving the
+      -- fallback with no trigger to ever invalidate once it does load.
+      if not soft_require.available("nvim-web-devicons") then
+        icon_cache:put(cache_key, result)
+      end
       return result.icon, result.color
     end
   end
