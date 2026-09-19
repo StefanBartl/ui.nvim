@@ -30,6 +30,7 @@ theme list.
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs |
+| `:UI context` | `on`/`off` for an explicit state; `up [n]` jumps to the n-th enclosing scope above the window's top (1 = innermost, works with the overlay off) | Toggle the sticky code-context overlay (`ui.context`): the enclosing function/class/loop lines pinned over the window's first rows while the body scrolls -- off by default; `ui.setup({ context = true })` turns it on at startup |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
@@ -40,7 +41,7 @@ theme list.
 **Completion is two-level:** the first argument completes over the thirteen
 subcommands, the argument after `theme`/`variant`/`tabline-style` over the
 theme list / the variant registry / the tabline-style registry
-respectively (`screenkey`/`transparency` complete `on`/`off` the same way). The theme list is `vim.fn.getcompletion("", "color")` at the
+respectively (`screenkey`/`transparency` complete `on`/`off` the same way, `context` adds `up`). The theme list is `vim.fn.getcompletion("", "color")` at the
 moment `<Tab>` is pressed, so a colorscheme installed mid-session is
 offered; the variant and tabline-style lists are
 `ui.config.variants.list()`/`ui.tabline.styles.list()`, so an entry a host

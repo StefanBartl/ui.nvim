@@ -9,6 +9,7 @@ local M = {}
 local theme = require("ui.bindings.usrcmds.themes")
 local theme_picker = require("ui.bindings.usrcmds.themes.picker")
 local screenkey = require("ui.screenkey")
+local context = require("ui.context")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -28,6 +29,7 @@ local ICON = {
   theme = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
   magic = nerd_font.glyph("f0d0", ""), -- nf-fa-magic
   keyboard = nerd_font.glyph("f11c", ""), -- nf-fa-keyboard_o
+  context = nerd_font.glyph("f121", ""), -- nf-fa-code
 }
 
 ---`icon .. " " .. text`, or bare `text` when no icon resolved.
@@ -120,6 +122,39 @@ local function ui_screenkey(args)
   notify.info(
     prefix(ICON.keyboard, ("Screenkey %s"):format(now_enabled and "enabled" or "disabled"))
   )
+end
+
+---Handle context command -- the sticky code-context overlay, off by default
+---(see `ui.context`'s own doc comment). `on`/`off` set an explicit state,
+---no argument toggles, and `up [n]` jumps the cursor to the n-th enclosing
+---scope above the top of the window (1 = innermost) -- that one works with
+---the overlay off as well, it only needs the parser.
+---@param args string[]
+local function ui_context(args)
+  local action = args[2]
+
+  if action == "on" then
+    context.enable()
+    notify.info(prefix(ICON.context, "Context enabled"))
+    return
+  end
+
+  if action == "off" then
+    context.disable()
+    notify.info(prefix(ICON.context, "Context disabled"))
+    return
+  end
+
+  if action == "up" then
+    local n = tonumber(args[3]) or 1
+    if not context.go_to_context(n) then
+      notify.warn(prefix(ICON.context, "No enclosing context above the top of this window"))
+    end
+    return
+  end
+
+  local now_enabled = context.toggle()
+  notify.info(prefix(ICON.context, ("Context %s"):format(now_enabled and "enabled" or "disabled")))
 end
 
 ---Handle theme command
@@ -437,6 +472,11 @@ local function ui_help(_args)
 │  :UI screenkey on           Enable screenkey         │
 │  :UI screenkey off          Disable screenkey        │
 │                                                      │
+│  :UI context                Toggle the code context  │
+│  :UI context on             Enable the context       │
+│  :UI context off            Disable the context      │
+│  :UI context up [n]         Jump to the n-th scope   │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -472,6 +512,7 @@ end
 local SUBCOMMANDS = {
   { name = "transparency", fn = ui_transparency },
   { name = "screenkey", fn = ui_screenkey },
+  { name = "context", fn = ui_context },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
@@ -558,6 +599,10 @@ local function complete(arglead, cmdline, _cursorpos)
 
     if subcmd == "screenkey" then
       return filter(arglead, { "on", "off" })
+    end
+
+    if subcmd == "context" then
+      return filter(arglead, { "on", "off", "up" })
     end
 
     if subcmd == "theme" then

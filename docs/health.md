@@ -120,6 +120,18 @@ ownership pattern this mirrors.
 
 ---
 
+## Context
+
+| Line | Means |
+| --- | --- |
+| ✅ `ui.context is on (max_lines N, M scope patterns)` | The sticky code-context overlay is enabled, with its current cap and the number of node-type patterns it treats as scopes |
+| ℹ️ `ui.context is off` | The shipped default. `:UI context on` for the session, `ui.setup({ context = true })` for good |
+| ✅ `Tree-sitter parser available for the current buffer (ft)` | The overlay can work in this buffer |
+| ℹ️ `No Tree-sitter parser for the current buffer` | The overlay needs a parser per filetype; a buffer without one simply shows no context. Not an error — `:checkhealth` itself runs in such a buffer |
+| ❌ `ui.context did not load` | The module errored on require; `:UI context` will fail the same way |
+
+---
+
 ## Optional integrations
 
 Which foreign modules this plugin probes, and which of them resolve right

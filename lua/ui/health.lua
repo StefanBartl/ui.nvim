@@ -368,6 +368,41 @@ end
 --- "absent" forever with nothing anywhere to say the feature had gone quiet.
 --- A list you can read is what makes that visible.
 ---@return nil
+local function check_context()
+  health.start("Context")
+
+  local ok, context = pcall(require, "ui.context")
+  if not ok or type(context.enable) ~= "function" then
+    health.error("ui.context did not load: " .. tostring(context))
+    return
+  end
+  if context.is_enabled() then
+    local cfg = context.config()
+    health.ok(
+      ("ui.context is on (max_lines %s, %d scope patterns)"):format(
+        tostring(cfg.max_lines),
+        #cfg.node_types
+      )
+    )
+  else
+    health.info(
+      "ui.context is off -- `:UI context on` or `ui.setup({ context = true })` to enable it"
+    )
+  end
+
+  local buf = vim.api.nvim_get_current_buf()
+  local ft = vim.bo[buf].filetype
+  local has_parser = ft ~= "" and pcall(vim.treesitter.get_parser, buf)
+  if has_parser then
+    health.ok(("Tree-sitter parser available for the current buffer (%s)"):format(ft))
+  else
+    health.info(
+      "No Tree-sitter parser for the current buffer -- the overlay needs one per filetype"
+    )
+  end
+end
+
+---@return nil
 local function check_soft_dependencies()
   health.start("Optional integrations")
 
@@ -423,6 +458,7 @@ function M.check()
   check_modules()
   check_segments()
   check_winbar()
+  check_context()
   check_soft_dependencies()
 end
 

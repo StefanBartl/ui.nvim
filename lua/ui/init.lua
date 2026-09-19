@@ -32,6 +32,13 @@ local M = {}
 --- `false` to disable `ui.contextmenu`'s renderer/trigger (`open`/
 --- `bind_buffer`) -- omitting it, or `opts.all`, leaves the menu at its
 --- already-working default rather than needing to ask for it.
+---
+--- `opts.context` is explicit-only: neither `opts.all` nor its absence turns
+--- the sticky code-context overlay (`ui.context`) on, because it draws over
+--- the buffer's first rows and a host asking for "the keymaps and the
+--- command" should not get that as a side effect. `true` enables it with
+--- the shipped tunables, a `Ui.Context.Opts` table enables it with those
+--- overrides applied first.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
@@ -51,6 +58,19 @@ function M.setup(opts)
     local ok, err = pcall(require("ui.bindings.usrcmds").setup)
     if not ok then
       notify.error("usrcmds setup failed: " .. tostring(err))
+    end
+  end
+
+  if opts.context then
+    local ok, err = pcall(function()
+      local context = require("ui.context")
+      if type(opts.context) == "table" then
+        context.setup(opts.context)
+      end
+      context.enable()
+    end)
+    if not ok then
+      notify.error("context setup failed: " .. tostring(err))
     end
   end
 

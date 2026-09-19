@@ -32,8 +32,18 @@ require("ui").setup({
   keymaps = true,  -- buffer/tab navigation and tabline mappings
   usrcmds = true,  -- the :UI command and theme management
   menu = false,    -- opt out of ui.contextmenu's renderer/trigger
+  context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
 })
 ```
+
+`context` is the other exception, in the opposite direction: it is
+explicit-only. `all = true` does **not** turn it on, because `ui.context`
+draws over the buffer's first rows and a host asking for the keymaps and the
+command should not get that as a side effect. Pass `true` for the shipped
+tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
+debounce_ms = 30, line_numbers = true, node_types = {...},
+exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20 }`) to
+override them; `:UI context` toggles it for the session either way.
 
 Nothing here is on by default, with one deliberate exception: `menu` is
 opt-**out**, not opt-in. `ui.contextmenu`'s `open`/`bind_buffer` already work
