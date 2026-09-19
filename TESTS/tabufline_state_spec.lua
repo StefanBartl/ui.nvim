@@ -111,6 +111,45 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
         state.move_buf(1)
       end)
     end)
+
+    -- PRIN-25: `n` used to reach straight into `bufs[i + n]` unclamped --
+    -- for a middle buffer and |n| large enough to overshoot either end,
+    -- that read a hole (nil) and wrote one, corrupting the persisted list.
+    it(
+      "clamps an overshooting rightward move to the last slot instead of corrupting the list",
+      function()
+        vim.api.nvim_set_current_buf(b) -- middle of { a, b, c }, index 2
+        state.move_buf(5)
+        assert.same({ a, c, b }, vim.t.bufs)
+        for _, v in ipairs(vim.t.bufs) do
+          assert.is_number(v)
+        end
+      end
+    )
+
+    it(
+      "clamps an overshooting leftward move to the first slot instead of corrupting the list",
+      function()
+        vim.api.nvim_set_current_buf(b) -- middle of { a, b, c }, index 2
+        state.move_buf(-5)
+        assert.same({ b, a, c }, vim.t.bufs)
+        for _, v in ipairs(vim.t.bufs) do
+          assert.is_number(v)
+        end
+      end
+    )
+
+    it("does nothing for n = 0", function()
+      state.move_buf(0)
+      assert.same({ a, b, c }, vim.t.bufs)
+    end)
+
+    it("does nothing for a non-number n, without throwing", function()
+      assert.has_no.errors(function()
+        state.move_buf("1")
+      end)
+      assert.same({ a, b, c }, vim.t.bufs)
+    end)
   end)
 
   describe("close_buffer", function()

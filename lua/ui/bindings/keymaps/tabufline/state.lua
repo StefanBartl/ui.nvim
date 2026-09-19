@@ -363,6 +363,10 @@ function M.move_buf(n)
   if not bufs then
     return
   end
+  if type(n) ~= "number" or n == 0 then
+    return
+  end
+  n = math.floor(n)
 
   local cur = api.nvim_get_current_buf()
   for i, bufnr in ipairs(bufs) do
@@ -370,7 +374,12 @@ function M.move_buf(n)
       if (n < 0 and i == 1) or (n > 0 and i == #bufs) then
         bufs[1], bufs[#bufs] = bufs[#bufs], bufs[1]
       else
-        bufs[i], bufs[i + n] = bufs[i + n], bufs[i]
+        -- Clamp the destination into bounds (PRIN-25): `n` is documented as
+        -- "positive moves right, negative moves left" with no range limit,
+        -- but an unclamped `i + n` past either end reads bufs[i + n] as nil
+        -- and writes one, corrupting the sequence vim.t.bufs persists.
+        local dest = math.min(math.max(i + n, 1), #bufs)
+        bufs[i], bufs[dest] = bufs[dest], bufs[i]
       end
       break
     end
