@@ -8,6 +8,7 @@ local api, fn, fs, uv = vim.api, vim.fn, vim.fs, vim.uv or vim.loop
 -- Cache with buffer-tick awareness
 local path_cache = require("lib.lua.memo.lru").new(128)
 local Autocmd = require("lib.nvim.bindings.autocmd")
+local normkey = require("lib.nvim.fs.normkey")
 local tick_cache = {} -- bufnr -> { tick, abs_path }
 
 --- Get current buffer tick (for cache invalidation)
@@ -63,10 +64,13 @@ function M.path_absolute(path_or_buf)
       return ""
     end
 
+    -- `normkey` rather than a raw `fs_realpath`-with-fallback: a path that
+    -- does not exist yet resolves its nearest existing ancestor instead of
+    -- falling back to the unresolved input, so a buffer queried before its
+    -- first `:w` and again after does not cache two different spellings
+    -- under what is meant to be the same key (XP-02).
     local abs = fn.fnamemodify(path, ":p")
-    local ok_real, real = pcall(uv.fs_realpath, abs)
-    local canon = ok_real and real or abs
-    local result = norm_sep(tostring(canon))
+    local result = norm_sep(normkey(abs))
 
     -- Update tick cache
     tick_cache[bufnr] = {
@@ -90,9 +94,7 @@ function M.path_absolute(path_or_buf)
   end
 
   local abs = fn.fnamemodify(path, ":p")
-  local ok_real, real = pcall(uv.fs_realpath, abs)
-  local canon = ok_real and real or abs
-  local result = norm_sep(tostring(canon))
+  local result = norm_sep(normkey(abs))
 
   path_cache:put(cache_key, result)
   return result
