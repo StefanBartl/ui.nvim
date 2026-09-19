@@ -341,6 +341,27 @@ describe("ui.contextmenu (ported from ui.contextmenu's TESTS/contextmenu_spec.lu
       vim.cmd("bwipeout! " .. buf)
     end
 
+    -- ---------- bind_buffer: a raising get_items must not crash the keymap ----------
+    --
+    -- get_items is supplied by another plugin; the callback must run it
+    -- through pcall so a foreign bug degrades instead of turning a
+    -- right-click into a raw traceback out of the keymap callback (ERR-01).
+
+    do
+      vim.cmd("enew")
+      local buf = vim.api.nvim_get_current_buf()
+
+      contextmenu.bind_buffer(buf, function()
+        error("boom from a foreign items provider")
+      end, { desc = "raising menu" })
+
+      local mapped = vim.fn.maparg("<RightMouse>", "n", false, true)
+      local call_ok = pcall(mapped.callback)
+      ok(call_ok, "bind_buffer: a raising get_items is caught, not propagated")
+
+      vim.cmd("bwipeout! " .. buf)
+    end
+
     -- ---------- open: win/anchor/row/col forwarded, surface returned ----------
     --
     -- Positioning a menu beside a plugin's own window (rather than at the
