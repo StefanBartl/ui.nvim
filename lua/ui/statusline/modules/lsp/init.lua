@@ -48,7 +48,7 @@ end
 --- absent and it applies the winbar itself.
 ---@nodiscard
 ---@return string|nil
-function M.symbol_context_smart()
+local function compute_symbol_context_smart()
   local lsp_symbols = soft_require.try("my.hl_config.breadcrumbs.ctx.providers.lsp_symbols")
   if lsp_symbols then
     local ok, ctx = pcall(lsp_symbols.context, nil)
@@ -64,6 +64,38 @@ function M.symbol_context_smart()
   end
 
   return nil
+end
+
+---@type { bufnr: integer, value: string|nil, at: integer }|nil
+--- Last `compute_symbol_context_smart()` result, reused for `debounce_ms`
+--- (`ui.statusline.modules.lsp.config`) instead of recomputed on every call --
+--- 'statusline' is re-evaluated on essentially every cursor move and
+--- keystroke, and a full Tree-sitter ancestor walk plus node-text extraction
+--- is not a guard's cheap exit, so the hot path needs the throttle this
+--- module's own config already declares (PERF-93).
+local ctx_cache = nil
+
+---@nodiscard
+---@return string|nil
+function M.symbol_context_smart()
+  local config_mod = require("ui.statusline.modules.lsp.config")
+  local debounce_ms = config_mod.get("debounce_ms")
+  local bufnr = vim.api.nvim_get_current_buf()
+  local now = (vim.uv or vim.loop).now()
+
+  if
+    type(debounce_ms) == "number"
+    and debounce_ms > 0
+    and ctx_cache
+    and ctx_cache.bufnr == bufnr
+    and (now - ctx_cache.at) < debounce_ms
+  then
+    return ctx_cache.value
+  end
+
+  local value = compute_symbol_context_smart()
+  ctx_cache = { bufnr = bufnr, value = value, at = now }
+  return value
 end
 
 ---@return string
