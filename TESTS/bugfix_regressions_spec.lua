@@ -63,6 +63,42 @@ describe("bug: lsp.config.update() dropped valid fields after a bad one", functi
   end)
 end)
 
+describe(
+  "bug: lsp.config.set() bypassed the type check M.update() already enforces (ERR-22)",
+  function()
+    -- M.set() used to assign `cfg[key] = value` directly, with none of the
+    -- type check the sibling `M.update()` above enforces -- despite its own
+    -- doc comment claiming "strict typing". A caller passing the wrong type
+    -- for a numeric field (a realistic slip: `set("center_width_frac",
+    -- "0.5")` reads like the number but is a string) reached
+    -- `formatters.compact_breadcrumb_line`'s arithmetic on the very next
+    -- LSP-breadcrumbs statusline redraw and threw.
+    local cfg = require("ui.statusline.modules.lsp.config")
+    local formatters = require("ui.statusline.modules.formatters")
+
+    it("rejects a wrong-type value instead of corrupting the live config", function()
+      local before = cfg.get("center_width_frac")
+
+      cfg.set("center_width_frac", "not-a-number")
+
+      assert.equals(before, cfg.get("center_width_frac"))
+
+      cfg.set("center_width_frac", before)
+    end)
+
+    it("no longer crashes compact_breadcrumb_line's arithmetic on the rejected value", function()
+      local before = cfg.get("center_width_frac")
+      cfg.set("center_width_frac", "not-a-number")
+
+      assert.has_no.errors(function()
+        formatters.compact_breadcrumb_line("a/b/c/d.lua", "MyFunction", " > ", nil)
+      end)
+
+      cfg.set("center_width_frac", before)
+    end)
+  end
+)
+
 describe("bug: display_path() mutated shared config as a side effect", function()
   local paths = require("ui.statusline.modules.lsp.helpers.paths")
   local cfg = require("ui.statusline.modules.lsp.config")

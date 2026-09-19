@@ -157,6 +157,44 @@ describe("ui.tabline.modules", function()
     vim.t.bufs = saved
   end)
 
+  it(
+    "ignores a wrong-type bufwidth instead of crashing the chip-width arithmetic (ERR-22)",
+    function()
+      -- `local bufwidth = cfg.bufwidth; if not bufwidth then ... end` only
+      -- guarded an ABSENT/false value -- a wrong type (a realistic slip:
+      -- `bufwidth = "20"`, a string that reads like the column count it
+      -- should have been) reached `bufwidth + ICON_WIDTH_SLACK` in the
+      -- per-buffer overflow check unguarded.
+      local saved = vim.t.bufs
+      local buf = vim.api.nvim_create_buf(true, false)
+      vim.t.bufs = { buf }
+
+      local cfg = vim.tbl_extend("force", default_cfg, { bufwidth = "not-a-number" })
+      assert.has_no.errors(function()
+        modules.buffers(cfg)
+      end)
+
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+      vim.t.bufs = saved
+    end
+  )
+
+  it(
+    "ignores wrong-type/non-positive bufwidth_min and bufwidth_max the same way (ERR-22)",
+    function()
+      local saved = vim.t.bufs
+      vim.t.bufs = {}
+
+      local cfg =
+        vim.tbl_extend("force", default_cfg, { bufwidth_min = "not-a-number", bufwidth_max = -5 })
+      assert.has_no.errors(function()
+        modules.buffers(cfg)
+      end)
+
+      vim.t.bufs = saved
+    end
+  )
+
   it("computes available_space once per buffers() call, not once per buffer", function()
     -- Regression: available_space(cfg) used to be called from inside the
     -- overflow loop, once per buffer in vim.t.bufs -- pure waste, since
