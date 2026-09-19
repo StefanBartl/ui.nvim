@@ -66,13 +66,19 @@ local function compute_symbol_context_smart()
   return nil
 end
 
----@type { bufnr: integer, value: string|nil, at: integer }|nil
+---@type { winid: integer, bufnr: integer, value: string|nil, at: integer }|nil
 --- Last `compute_symbol_context_smart()` result, reused for `debounce_ms`
 --- (`ui.statusline.modules.lsp.config`) instead of recomputed on every call --
 --- 'statusline' is re-evaluated on essentially every cursor move and
 --- keystroke, and a full Tree-sitter ancestor walk plus node-text extraction
 --- is not a guard's cheap exit, so the hot path needs the throttle this
 --- module's own config already declares (PERF-93).
+---
+--- Keyed by window as well as buffer: the symbol chain depends on the
+--- cursor position (`lsp_symbols.context()`/`symbol_context_ts()` both read
+--- it), and two windows can show the same buffer at two different cursor
+--- lines. A bufnr-only key would hand one window's breadcrumb to the other
+--- for up to `debounce_ms` whenever both redraw within that window.
 local ctx_cache = nil
 
 ---@nodiscard
@@ -80,6 +86,7 @@ local ctx_cache = nil
 function M.symbol_context_smart()
   local config_mod = require("ui.statusline.modules.lsp.config")
   local debounce_ms = config_mod.get("debounce_ms")
+  local winid = vim.api.nvim_get_current_win()
   local bufnr = vim.api.nvim_get_current_buf()
   local now = (vim.uv or vim.loop).now()
 
@@ -87,6 +94,7 @@ function M.symbol_context_smart()
     type(debounce_ms) == "number"
     and debounce_ms > 0
     and ctx_cache
+    and ctx_cache.winid == winid
     and ctx_cache.bufnr == bufnr
     and (now - ctx_cache.at) < debounce_ms
   then
@@ -94,7 +102,7 @@ function M.symbol_context_smart()
   end
 
   local value = compute_symbol_context_smart()
-  ctx_cache = { bufnr = bufnr, value = value, at = now }
+  ctx_cache = { winid = winid, bufnr = bufnr, value = value, at = now }
   return value
 end
 
