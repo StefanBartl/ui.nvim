@@ -48,11 +48,23 @@ end
 
 --- Set a single config field with strict typing.
 ---
+--- Delegates to `M.update` rather than assigning `cfg[key]` directly (ERR-22:
+--- an invalid config VALUE must degrade to the field's current/default value
+--- instead of crashing a downstream consumer). The docstring here always
+--- claimed "strict typing", but the implementation used to skip the check
+--- `M.update` already does -- a caller passing the wrong type for a numeric
+--- field (a realistic slip: `set("center_width_frac", "0.5")` reads like the
+--- number but is a string) reached `formatters.compact_breadcrumb_line`'s
+--- arithmetic on the very next LSP-breadcrumbs statusline redraw and threw
+--- ("attempt to perform arithmetic on a string value"), taking the whole
+--- segment down. Routing through `M.update` rejects the mismatched field
+--- (keeping its prior value) and emits the same `notify.warn` a batch patch
+--- would, instead of corrupting live config state silently.
 ---@param key Ui.UI.Stl.Modules.Lsp.CfgKey
 ---@param value any
 ---@return nil
 function M.set(key, value)
-  cfg[key] = value
+  M.update({ [key] = value })
 end
 
 --- Update multiple fields at once with runtime type checks.

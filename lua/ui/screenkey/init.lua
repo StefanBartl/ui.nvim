@@ -160,11 +160,12 @@ local function build_text()
     table.remove(parts, 1)
     text = table.concat(parts, " ")
   end
-  if vim.fn.strdisplaywidth(text) > max_w then
-    -- A single entry alone overflows (a long <Cmd>...<CR> sequence) -- crude
-    -- byte-based clip rather than nothing at all; this is a rare edge case,
-    -- not the common path the loop above already handles.
-    text = text:sub(-max_w)
+  -- A single part alone overflows: a long <Cmd>...<CR> sequence, or with
+  -- `join_chars` any typed command line. Drop leading *characters* until it
+  -- fits -- a byte-based clip could cut a multi-byte glyph (a label such as
+  -- U+2423) in half and put invalid UTF-8 into the buffer.
+  while vim.fn.strdisplaywidth(text) > max_w and vim.fn.strchars(text) > 1 do
+    text = vim.fn.strcharpart(text, 1)
   end
   return text
 end
