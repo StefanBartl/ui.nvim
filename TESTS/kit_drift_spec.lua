@@ -137,11 +137,18 @@ describe("ui.kit and lib.nvim's frozen copy", function()
   local ui_dir = vim.fn.getcwd() .. "/lua/ui/kit"
 
   --- Every .lua file under a kit directory, relative to it.
+  ---
+  --- `vim.fn.glob` reads its argument as a pattern, not a path -- `root`
+  --- goes through `lib.nvim.fs.globbable` first so an 8.3 short name in an
+  --- env-var-supplied path (`$LIB_NVIM_DIR` on Windows, e.g.
+  --- `C:/Users/STEFAN~1/...`) cannot make glob try to resolve `~1` as a
+  --- home directory and come back an empty list with no error (XP-01).
   ---@param root string
   ---@return string[]
   local function kit_files(root)
+    local globbable = require("lib.nvim.fs.globbable")
     local out = {}
-    for _, p in ipairs(vim.fn.glob(root .. "/**/*.lua", false, true)) do
+    for _, p in ipairs(vim.fn.glob(globbable(root) .. "/**/*.lua", false, true)) do
       out[#out + 1] = p:sub(#root + 2):gsub("\\", "/")
     end
     table.sort(out)
@@ -149,12 +156,34 @@ describe("ui.kit and lib.nvim's frozen copy", function()
   end
 
   it("carries the same set of files on both sides", function()
-    assert.same(kit_files(ui_dir), kit_files(lib_dir))
+    local ui_files, lib_files = kit_files(ui_dir), kit_files(lib_dir)
+    -- An empty result on either side means the glob itself came back empty
+    -- (e.g. the 8.3 short-name trap XP-01 guards against), which must fail
+    -- loudly here rather than let the next test compare two empty lists and
+    -- report "no drift" while having checked nothing at all.
+    assert.is_true(
+      #ui_files > 0,
+      "kit_files(ui_dir) found no .lua files -- glob likely came back empty"
+    )
+    assert.is_true(
+      #lib_files > 0,
+      "kit_files(lib_dir) found no .lua files -- glob likely came back empty"
+    )
+    assert.same(ui_files, lib_files)
   end)
 
   it("has not drifted from lib.nvim's copy", function()
+    local files = kit_files(ui_dir)
+    -- Same reasoning as the file-set test above: zero files here means this
+    -- loop compares nothing and `drifted` stays `{}` regardless of any real
+    -- divergence -- an empty glob must not read as "no drift found".
+    assert.is_true(
+      #files > 0,
+      "kit_files(ui_dir) found no .lua files -- glob likely came back empty"
+    )
+
     local drifted = {}
-    for _, rel in ipairs(kit_files(ui_dir)) do
+    for _, rel in ipairs(files) do
       local mine = flatten(as_lib(read(ui_dir .. "/" .. rel)))
       local theirs = flatten(read(lib_dir .. "/" .. rel))
       if mine ~= theirs then
