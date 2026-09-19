@@ -16,6 +16,7 @@
 --- overlay in this ecosystem uses) sidesteps that fight entirely.
 
 local window = require("lib.nvim.window")
+local notify = require("lib.nvim.notify").create("[ui.windowpicker]")
 
 local M = {}
 
@@ -69,7 +70,7 @@ local function groups_spec()
   }
 end
 
----@type Lib.UI.HL.PersistHandle|nil
+---@type Lib.UI.HL.PersistHandle|boolean|nil
 local hl_handle = nil
 
 ---@internal
@@ -81,9 +82,14 @@ local function ensure_groups()
   if ok and type(hl.persist) == "function" then
     hl_handle = hl.persist(groups_spec, { name = "ui_windowpicker" })
   else
+    -- No `ColorScheme` re-application without `lib.nvim.ui.hl.persist`, but
+    -- still only ever done once: without a truthy sentinel here, the guard
+    -- above never trips and this re-defines the group on every single
+    -- `M.pick()` call instead of once.
     for group, opts in pairs(groups_spec()) do
       vim.api.nvim_set_hl(0, group, opts)
     end
+    hl_handle = true
   end
 end
 
@@ -149,6 +155,10 @@ function M.pick(opts)
 
   local windows = eligible_windows(opts)
   if #windows == 0 then
+    -- Not just an internal no-op: `:UI winpick` is a directly user-invoked
+    -- command too, and a silent "nothing happened" there is indistinguishable
+    -- from the command failing to run at all.
+    notify.warn("no window to pick from")
     return nil
   end
   if opts.autoselect_one and #windows == 1 then
