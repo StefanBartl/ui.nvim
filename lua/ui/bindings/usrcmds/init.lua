@@ -10,6 +10,7 @@ local theme = require("ui.bindings.usrcmds.themes")
 local theme_picker = require("ui.bindings.usrcmds.themes.picker")
 local screenkey = require("ui.screenkey")
 local context = require("ui.context")
+local colorpicker = require("ui.colorpicker")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -30,6 +31,7 @@ local ICON = {
   magic = nerd_font.glyph("f0d0", ""), -- nf-fa-magic
   keyboard = nerd_font.glyph("f11c", ""), -- nf-fa-keyboard_o
   context = nerd_font.glyph("f121", ""), -- nf-fa-code
+  color = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
 }
 
 ---`icon .. " " .. text`, or bare `text` when no icon resolved.
@@ -122,6 +124,21 @@ local function ui_screenkey(args)
   notify.info(
     prefix(ICON.keyboard, ("Screenkey %s"):format(now_enabled and "enabled" or "disabled"))
   )
+end
+
+---Handle color command -- the interactive colour picker (`ui.colorpicker`).
+---An optional `#hex` argument is the start colour; without one the picker
+---opens on the `#hex` under the cursor, or on its default.
+---@param args string[]
+local function ui_color(args)
+  local hex = args[2]
+  if hex and not require("ui.colorpicker.color").valid(hex) then
+    notify.warn(prefix(ICON.color, ("not a colour: %s (expected #rrggbb)"):format(hex)))
+    return
+  end
+  if not colorpicker.open({ hex = hex }) then
+    notify.warn(prefix(ICON.color, "could not open the colour picker"))
+  end
 end
 
 ---Handle context command -- the sticky code-context overlay, off by default
@@ -477,6 +494,8 @@ local function ui_help(_args)
 │  :UI context off            Disable the context      │
 │  :UI context up [n]         Jump to the n-th scope   │
 │                                                      │
+│  :UI color [#hex]           Open the colour picker   │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -513,6 +532,7 @@ local SUBCOMMANDS = {
   { name = "transparency", fn = ui_transparency },
   { name = "screenkey", fn = ui_screenkey },
   { name = "context", fn = ui_context },
+  { name = "color", fn = ui_color },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
