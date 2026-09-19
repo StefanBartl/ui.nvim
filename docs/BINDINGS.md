@@ -30,6 +30,7 @@ theme list.
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
 | `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs |
+| `:UI color [#hex]` | an optional start colour | Open the interactive colour picker (`ui.colorpicker`): a hue row, a saturation × lightness grid, a shades row; the window cursor selects, `<CR>` replaces the `#hex` the picker opened on (or inserts after the cursor), `y` yanks, `q` closes |
 | `:UI context` | `on`/`off` for an explicit state; `up [n]` jumps to the n-th enclosing scope above the window's top (1 = innermost, works with the overlay off) | Toggle the sticky code-context overlay (`ui.context`): the enclosing function/class/loop lines pinned over the window's first rows while the body scrolls -- off by default; `ui.setup({ context = true })` turns it on at startup |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
