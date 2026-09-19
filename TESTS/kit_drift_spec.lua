@@ -143,13 +143,21 @@ describe("ui.kit and lib.nvim's frozen copy", function()
   --- env-var-supplied path (`$LIB_NVIM_DIR` on Windows, e.g.
   --- `C:/Users/STEFAN~1/...`) cannot make glob try to resolve `~1` as a
   --- home directory and come back an empty list with no error (XP-01).
+  ---
+  --- The resolved (`globbable`d) root, not the original `root`, is what
+  --- prefixes every path glob hands back -- when `root` actually contained
+  --- a `~`, that resolution changes its length (the 8.3 segment expands to
+  --- its long form), so stripping with `#root` instead of `#groot` sliced
+  --- the wrong number of characters off `p` and corrupted the very paths
+  --- this fix exists to recover, in exactly the case it targets.
   ---@param root string
   ---@return string[]
   local function kit_files(root)
     local globbable = require("lib.nvim.fs.globbable")
+    local groot = globbable(root)
     local out = {}
-    for _, p in ipairs(vim.fn.glob(globbable(root) .. "/**/*.lua", false, true)) do
-      out[#out + 1] = p:sub(#root + 2):gsub("\\", "/")
+    for _, p in ipairs(vim.fn.glob(groot .. "/**/*.lua", false, true)) do
+      out[#out + 1] = p:sub(#groot + 2):gsub("\\", "/")
     end
     table.sort(out)
     return out
