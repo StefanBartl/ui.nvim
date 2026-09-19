@@ -4,7 +4,10 @@ Every command, keymap and autocommand this plugin registers. Read by
 `:Bindings` out of the installed plugin directory, so this file is the source
 of truth rather than a copy of one.
 
-Nothing here is registered until `require("ui").setup({ all = true })` runs.
+Nothing here is registered until `require("ui").setup({ all = true })` runs,
+**except `:KitPreview`** (see Commands below): `ui.kit`'s module load
+registers it unconditionally, so any sibling plugin doing
+`require("ui.kit")` turns it on regardless of whether `ui.setup()` ever runs.
 
 ---
 
@@ -41,6 +44,16 @@ theme list.
 | `:UI tabline-styles` | — | List the registered tabline styles (`rounded`/`square`/`divider` plus anything a host registered), marking the active one |
 | `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
 | `:UI help` | — | The subcommand list, in a float |
+
+**`:KitPreview`** (`ui.kit`'s own command, not a `:UI` subcommand) opens the
+live theme playground: a tab split with an editable Lua config buffer on the
+left and a rendered widget gallery on the right that restyles as the config
+settles (`lua/ui/kit/preview.lua`). Registered as soon as `ui.kit`'s module
+loads — `require("ui.kit")` from any plugin, not just this one's own
+`setup()` — so it is reachable even in a host that never calls
+`ui.setup()`. The config buffer's contents are evaluated as Lua a short,
+debounced delay after the last keystroke, not on every one (see the
+in-buffer reference block, or `EVAL_DEBOUNCE_MS` in `preview.lua`).
 
 **Completion is two-level:** the first argument completes over the thirteen
 subcommands, the argument after `theme`/`variant`/`tabline-style` over the

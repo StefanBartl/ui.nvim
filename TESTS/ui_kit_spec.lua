@@ -1348,6 +1348,30 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     local rendered2 = table.concat(vim.api.nvim_buf_get_lines(prev_buf, 0, -1, false), "\n")
     ok(rendered2:find("border=double", 1, true), "editing the config restyles the preview")
 
+    -- SEC-50: the buffer's contents are eval'd as Lua, so a real edit (via
+    -- the autocmd wiring `M.open` installs, not the direct `P.render` calls
+    -- above) must NOT eval immediately -- only after a brief quiet window,
+    -- so a paste/completion-insert stays reviewable for a moment first.
+    -- "minimal" -> border = "none" (distinct from "double" above and cleanly
+    -- greppable in the rendered "border=%s" header, unlike e.g. "solid",
+    -- whose preset border token is actually "single").
+    vim.api.nvim_buf_set_lines(cfg_buf, 0, -1, false, { 'return "minimal"' })
+    vim.api.nvim_exec_autocmds("TextChanged", { buffer = cfg_buf })
+    local immediate = table.concat(vim.api.nvim_buf_get_lines(prev_buf, 0, -1, false), "\n")
+    ok(
+      not immediate:find("border=none", 1, true),
+      "SEC-50: an edit does not eval synchronously (debounced, not immediate)"
+    )
+    wait_for(function()
+      local text = table.concat(vim.api.nvim_buf_get_lines(prev_buf, 0, -1, false), "\n")
+      return text:find("border=none", 1, true) ~= nil
+    end)
+    local settled_text = table.concat(vim.api.nvim_buf_get_lines(prev_buf, 0, -1, false), "\n")
+    ok(
+      settled_text:find("border=none", 1, true),
+      "SEC-50: the debounced eval applies once the buffer goes quiet"
+    )
+
     -- a broken config shows an error instead of throwing
     vim.api.nvim_buf_set_lines(cfg_buf, 0, -1, false, { "return { border =" })
     P.render(cfg_buf, prev_buf)
