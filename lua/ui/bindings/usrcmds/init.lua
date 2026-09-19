@@ -11,6 +11,7 @@ local theme_picker = require("ui.bindings.usrcmds.themes.picker")
 local screenkey = require("ui.screenkey")
 local context = require("ui.context")
 local colorpicker = require("ui.colorpicker")
+local zen = require("ui.zen")
 local nerd_font = require("lib.nvim.ui.nerd_font")
 
 -- Icons for `:UI` output.
@@ -32,6 +33,7 @@ local ICON = {
   keyboard = nerd_font.glyph("f11c", ""), -- nf-fa-keyboard_o
   context = nerd_font.glyph("f121", ""), -- nf-fa-code
   color = nerd_font.glyph("f1fc", ""), -- nf-fa-paint_brush
+  zen = nerd_font.glyph("f10c", ""), -- nf-fa-circle_o
 }
 
 ---`icon .. " " .. text`, or bare `text` when no icon resolved.
@@ -138,6 +140,25 @@ local function ui_color(args)
   end
   if not colorpicker.open({ hex = hex }) then
     notify.warn(prefix(ICON.color, "could not open the colour picker"))
+  end
+end
+
+---Handle zen command -- the distraction-free box (`ui.zen`). `on`/`off`
+---set an explicit state, no argument toggles.
+---@param args string[]
+local function ui_zen(args)
+  local action = args[2]
+  if action == "on" then
+    zen.open()
+    return
+  end
+  if action == "off" then
+    zen.close()
+    return
+  end
+  local now_open = zen.toggle()
+  if not now_open then
+    notify.info(prefix(ICON.zen, "Zen off"))
   end
 end
 
@@ -496,6 +517,10 @@ local function ui_help(_args)
 │                                                      │
 │  :UI color [#hex]           Open the colour picker   │
 │                                                      │
+│  :UI zen                    Toggle the zen box       │
+│  :UI zen on                 Enter zen                │
+│  :UI zen off                Leave zen                │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -533,6 +558,7 @@ local SUBCOMMANDS = {
   { name = "screenkey", fn = ui_screenkey },
   { name = "context", fn = ui_context },
   { name = "color", fn = ui_color },
+  { name = "zen", fn = ui_zen },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
@@ -623,6 +649,10 @@ local function complete(arglead, cmdline, _cursorpos)
 
     if subcmd == "context" then
       return filter(arglead, { "on", "off", "up" })
+    end
+
+    if subcmd == "zen" then
+      return filter(arglead, { "on", "off" })
     end
 
     if subcmd == "theme" then
