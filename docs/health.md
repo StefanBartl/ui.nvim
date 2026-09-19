@@ -141,7 +141,7 @@ tunables (`width`, `height`, `margin`, `max_entries`, `fade_ms`) as well as
 `labels` (a table mapping `keytrans()` names to replacement text, e.g.
 `{ ["<Space>"] = "â£" }`; a non-string entry is dropped) and
 `join_chars` (a boolean: run plain characters together into one chip per
-typed word while `<Esc>`, `<C-…>` and repeat counts stay apart).
+typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart).
 
 | Line | Means |
 | --- | --- |
