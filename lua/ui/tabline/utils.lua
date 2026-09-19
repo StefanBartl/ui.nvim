@@ -300,10 +300,16 @@ local function devicon_for_buf(bufnr)
     return cached.icon, cached.color
   end
 
-  local devicons = require("ui.util.soft_require").try("nvim-web-devicons")
+  local soft_require = require("ui.util.soft_require")
+  local devicons = soft_require.try("nvim-web-devicons")
   if not devicons then
     local result = { icon = "󰈚", color = nil }
-    icon_cache:put(cache_key, result)
+    -- Only cache when devicons is confirmed absent (PERF-42): while it is
+    -- merely not lazy-loaded yet, caching here would keep serving the
+    -- fallback with no trigger to ever invalidate once it does load.
+    if not soft_require.available("nvim-web-devicons") then
+      icon_cache:put(cache_key, result)
+    end
     return result.icon, result.color
   end
 
