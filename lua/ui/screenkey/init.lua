@@ -34,6 +34,8 @@ local M = {}
 ---@field margin? integer
 ---@field max_entries? integer
 ---@field theme? string|table|nil
+---@field labels? table<string, string>
+---@field join_chars? boolean
 
 ---@class Ui.Screenkey.Config
 ---@field fade_ms integer # how long the HUD stays up after the last keystroke
@@ -42,6 +44,8 @@ local M = {}
 ---@field margin integer # columns from the right edge / rows above the cmdline
 ---@field max_entries integer # rolling cap on tracked key entries, before display-width truncation
 ---@field theme string|table|nil # forwarded to ui.kit.surface's theme resolver
+---@field labels table<string, string> # keytrans() name -> what to show instead, e.g. { ["<Space>"] = "\xE2\x90\xA3" (U+2423), ["<CR>"] = "\xE2\x8F\x8E" (U+23CE) }
+---@field join_chars boolean # run plain characters together ("todo.md") instead of one chip per key ("t o d o . m d")
 local cfg = {
   fade_ms = 2000,
   width = 40,
@@ -49,6 +53,8 @@ local cfg = {
   margin = 2,
   max_entries = 30,
   theme = nil,
+  labels = {},
+  join_chars = false,
 }
 
 ---@type boolean
@@ -99,10 +105,48 @@ local TIMES = "\xC3\x97"
 --- entries (never the newest) until it fits `cfg.width` -- the most recent
 --- keystroke is always the one worth seeing.
 ---@return string
+---@internal
+--- What one entry shows: its `cfg.labels` replacement when there is one,
+--- the keytrans() name otherwise.
+---@param key string
+---@return string
+local function label_of(key)
+  local l = cfg.labels[key]
+  if type(l) == "string" and l ~= "" then
+    return l
+  end
+  return key
+end
+
+---@internal
+--- With `cfg.join_chars`, a run of single presses whose display is not a
+--- `<...>` keycode is one chip ("todo.md" rather than "t o d o . m d"), so
+--- typed text reads as text while `<Esc>`, `<C-w>` and repeat counts still
+--- stand apart. A label counts as text too: `<Space>` shown as U+2423
+--- joins its neighbours, an unlabelled `<Space>` does not.
+---@param display string
+---@param count integer
+---@return boolean
+local function joinable(display, count)
+  return cfg.join_chars and count == 1 and display:match("^<.+>$") == nil
+end
+
 local function build_text()
   local parts = {}
+  local open = false -- whether parts[#parts] is a run that may still grow
   for _, e in ipairs(entries) do
-    parts[#parts + 1] = (e.count > 1) and (e.key .. TIMES .. e.count) or e.key
+    local display = label_of(e.key)
+    if joinable(display, e.count) then
+      if open then
+        parts[#parts] = parts[#parts] .. display
+      else
+        parts[#parts + 1] = display
+        open = true
+      end
+    else
+      parts[#parts + 1] = (e.count > 1) and (display .. TIMES .. e.count) or display
+      open = false
+    end
   end
 
   local max_w = math.max(1, cfg.width - 2) -- inside the border/padding
@@ -238,6 +282,34 @@ function M.setup(opts)
   apply_int(opts, "max_entries", 1)
   if opts.theme ~= nil then
     cfg.theme = opts.theme
+  end
+  if opts.labels ~= nil then
+    if type(opts.labels) == "table" then
+      local clean = {}
+      for k, v in pairs(opts.labels) do
+        if type(k) == "string" and type(v) == "string" then
+          clean[k] = v
+        else
+          setup_issues[#setup_issues + 1] = ("labels[%s] must map a keytrans() name to a string (dropped)"):format(
+            tostring(k)
+          )
+        end
+      end
+      cfg.labels = clean
+    else
+      setup_issues[#setup_issues + 1] = ("labels must be a table (kept %d entries)"):format(
+        vim.tbl_count(cfg.labels)
+      )
+    end
+  end
+  if opts.join_chars ~= nil then
+    if type(opts.join_chars) == "boolean" then
+      cfg.join_chars = opts.join_chars
+    else
+      setup_issues[#setup_issues + 1] = ("join_chars must be a boolean (kept %s)"):format(
+        tostring(cfg.join_chars)
+      )
+    end
   end
   if apply_int(opts, "fade_ms", 1) then
     fader.cancel()

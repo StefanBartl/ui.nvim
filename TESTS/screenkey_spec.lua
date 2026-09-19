@@ -49,6 +49,7 @@ describe("ui.screenkey", function()
   -- float into the next one.
   after_each(function()
     screenkey.disable()
+    screenkey.setup({ labels = {}, join_chars = false })
   end)
 
   it("is off by default -- no float, no hook", function()
@@ -100,6 +101,61 @@ describe("ui.screenkey", function()
 
     assert.equals("<Esc>", current_text())
   end)
+
+  it("shows a configured label instead of the keytrans() name", function()
+    screenkey.setup({ labels = { ["<Esc>"] = "Esc" } })
+    screenkey.enable()
+    feed("<Esc>")
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("Esc", current_text())
+  end)
+
+  -- Normal-mode motions rather than letters that would enter Insert mode:
+  -- feedkeys() in "x" mode appends an <Esc> when a call leaves Insert mode,
+  -- which would land in the HUD as a key nobody pressed.
+  it("join_chars runs plain characters together, one chip per typed word", function()
+    screenkey.setup({ join_chars = true })
+    screenkey.enable()
+    feed_each({ "h", "j", "k" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("hjk", current_text())
+  end)
+
+  it("join_chars keeps a keycode apart from the characters around it", function()
+    screenkey.setup({ join_chars = true })
+    screenkey.enable()
+    feed_each({ "h", "j", "<Esc>", "k" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("hj <Esc> k", current_text())
+  end)
+
+  it("join_chars lets a labelled keycode join the run", function()
+    screenkey.setup({ join_chars = true, labels = { ["<Esc>"] = "!" } })
+    screenkey.enable()
+    feed_each({ "h", "<Esc>", "j" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("h!j", current_text())
+  end)
+
+  it(
+    "rejects a non-table labels and a non-boolean join_chars, keeping the current values",
+    function()
+      screenkey.setup({ labels = "nope", join_chars = "yes" })
+      assert.equals(2, #screenkey.health_issues())
+    end
+  )
 
   it("collapses consecutive presses of the same key into key\xC3\x97N", function()
     screenkey.enable()
