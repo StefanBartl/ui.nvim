@@ -19,6 +19,7 @@
 
 local surface = require("ui.kit.surface")
 local debounce = require("lib.nvim.debounce")
+local normalize = require("lib.nvim.normalize")
 
 local NS = vim.api.nvim_create_namespace("ui_screenkey")
 
@@ -56,6 +57,11 @@ local enabled = false
 local surf = nil
 ---@type { key: string, count: integer }[]
 local entries = {}
+---@type string[]
+--- Rejected values from the last `M.setup()` call -- an invalid single value
+--- keeps `cfg`'s current one instead of corrupting it, surfaced through
+--- `:checkhealth ui` rather than raised (ERR-22).
+local setup_issues = {}
 
 ---@internal
 --- Close the float and drop every tracked entry -- the fade's own end state,
@@ -190,33 +196,60 @@ local function on_key(key)
   end)
 end
 
+---@internal
+--- Validate one integer field of `opts` and apply it to `cfg`, or reject it
+--- and record why -- an invalid value keeps `cfg`'s current one rather than
+--- being accepted as-is (ERR-22).
+---@param opts Ui.Screenkey.Opts
+---@param field "width"|"height"|"margin"|"max_entries"|"fade_ms"
+---@param min integer
+---@return boolean applied
+local function apply_int(opts, field, min)
+  local v = opts[field]
+  if v == nil then
+    return false
+  end
+  local ok, n, err = normalize.as_int(field, v, min, false)
+  if ok then
+    cfg[field] = n
+    return true
+  end
+  setup_issues[#setup_issues + 1] = ("%s (kept %s)"):format(
+    err or (field .. " is invalid"),
+    tostring(cfg[field])
+  )
+  return false
+end
+
 ---Override the shipped tunables. Safe to call before or after `M.enable()`;
 ---a `fade_ms` change takes effect on the next keystroke's fade, not
----retroactively on one already pending.
+---retroactively on one already pending. An invalid value (wrong type, or
+---below its minimum) is rejected and `cfg` keeps its current value; see
+---`M.health_issues()`.
 ---@param opts? Ui.Screenkey.Opts
 ---@return nil
 function M.setup(opts)
   opts = opts or {}
-  if opts.width then
-    cfg.width = opts.width
-  end
-  if opts.height then
-    cfg.height = opts.height
-  end
-  if opts.margin then
-    cfg.margin = opts.margin
-  end
-  if opts.max_entries then
-    cfg.max_entries = opts.max_entries
-  end
+  setup_issues = {}
+
+  apply_int(opts, "width", 1)
+  apply_int(opts, "height", 1)
+  apply_int(opts, "margin", 0)
+  apply_int(opts, "max_entries", 1)
   if opts.theme ~= nil then
     cfg.theme = opts.theme
   end
-  if opts.fade_ms then
-    cfg.fade_ms = opts.fade_ms
+  if apply_int(opts, "fade_ms", 1) then
     fader.cancel()
     fader = build_fader()
   end
+end
+
+---Rejected `M.setup()` values from the last call, one message per rejected
+---field -- empty when every field validated. For `:checkhealth ui`.
+---@return string[]
+function M.health_issues()
+  return vim.deepcopy(setup_issues)
 end
 
 ---Turn the HUD on: registers the `vim.on_key()` hook. Idempotent.

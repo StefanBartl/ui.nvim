@@ -102,6 +102,7 @@ describe("ui.health", function()
       "Statusline segments",
       "Winbar",
       "Context",
+      "Screenkey",
       "Optional integrations",
     }, starts)
   end)

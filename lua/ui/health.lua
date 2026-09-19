@@ -314,7 +314,10 @@ local function check_segments()
   health.start("Statusline segments")
 
   for _, entry in ipairs({
-    { "nvim-web-devicons", "file type icons; without it lib.nvim.ui.icons' own table (a devicons subset) fills the column" },
+    {
+      "nvim-web-devicons",
+      "file type icons; without it lib.nvim.ui.icons' own table (a devicons subset) fills the column",
+    },
     { "gitsigns", "branch name + added/changed/removed counts (git, git_clickable)" },
     { "casedesk.config", "case info + SLA urgency badge (casedesk)" },
     { "filetree", "cwd-mode badge (filetree_cwd_mode)" },
@@ -402,6 +405,28 @@ local function check_context()
   end
 end
 
+--- Screenkey's own `M.setup()` rejects an invalid value instead of accepting
+--- it (ERR-22); this surfaces whatever the last call rejected.
+---@return nil
+local function check_screenkey()
+  health.start("Screenkey")
+
+  local ok, screenkey = pcall(require, "ui.screenkey")
+  if not ok or type(screenkey.health_issues) ~= "function" then
+    health.error("ui.screenkey did not load: " .. tostring(screenkey))
+    return
+  end
+
+  local issues = screenkey.health_issues()
+  if #issues == 0 then
+    health.ok("no rejected config values from the last setup() call")
+  else
+    for _, issue in ipairs(issues) do
+      health.warn(issue)
+    end
+  end
+end
+
 ---@return nil
 local function check_soft_dependencies()
   health.start("Optional integrations")
@@ -459,6 +484,7 @@ function M.check()
   check_segments()
   check_winbar()
   check_context()
+  check_screenkey()
   check_soft_dependencies()
 end
 

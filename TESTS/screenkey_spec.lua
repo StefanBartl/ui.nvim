@@ -156,4 +156,24 @@ describe("ui.screenkey", function()
     end)
     assert.is_nil(screenkey.surface())
   end)
+
+  it("setup() rejects a wrongly-typed value and records it for :checkhealth", function()
+    screenkey.setup({ width = true })
+    local issues = screenkey.health_issues()
+    assert.equals(1, #issues)
+    assert.is_true(issues[1]:find("width", 1, true) ~= nil, issues[1])
+
+    -- A subsequent valid call clears the rejected-value list.
+    screenkey.setup({ width = 40 })
+    assert.same({}, screenkey.health_issues())
+  end)
+
+  it("setup() rejects max_entries below its minimum", function()
+    screenkey.setup({ max_entries = 0 })
+    local issues = screenkey.health_issues()
+    assert.equals(1, #issues)
+    assert.is_true(issues[1]:find("max_entries", 1, true) ~= nil, issues[1])
+
+    screenkey.setup({ max_entries = 30 })
+  end)
 end)

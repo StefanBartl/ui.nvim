@@ -4,7 +4,7 @@
 :checkhealth ui
 ```
 
-Seven sections. As of roadmap step 6, only one thing in the first is fatal:
+Eight sections. As of roadmap step 6, only one thing in the first is fatal:
 `lib.nvim` missing. NvChad's presence is information now, not a dependency
 check — steps 3-5 replaced everything this plugin's own code used to read
 out of it, one gap at a time, and step 6 did the same for base46.
@@ -129,6 +129,20 @@ ownership pattern this mirrors.
 | ✅ `Tree-sitter parser available for the current buffer (ft)` | The overlay can work in this buffer |
 | ℹ️ `No Tree-sitter parser for the current buffer` | The overlay needs a parser per filetype; a buffer without one simply shows no context. Not an error — `:checkhealth` itself runs in such a buffer |
 | ❌ `ui.context did not load` | The module errored on require; `:UI context` will fail the same way |
+
+---
+
+## Screenkey
+
+`ui.screenkey.setup()` rejects an invalid value (wrong type, or below its
+minimum) instead of accepting it and keeps whatever `cfg` already had; this
+section surfaces what the last call rejected.
+
+| Line | Means |
+| --- | --- |
+| OK `no rejected config values from the last setup() call` | Every field validated |
+| WARN `<field> must be ...` (one per rejected field) | That `setup()` call passed something invalid for `<field>`; the message names what was kept instead |
+| ERROR `ui.screenkey did not load` | The module errored on require |
 
 ---
 
