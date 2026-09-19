@@ -110,6 +110,26 @@ describe("ui.windowpicker", function()
     assert.is_nil(windowpicker.pick())
   end)
 
+  it("returns nil instead of a stale id when the target window closes during the wait", function()
+    vim.cmd("only")
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    local target = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(origin)
+    windowpicker.setup({ autoselect_one = false })
+
+    -- getchar() yields to the event loop while it blocks, so a deferred
+    -- callback really does get to run mid-pick -- close the window the
+    -- letter was assigned to, then only feed the keystroke that unblocks
+    -- getchar() once it is already gone.
+    vim.defer_fn(function()
+      pcall(vim.api.nvim_win_close, target, true)
+      vim.api.nvim_feedkeys("J", "n", false)
+    end, 10)
+
+    assert.is_nil(windowpicker.pick())
+  end)
+
   it("setup() overrides the shipped defaults", function()
     windowpicker.setup({ chars = "AB" })
     assert.equals("AB", windowpicker.config().chars)

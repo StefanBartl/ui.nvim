@@ -162,7 +162,10 @@ function M.pick(opts)
     return nil
   end
   if opts.autoselect_one and #windows == 1 then
-    return windows[1]
+    if vim.api.nvim_win_is_valid(windows[1]) then
+      return windows[1]
+    end
+    return nil
   end
 
   ---@type string[]
@@ -198,7 +201,15 @@ function M.pick(opts)
   local picked = vim.fn.nr2char(code):lower()
   for i, char in ipairs(chars) do
     if char:lower() == picked then
-      return windows[i]
+      -- getchar() yields to the event loop, so a timer/autocmd had the
+      -- whole wait to close the window this letter was assigned to. Every
+      -- caller (this config's neo-tree integration, and now :UI winpick)
+      -- treats nil as "nothing happened" -- a stale id would instead reach
+      -- an unguarded nvim_set_current_win and raise a raw API error.
+      if vim.api.nvim_win_is_valid(windows[i]) then
+        return windows[i]
+      end
+      return nil
     end
   end
   return nil
