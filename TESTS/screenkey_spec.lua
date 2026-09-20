@@ -181,6 +181,20 @@ describe("ui.screenkey", function()
     assert.is_true(text:sub(-1) == "h", text)
   end)
 
+  it("clips an overlong joined run to the longest tail that fits, not a shorter one", function()
+    -- Width 8 leaves 6 columns; ten distinct motions form one ten-character
+    -- run. The clip must keep exactly the newest six (a search that stops
+    -- early or drops one too many would show five or fewer).
+    screenkey.setup({ join_chars = true, width = 8 })
+    screenkey.enable()
+    feed_each({ "h", "j", "k", "l", "h", "j", "k", "l", "h", "j" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("hjklhj", current_text())
+  end)
+
   it("join_chars keeps a keycode apart from the characters around it", function()
     screenkey.setup({ join_chars = true })
     screenkey.enable()
