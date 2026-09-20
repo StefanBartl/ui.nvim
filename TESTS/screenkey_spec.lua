@@ -113,6 +113,25 @@ describe("ui.screenkey", function()
     assert.equals("Esc", current_text())
   end)
 
+  it("matches a label written in mapping spelling (<C-w>) against keytrans()'s <C-W>", function()
+    -- keytrans() hands on_key() `<C-W>`, upper-case; a host writing the
+    -- label the way it writes a mapping (`<C-w>`) used to never match.
+    screenkey.setup({ labels = { ["<C-w>"] = "win", ["<"] = "lt" } })
+    screenkey.enable()
+    -- Both are incomplete Normal-mode commands, so feedkeys("x") appends an
+    -- <Esc> after each; the assertion looks for the labels, not exact text.
+    feed_each({ "<C-w>", "<" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    local text = current_text()
+    assert.is_true(text:find("win", 1, true) ~= nil, text)
+    assert.is_true(text:find("lt", 1, true) ~= nil, text)
+    assert.is_nil(text:find("<C-W>", 1, true), text)
+    assert.is_nil(text:find("<lt>", 1, true), text)
+  end)
+
   -- Normal-mode motions rather than letters that would enter Insert mode:
   -- feedkeys() in "x" mode appends an <Esc> when a call leaves Insert mode,
   -- which would land in the HUD as a key nobody pressed.

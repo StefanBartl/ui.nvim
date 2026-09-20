@@ -334,7 +334,15 @@ function M.setup(opts)
             tostring(k)
           )
         else
-          clean[k] = v
+          -- Store under the exact spelling keytrans() will hand on_key():
+          -- it writes `<C-W>`, `<lt>`, `<Space>`, while a host naturally
+          -- writes the mapping form (`<C-w>`, `<`, `<leader>`). Round-trip
+          -- through replace_termcodes so both spellings hit the same entry;
+          -- a plain character or an already-canonical name maps to itself.
+          local ok_c, canon = pcall(function()
+            return vim.fn.keytrans(vim.api.nvim_replace_termcodes(k, true, true, true))
+          end)
+          clean[(ok_c and canon ~= "") and canon or k] = v
         end
       end
       cfg.labels = clean

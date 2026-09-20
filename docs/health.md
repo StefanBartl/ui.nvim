@@ -138,7 +138,8 @@ ownership pattern this mirrors.
 minimum) instead of accepting it and keeps whatever `cfg` already had; this
 section surfaces what the last call rejected. That covers the integer
 tunables (`width`, `height`, `margin`, `max_entries`, `fade_ms`) as well as
-`labels` (a table mapping `keytrans()` names to replacement text, e.g.
+`labels` (a table mapping key names to replacement text -- mapping spelling
+is fine, `<C-w>` is stored as the `<C-W>` that `keytrans()` reports -- e.g.
 `{ ["<Space>"] = "â£" }`; a non-string entry, or one containing a newline, is dropped) and
 `join_chars` (a boolean: run plain characters together into one chip per
 typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart).
