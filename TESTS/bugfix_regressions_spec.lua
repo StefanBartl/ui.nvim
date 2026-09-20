@@ -127,6 +127,43 @@ describe(
   end
 )
 
+describe("bug: a nulled field's type check was bypassed on the very next set() (ERR-22)", function()
+  -- `apply_field` used to type-check a new value against `type(cfg[key])`
+  -- -- once `path_max_chars` was nulled (the case above), `cfg[key]` was
+  -- nil, so there was nothing to check against and ANY type was accepted
+  -- silently, no `notify.warn`. `set("path_max_chars", nil)` then
+  -- `set("path_max_chars", "45")` (a realistic slip: a string where a
+  -- number belongs) stored the string outright, which
+  -- `formatters.compact_breadcrumb_line`'s `math.min(room,
+  -- options.path_max_chars)` then threw on. Now checked against a fixed
+  -- `KNOWN_TYPES` snapshot instead of the live value.
+  local cfg = require("ui.statusline.modules.lsp.config")
+  local formatters = require("ui.statusline.modules.formatters")
+
+  it("still rejects a wrong-type value for a field that was nulled first", function()
+    local before = cfg.get("path_max_chars")
+
+    cfg.set("path_max_chars", nil)
+    cfg.set("path_max_chars", "not-a-number")
+
+    assert.is_nil(cfg.get("path_max_chars"))
+
+    cfg.set("path_max_chars", before)
+  end)
+
+  it("no longer crashes compact_breadcrumb_line's arithmetic on the rejected value", function()
+    local before = cfg.get("path_max_chars")
+    cfg.set("path_max_chars", nil)
+    cfg.set("path_max_chars", "not-a-number")
+
+    assert.has_no.errors(function()
+      formatters.compact_breadcrumb_line("a/b/c/d.lua", "MyFunction", " > ", nil)
+    end)
+
+    cfg.set("path_max_chars", before)
+  end)
+end)
+
 describe("bug: display_path() mutated shared config as a side effect", function()
   local paths = require("ui.statusline.modules.lsp.helpers.paths")
   local cfg = require("ui.statusline.modules.lsp.config")

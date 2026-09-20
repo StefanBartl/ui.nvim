@@ -204,6 +204,24 @@ describe("ui.screenkey", function()
     assert.is_nil(text:find("<t_", 1, true), text)
   end)
 
+  it("rejects a label containing a newline instead of crashing render() on it", function()
+    -- nvim_buf_set_lines errors on any line with an embedded "\n"; an
+    -- unvalidated label used to reach it via surface.open()'s own initial
+    -- set_lines, breaking the HUD on the very first keystroke that used it.
+    screenkey.setup({ labels = { ["<Esc>"] = "a\nb" } })
+    local issues = screenkey.health_issues()
+    assert.equals(1, #issues)
+    assert.is_true(issues[1]:find("<Esc>", 1, true) ~= nil, issues[1])
+
+    screenkey.enable()
+    feed("<Esc>")
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    assert.equals("<Esc>", current_text())
+  end)
+
   it("collapses consecutive presses of the same key into key\xC3\x97N", function()
     screenkey.enable()
     feed_each({ "j", "j", "j" })

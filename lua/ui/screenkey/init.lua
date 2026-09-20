@@ -322,12 +322,19 @@ function M.setup(opts)
     if type(opts.labels) == "table" then
       local clean = {}
       for k, v in pairs(opts.labels) do
-        if type(k) == "string" and type(v) == "string" then
-          clean[k] = v
-        else
+        if type(k) ~= "string" or type(v) ~= "string" then
           setup_issues[#setup_issues + 1] = ("labels[%s] must map a keytrans() name to a string (dropped)"):format(
             tostring(k)
           )
+        -- nvim_buf_set_lines rejects any line containing "\n" -- a label with
+        -- one would crash render() on the very first keystroke that uses it
+        -- (surface.open()'s own initial set_lines), not just render wrong.
+        elseif v:find("\n", 1, true) then
+          setup_issues[#setup_issues + 1] = ("labels[%s] must not contain a newline (dropped)"):format(
+            tostring(k)
+          )
+        else
+          clean[k] = v
         end
       end
       cfg.labels = clean
