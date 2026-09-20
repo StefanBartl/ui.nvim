@@ -198,6 +198,21 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     toast_mod.clear()
     eq(toast_mod.active(), 0, "clear removes all toasts")
 
+    -- PERF-92 regression: a toast is repositioned on VimResized, not just
+    -- when the stack itself changes -- a toast opened with timeout = 0 (as
+    -- above) can stay up for the rest of the session, and reflow() used to
+    -- run only from M.open()/on_close/M.clear().
+    local original_columns = vim.o.columns
+    local t3 = assert(kit.toast({ message = "resize me", timeout = 0 }), "toast opens")
+    local before_col = tonumber(tostring(vim.api.nvim_win_get_config(t3.winid).col))
+    vim.o.columns = original_columns + 20
+    vim.api.nvim_exec_autocmds("VimResized", {})
+    local after_col = tonumber(tostring(vim.api.nvim_win_get_config(t3.winid).col))
+    vim.o.columns = original_columns
+    ok(after_col > before_col, "toast repositions on VimResized")
+    toast_mod.clear()
+    eq(toast_mod.active(), 0, "clear removes all toasts")
+
     -- --------------------------------------------------------------- input
     local inp = assert(kit.input({ prompt = "Name", default = "sb" }), "input opens")
     ok(inp:is_valid(), "input float valid")
