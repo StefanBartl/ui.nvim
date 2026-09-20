@@ -40,8 +40,22 @@ local cfg = {
 -- the real keys sidesteps that: it does not change when `cfg[key]` does.
 ---@type table<string, true>
 local KNOWN_KEYS = {}
-for key in pairs(cfg) do
+-- Declared type for each known field, from the same initial `cfg` snapshot.
+-- `apply_field` below cannot type-check a value against `cfg[key]`'s own
+-- live type once `path_max_chars` -- the one nullable field -- has been
+-- cleared: with the live value nil there is no live type left to compare
+-- against. Without this fixed snapshot, that left
+-- `apply_field("path_max_chars", <wrong type>)` falling through as if it
+-- were the field's first-ever assignment, accepting any type silently (no
+-- `notify.warn`, ERR-22 again) -- e.g. `set("path_max_chars", nil)` then
+-- `set("path_max_chars", "45")` stored the string, which
+-- `formatters.compact_breadcrumb_line`'s `math.min(room,
+-- options.path_max_chars)` then threw on.
+---@type table<string, string>
+local KNOWN_TYPES = {}
+for key, value in pairs(cfg) do
   KNOWN_KEYS[key] = true
+  KNOWN_TYPES[key] = type(value)
 end
 
 -- ---------------------------------------------------------------------------
@@ -83,23 +97,24 @@ local function apply_field(key, value)
   if not KNOWN_KEYS[key] then
     return
   end
-  local current = cfg[key]
 
   -- allow explicit nil for nullable fields
   if value == nil then
     cfg[key] = nil
-  elseif current == nil then
-    -- Currently nil (a nullable field that was explicitly cleared) --
-    -- nothing to type-check against, so any type is accepted, same as
-    -- the field's very first assignment would be.
-    cfg[key] = value
-  elseif type(current) == type(value) then
+    return
+  end
+
+  -- Checked against `KNOWN_TYPES`'s fixed snapshot, not `type(cfg[key])`:
+  -- a nullable field that is presently nil (explicitly cleared) still has
+  -- a declared type to enforce, same as before it was ever cleared.
+  local expected = KNOWN_TYPES[key]
+  if type(value) == expected then
     cfg[key] = value
   else
     notify.warn(
       ("LSP config update rejected: field '%s' expects %s, got %s"):format(
         key,
-        type(current),
+        expected,
         type(value)
       )
     )

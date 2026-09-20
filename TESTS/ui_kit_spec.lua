@@ -101,6 +101,47 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     eq(theme.resolve("spec_preset").border, "single", "user preset registered")
     ok(vim.tbl_contains(theme.presets(), "spec_preset"), "preset listed")
 
+    -- setup() validates rather than silently dropping a bad option: an unknown
+    -- key, a non-table `presets`, or a `default` naming no registered preset
+    -- must all be reported, matching lib.config.setup()'s own contract.
+    do
+      local before_default = theme.default()
+      local warnings = {}
+      local real_notify = vim.notify
+      vim.notify = function(msg, level)
+        warnings[#warnings + 1] = { msg = msg, level = level }
+      end
+
+      ---@type any
+      kit.setup({ default = "drak" })
+      eq(theme.default(), before_default, "setup: unknown default preset name is not applied")
+      eq(#warnings, 1, "setup: the unknown default preset is reported once")
+      ok(
+        warnings[1].msg:find("drak", 1, true) ~= nil,
+        "setup: the report names the bad preset: " .. warnings[1].msg
+      )
+      eq(warnings[1].level, vim.log.levels.WARN, "setup: reported as a warning")
+
+      ---@type any
+      kit.setup({ presets = "not-a-table" })
+      eq(#warnings, 2, "setup: a non-table presets value is reported once")
+
+      ---@type any
+      kit.setup({ preests = { foo = {} } })
+      eq(#warnings, 3, "setup: an unknown top-level key is reported once")
+      ok(
+        warnings[3].msg:find("preests", 1, true) ~= nil,
+        "setup: the report names the unknown key: " .. warnings[3].msg
+      )
+
+      kit.setup({ default = "double" })
+      eq(theme.default(), "double", "setup: a known default preset is still applied")
+      eq(#warnings, 3, "setup: a valid call reports nothing")
+
+      kit.setup({ default = before_default })
+      vim.notify = real_notify
+    end
+
     -- --------------------------------------------------------------- surface
     local s = assert(
       kit.surface.open({ lines = { "hello", "world" }, theme = "double", title = "T" }),
@@ -1619,6 +1660,68 @@ describe("ui.kit.shortlist (promptless list + preview)", function()
     )
     assert.is_true(rendered, "kit.popup routes to the shortlist component")
     h.close()
+  end)
+end)
+
+describe("bug: ui.kit.shortlist left the results window orphaned", function()
+  it("closing the preview pane directly also closes the results window", function()
+    local kit = require("ui.kit")
+
+    local h = assert(
+      kit.shortlist({
+        items = { "x" },
+        render = function(item, surface)
+          surface:set_lines({ item })
+        end,
+      }),
+      "shortlist opens"
+    )
+
+    h.preview:close()
+
+    assert.is_false(
+      h.results:is_valid(),
+      "closing the preview pane directly also closes the results window"
+    )
+  end)
+end)
+
+describe("bug: ui.kit.picker's TextChanged debounce broke when a second picker opened", function()
+  it("keeps the first picker's on_change firing after a second picker opens", function()
+    local kit = require("ui.kit")
+
+    local first_changes = {}
+    local first = assert(
+      kit.picker({
+        debounce = 10,
+        on_change = function(q)
+          first_changes[#first_changes + 1] = q
+        end,
+      }),
+      "first picker opens"
+    )
+    local second = assert(
+      kit.picker({
+        debounce = 10,
+        on_change = function() end,
+      }),
+      "second picker opens"
+    )
+
+    vim.api.nvim_buf_set_lines(first.slots.prompt.bufnr, 0, 1, false, { "hello" })
+    vim.api.nvim_exec_autocmds("TextChangedI", { buffer = first.slots.prompt.bufnr })
+    wait_for(function()
+      return #first_changes >= 1
+    end)
+
+    assert.same(
+      { "hello" },
+      first_changes,
+      "the first picker's own TextChanged autocmd still fires after a second picker opens"
+    )
+
+    first.close()
+    second.close()
   end)
 end)
 

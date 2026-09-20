@@ -591,7 +591,7 @@ local function ui_help(_args)
 │  :UI zen off                Leave zen                │
 │                                                      │
 │  :UI winpick                Pick a window by letter, │
-│                             jump to it                │
+│                             jump to it               │
 │                                                      │
 │  :UI notify                 Toggle notify toasts     │
 │  :UI notify on|off          Explicit state           │
