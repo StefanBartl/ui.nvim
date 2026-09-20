@@ -98,6 +98,7 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | `menu`    | anchored action list — `{ label, action }` items; picking runs the action. Also renders [`ui.contextmenu`](../contextmenu/README.md) tables (`name`/`cmd`, `{ name = "separator" }`, `rtxt`, `icon`, nested `items`) and takes `mouse = true` to anchor at the pointer. A row is a set of **fixed-width columns** measured across the whole level — icon, label, fly-out marker, `rtxt` — so entries line up whichever section they sit in; `icon` is a field, never a prefix on `label`. The marker follows the *label* column rather than the row, so it stays beside the list instead of against the frame, and the hint column keeps the right edge. Named groups (`contextmenu.heading`) are drawn as titled frames (`group_style` = `"box"` \| `"header"` \| `"plain"`; a menu that names nothing keeps the plain divider look). The block cursor is hidden while it is open, one left click picks, and a click or focus change elsewhere dismisses it (`hide_cursor` / `single_click` / `close_on_focus_lost` turn those off). A pick is acknowledged before it is acted on: the row lights up (`KitFlash`) for `flash_ms` (default 100) and the action follows, the way a button shows its press — the delay is the point, since a leaf action closes the menu and a flash painted at that moment would never be seen. A menu dismissed while a row is lit runs nothing (`flash_on_select = false` turns it off). Defaults to the `menu` preset, so the frame is coloured. Drilling into a submenu and walking back swap the list **inside the same window** — no flash, and the menu stays put |
 | `progress`| passthrough to `lib.nvim.progress` (`:update`/`:finish`/`:cancel`) |
 | `compare` | pick two items out of one picker, then view them side by side — see [Compare](#compare-pick-two-view-side-by-side) below |
+| `shortlist` | promptless list+preview for a handful of items — see [Shortlist](#shortlist-promptless-list--preview) below |
 
 ## Layout engine (Phase 3, partial)
 
@@ -141,6 +142,38 @@ local p = kit.picker({
 
 `kit.picker({ prompt = "plain" })` falls back to a bare
 `kit.layout.template("picker")` whose prompt slot you wire yourself.
+
+### Shortlist (promptless list + preview)
+
+`kit.shortlist(opts)` is for a handful of items (a mark list, recent
+buffers, …) that don't need fuzzy search — no prompt row, and preview sits
+above the results instead of beside it, so there's room for a real file path
+instead of a narrow results column's worth of it. Navigation is `kit.chooser`'s
+own (`j`/`k`/arrows wrap-around, `<CR>` selects, `<Esc>`/`q` closes); the
+preview follows the selection however the cursor gets there — keys, mouse,
+`gg`/`G` — via `CursorMoved`, not a hand-picked set of keys.
+
+```lua
+local handle = kit.shortlist({
+  items = marks,                          -- your own item values, any shape
+  format_item = function(item, width)     -- results line for this item, at
+    return path_shorten(item.path, width) -- most `width` columns wide
+  end,
+  render = function(item, surface)        -- same contract as kit.compare
+    surface:set_lines(read_lines(item.path))
+  end,
+  on_submit = function(item, idx) open(item.path) end,
+  on_close = function() end,
+})
+-- handle.current_item() / handle.current_index() read the highlighted item
+-- without submitting -- e.g. for extra keymaps on handle.results.bufnr.
+```
+
+`format_item` is called once per item with that run's actual results-slot
+width, so the label can show as much of a path as fits rather than a fixed
+truncation — `lib.nvim.fs.path_shorten(path, width)` (style `"fit"`, the
+default) is built for exactly this: it keeps the drive/root and the filename
+visible and collapses the middle.
 
 ### Compare (pick two, view side by side)
 
