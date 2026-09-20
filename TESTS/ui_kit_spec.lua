@@ -1401,6 +1401,227 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
   end)
 end)
 
+describe("ui.kit.shortlist (promptless list + preview)", function()
+  it("opens with preview above results, renders the initial item, and closes cleanly", function()
+    local kit = require("ui.kit")
+    local chooser = require("ui.kit.chooser")
+
+    local rendered = {}
+    local formatted_widths = {}
+    local items = { { path = "a.lua" }, { path = "b.lua" }, { path = "c.lua" } }
+
+    local h = assert(
+      kit.shortlist({
+        items = items,
+        format_item = function(item, width)
+          formatted_widths[#formatted_widths + 1] = width
+          return item.path
+        end,
+        render = function(item, surface)
+          rendered[#rendered + 1] = item.path
+          surface:set_lines({ "preview:" .. item.path })
+        end,
+        on_submit = function() end,
+      }),
+      "shortlist opens"
+    )
+
+    assert.is_true(h.results:is_valid(), "results surface is valid")
+    assert.is_true(h.preview:is_valid(), "preview surface is valid")
+
+    -- preview sits above results (the whole point of the template)
+    assert.is_true(
+      vim.api.nvim_win_get_config(h.preview.winid).row
+        < vim.api.nvim_win_get_config(h.results.winid).row,
+      "preview window sits above the results window"
+    )
+    -- both slots share the outer width (stacked, not side by side)
+    assert.equals(
+      vim.api.nvim_win_get_config(h.preview.winid).width,
+      vim.api.nvim_win_get_config(h.results.winid).width,
+      "preview and results share the same width"
+    )
+
+    assert.equals(3, #formatted_widths, "format_item ran once per item")
+    assert.is_true(formatted_widths[1] > 0, "format_item received the actual results-slot width")
+
+    assert.same({ "a.lua" }, rendered, "render() ran once, for the initial item")
+    assert.equals("preview:a.lua", vim.api.nvim_buf_get_lines(h.preview.bufnr, 0, -1, false)[1])
+
+    assert.equals(items[1], h.current_item(), "current_item() reads the highlighted item")
+    assert.equals(1, h.current_index(), "current_index() starts at 1")
+
+    -- moving the selection re-renders the preview via CursorMoved, however
+    -- the cursor got there -- not just a hand-picked set of keys. This
+    -- headless runner never fires CursorMoved for an API-driven cursor move
+    -- on its own (same limitation noted elsewhere in this file for
+    -- TextChangedI/TextChanged), so the autocmd is fired explicitly here --
+    -- a real interactive session fires it on every keypress-driven move.
+    chooser.move(1)
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = h.results.bufnr })
+    assert.same({ "a.lua", "b.lua" }, rendered, "moving the selection re-renders the preview")
+    assert.equals("preview:b.lua", vim.api.nvim_buf_get_lines(h.preview.bufnr, 0, -1, false)[1])
+    assert.equals(items[2], h.current_item())
+
+    h.close()
+    assert.is_false(h.results:is_valid(), "close() closes the results window")
+    assert.is_false(h.preview:is_valid(), "close() also closes the preview window (same lifecycle)")
+  end)
+
+  it("re-runs format_item at the new width on VimResized, not just repositions", function()
+    local kit = require("ui.kit")
+
+    local widths_seen = {}
+    local h = assert(
+      kit.shortlist({
+        items = { "x" },
+        format_item = function(item, width)
+          widths_seen[#widths_seen + 1] = width
+          return item .. ":" .. width
+        end,
+        render = function() end,
+      }),
+      "shortlist opens"
+    )
+
+    local width_at_open = widths_seen[1]
+    assert.equals(
+      "x:" .. width_at_open,
+      vim.api.nvim_buf_get_lines(h.results.bufnr, 0, -1, false)[1],
+      "initial label carries the open-time width"
+    )
+
+    -- A resize the layout actually reacts to: layout.compute derives the
+    -- results width from a fraction of vim.o.columns, so growing columns by
+    -- a lot is what reliably changes it (a growth too small can round back
+    -- to the same integer width and make this assertion flaky). Assigning
+    -- `vim.o.columns` here can itself fire a real VimResized in this runner
+    -- on top of the explicit one below, so this checks "ran again, at least
+    -- once, with the new width" rather than an exact call count -- same
+    -- tolerance the existing toast VimResized test above uses.
+    local original_columns = vim.o.columns
+    vim.o.columns = original_columns + 40
+    vim.api.nvim_exec_autocmds("VimResized", {})
+
+    assert.is_true(#widths_seen >= 2, "format_item ran again on VimResized")
+    local width_after_resize = widths_seen[#widths_seen]
+    assert.is_true(width_after_resize ~= width_at_open, "the new call got a different width")
+    assert.equals(
+      "x:" .. width_after_resize,
+      vim.api.nvim_buf_get_lines(h.results.bufnr, 0, -1, false)[1],
+      "the results line is re-formatted at the new width, not left stale"
+    )
+
+    vim.o.columns = original_columns
+    h.close()
+  end)
+
+  it("preview_bo forwards buffer options to the preview surface", function()
+    local kit = require("ui.kit")
+
+    local h = assert(
+      kit.shortlist({
+        items = { "x" },
+        preview_bo = { modifiable = false, readonly = true },
+        render = function(_, surface)
+          surface:set_lines({ "read-only content" })
+        end,
+      }),
+      "shortlist opens"
+    )
+
+    assert.is_false(
+      vim.api.nvim_get_option_value("modifiable", { buf = h.preview.bufnr }),
+      "preview_bo's modifiable = false reaches the preview buffer"
+    )
+    assert.is_true(
+      vim.api.nvim_get_option_value("readonly", { buf = h.preview.bufnr }),
+      "preview_bo's readonly = true reaches the preview buffer"
+    )
+    -- render() -> surface:set_lines() still worked despite modifiable=false
+    -- (set_lines saves/restores modifiable around its own write).
+    assert.equals(
+      "read-only content",
+      vim.api.nvim_buf_get_lines(h.preview.bufnr, 0, -1, false)[1],
+      "render() can still write through set_lines()"
+    )
+
+    h.close()
+  end)
+
+  it("on_submit receives the picked item and index, and tears down the preview", function()
+    local kit = require("ui.kit")
+    local chooser = require("ui.kit.chooser")
+
+    local submitted_item, submitted_idx
+    local items = { "one", "two", "three" }
+    local h = assert(
+      kit.shortlist({
+        items = items,
+        render = function(item, surface)
+          surface:set_lines({ item })
+        end,
+        on_submit = function(item, idx)
+          submitted_item, submitted_idx = item, idx
+        end,
+      }),
+      "shortlist opens"
+    )
+
+    chooser.move(1) -- one -> two
+    chooser.submit() -- <CR>
+
+    assert.equals("two", submitted_item, "on_submit receives the picked item's original value")
+    assert.equals(2, submitted_idx, "on_submit receives the picked item's index")
+    assert.is_false(h.preview:is_valid(), "submitting also closes the preview pane")
+  end)
+
+  it("q/<Esc> closes without submitting", function()
+    local kit = require("ui.kit")
+    local chooser = require("ui.kit.chooser")
+
+    local submitted = false
+    local h = assert(
+      kit.shortlist({
+        items = { "only" },
+        render = function() end,
+        on_submit = function()
+          submitted = true
+        end,
+      }),
+      "shortlist opens"
+    )
+
+    chooser.close() -- q/<Esc> both route to chooser.close()
+
+    assert.is_false(submitted, "closing without a pick never calls on_submit")
+    assert.is_false(h.preview:is_valid(), "closing the results pane also closes the preview")
+  end)
+
+  it("validates its required options instead of throwing", function()
+    local kit = require("ui.kit")
+    assert.is_nil(kit.shortlist({ items = {} }), "empty items -> nil")
+    assert.is_nil(kit.shortlist({ items = { "x" } }), "missing opts.render(item, surface) -> nil")
+  end)
+
+  it('routes via kit.popup({ type = "shortlist" })', function()
+    local kit = require("ui.kit")
+    local rendered = false
+    local h = assert(
+      kit.popup({
+        type = "shortlist",
+        items = { "x" },
+        render = function()
+          rendered = true
+        end,
+      }),
+      'kit.popup({ type = "shortlist" }) opens'
+    )
+    assert.is_true(rendered, "kit.popup routes to the shortlist component")
+    h.close()
+  end)
+end)
+
 describe("bug: kit.form stalled with no on_cancel when a field's surface failed to open", function()
   -- `ui.kit.input` is captured as a module-level upvalue in `ui.kit.form`
   -- (`local input = require("ui.kit.input")`), so simulating a genuine
