@@ -192,6 +192,18 @@ describe("ui.screenkey", function()
     end
   )
 
+  it("leaves a raw terminal code (<t_..>) out of the HUD", function()
+    screenkey.enable()
+    -- K_SPECIAL KS_EXTRA + a byte no key name owns: keytrans() renders it as <t_..>.
+    feed_each({ "j", "\128\253g", "k" })
+    vim.wait(200, function()
+      return current_text() ~= ""
+    end)
+
+    local text = current_text()
+    assert.is_nil(text:find("<t_", 1, true), text)
+  end)
+
   it("collapses consecutive presses of the same key into key\xC3\x97N", function()
     screenkey.enable()
     feed_each({ "j", "j", "j" })

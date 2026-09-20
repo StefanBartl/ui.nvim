@@ -254,6 +254,11 @@ local function on_key(key)
     if not ok or trans == nil or trans == "" then
       return
     end
+    -- A raw terminal code (`<t_..>`: a key the terminal sent in a form
+    -- Neovim has no name for) means nothing to a viewer; leave it out.
+    if trans:sub(1, 3) == "<t_" then
+      return
+    end
 
     local last = entries[#entries]
     if last and last.key == trans then
