@@ -181,6 +181,93 @@ local function warn_once(key, message)
   notify.warn(message)
 end
 
+---@type table<string, Ui.Statusline.CatalogEntry>|nil
+local catalog_by_key = nil
+
+---@param key string
+---@return Ui.Statusline.CatalogEntry|nil
+local function catalog_entry(key)
+  if not catalog_by_key then
+    catalog_by_key = {}
+    for _, entry in ipairs(require("ui.statusline.catalog")) do
+      catalog_by_key[entry.key] = entry
+    end
+  end
+  return catalog_by_key[key]
+end
+
+--- Make `entry.key` resolvable by `M.generate()`, requiring its module in
+--- if it is a standalone one `cfg.modules` does not have yet. A builtin key
+--- resolves against `ui.statusline.themes.default` with no `modules` entry
+--- at all (see `ui.statusline.catalog`'s own doc comment on `builtin`), so
+--- there is nothing to do for those beyond `order` membership itself.
+---
+--- Exported (not local) for `ui.statusline.menu.add_module` -- the "Add
+--- module" menu entry needs the exact same "does this key need its module
+--- required in" logic `apply_saved_order` below already has, and neither
+--- side should drift from the other.
+---@param cfg Ui.Statusline.Config
+---@param entry Ui.Statusline.CatalogEntry
+---@return boolean ok, string|nil err
+function M.ensure_module_loaded(cfg, entry)
+  if entry.builtin or not entry.source then
+    return true
+  end
+  cfg.modules = cfg.modules or {}
+  if cfg.modules[entry.key] ~= nil then
+    return true
+  end
+  local ok, mod = pcall(require, entry.source)
+  if not ok then
+    return false, tostring(mod)
+  end
+  cfg.modules[entry.key] = mod
+  return true
+end
+
+--- Restore `order` from `ui.statusline.state`'s saved file onto `cfg`, if
+--- one exists -- called from `M.enable()` on every call (startup and every
+--- later `:UI variant`/menu switch alike), so a no-op when nothing was ever
+--- saved (`state.read()` returns nil) costs one file stat and nothing else.
+--- A catalog key the saved list names that also needs a standalone module
+--- gets it required in via `M.ensure_module_loaded`; a key the saved list
+--- names that resolves to neither a catalog entry nor an existing
+--- `cfg.modules` entry is left to `M.generate()`'s own "no module for %q"
+--- warn-once -- not this function's job to catch.
+---
+--- Deliberately NOT routed through `ui.statusline.menu` (which would also
+--- reach `ui.contextmenu`/`ui.kit.menu` behind it): this runs on every
+--- `enable()`, including a plain startup that never opens a menu at all, and
+--- `ui.statusline.state`'s own file I/O is all it actually needs.
+---@param cfg Ui.Statusline.Config
+---@return nil
+local function apply_saved_order(cfg)
+  local saved = require("ui.statusline.state").read()
+  if not saved then
+    return
+  end
+
+  for _, key in ipairs(saved.order) do
+    if key ~= "%=" then
+      local entry = catalog_entry(key)
+      if entry then
+        local ok, err = M.ensure_module_loaded(cfg, entry)
+        if not ok then
+          warn_once(
+            "saved-layout:" .. key,
+            ("ui.statusline.render: saved layout could not load %q: %s"):format(
+              entry.source,
+              tostring(err)
+            )
+          )
+        end
+      end
+    end
+  end
+
+  cfg.order = saved.order
+end
+
 ---@internal
 --- Resolve the fallback module table for `theme_name` + `separator_style`,
 --- or nil when the theme is not ported (warns once, by theme name).
@@ -327,6 +414,8 @@ local current = nil
 ---@param cfg Ui.Statusline.Config
 ---@return nil
 function M.enable(cfg)
+  apply_saved_order(cfg)
+
   current = cfg
   highlights.ensure()
   vim.o.statusline = "%!v:lua.require('ui.statusline.render').render()"
