@@ -470,3 +470,12 @@ with the rename applied (`ui.kit` → `lib.nvim.ui.kit`, `Ui.Kit` →
 lengthens lines — `ui.kit.sync` becomes `lib.nvim.ui.kit.sync` — and pushes
 one `error()` past the shared 100-column budget, so stylua wraps it on one
 side only. Byte-identity is not achievable; identical code is.
+
+[`scripts/mirror_kit.lua`](../scripts/mirror_kit.lua) does the mirroring, with
+the spec's own rename table: from this repo's root,
+`LIB_NVIM_DIR=<lib.nvim> nvim --headless -n -u NONE -l scripts/mirror_kit.lua`
+writes the files that differ and formats them with lib.nvim's stylua config
+(`--check` only reports). Push lib.nvim **first**: this repo's CI reads
+lib.nvim's `ci-verified` branch, which advances only after lib.nvim's own CI is
+green on all three systems, so the other order leaves the drift check red until
+it catches up.

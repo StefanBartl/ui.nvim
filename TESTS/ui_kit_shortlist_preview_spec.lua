@@ -369,5 +369,122 @@ describe("ui.kit.shortlist: the preview pane", function()
       press("<C-j>")
       assert.is_true(topline(h.preview.winid) > 1, "the custom key scrolls")
     end)
+
+    it("a bare string is a list of one, not a group that silently vanishes", function()
+      open({ preview_keys = { scroll_down = "<C-j>" } })
+      assert.is_true(mapped(h.results.bufnr, "<C-j>"), "the string is bound")
+      assert.is_false(mapped(h.results.bufnr, "<C-f>"), "and replaces the group's defaults")
+    end)
+
+    it("entries that are not keys are ignored, not left as a half-open popup", function()
+      -- A table in a key list made the hint text raise, an empty string made `map`
+      -- raise ("Invalid (empty) LHS") -- both after the two windows were up, so
+      -- both stayed open with no handle to close them.
+      local before = #vim.api.nvim_list_wins()
+      open({
+        preview_keys = {
+          scroll_down = { {}, "", "<C-j>" },
+          focus = { "" },
+          half_down = { {} },
+        },
+      })
+      assert.equals(before + 2, #vim.api.nvim_list_wins(), "the list and the preview, no more")
+      assert.is_true(mapped(h.results.bufnr, "<C-j>"), "the usable entry is bound")
+      assert.is_false(mapped(h.results.bufnr, "<Tab>"), "a group left with no key is off")
+      assert.is_false(mapped(h.results.bufnr, "<C-d>"), "so is one that only held a table")
+      assert.is_true(mapped(h.results.bufnr, "<C-p>"), "the other groups keep their defaults")
+    end)
   end)
+end)
+
+describe("ui.kit.shortlist: a preview that cannot be rendered", function()
+  local h
+  local main
+
+  ---@param extra table|nil  merged over the default options
+  local function open(extra)
+    h = assert(
+      kit.shortlist(vim.tbl_extend("force", {
+        items = { { path = "good.txt" }, { path = "bad.bin" } },
+        format_item = function(item)
+          return item.path
+        end,
+        preview_bo = { modifiable = false },
+        render = function(item, surface)
+          if item.path == "bad.bin" then
+            -- What a NUL byte out of readfile() looks like: the API refuses it.
+            surface:set_lines({ "one\ntwo" })
+          else
+            surface:set_lines({ "good content" })
+          end
+        end,
+      }, extra or {})),
+      "shortlist opens"
+    )
+    return h
+  end
+
+  --- Put the list's cursor on row `row` the way a keypress would.
+  ---@param row integer
+  local function select_row(row)
+    vim.api.nvim_win_set_cursor(h.results.winid, { row, 0 })
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = h.results.bufnr })
+  end
+
+  ---@return string[]
+  local function preview_lines()
+    return vim.api.nvim_buf_get_lines(h.preview.bufnr, 0, -1, false)
+  end
+
+  before_each(function()
+    main = vim.api.nvim_get_current_win()
+  end)
+
+  after_each(function()
+    if h and h.results:is_valid() then
+      h.close()
+    end
+    h = nil
+    if vim.api.nvim_win_is_valid(main) then
+      vim.api.nvim_set_current_win(main)
+    end
+  end)
+
+  it("says so, instead of keeping the previous item's text under the new selection", function()
+    open()
+    assert.same({ "good content" }, preview_lines())
+
+    select_row(2)
+    local shown = preview_lines()
+    assert.equals(1, #shown)
+    assert.truthy(
+      shown[1]:find("preview failed:", 1, true),
+      "the pane says it failed: " .. shown[1]
+    )
+    assert.is_nil(shown[1]:find("good content", 1, true), "and no longer shows the other item")
+    assert.equals(1, vim.api.nvim_win_get_cursor(h.preview.winid)[1], "cursor on the notice")
+
+    select_row(1)
+    assert.same({ "good content" }, preview_lines(), "the pane recovers on an item that renders")
+  end)
+
+  it("a preview that stays read-only when its render raises", function()
+    open()
+    select_row(2)
+    assert.is_false(vim.bo[h.preview.bufnr].modifiable, "the render raised in set_lines")
+  end)
+
+  it(
+    "Surface:set_lines puts `modifiable` back when the API refuses a line, and still raises",
+    function()
+      open()
+      local ok, err = pcall(h.preview.set_lines, h.preview, { "a\nb" })
+      assert.is_false(ok, "the caller still sees the error")
+      assert.truthy(
+        tostring(err):find("newline", 1, true),
+        "and it is the API's own: " .. tostring(err)
+      )
+      assert.is_false(vim.bo[h.preview.bufnr].modifiable, "a read-only pane stays read-only")
+    end
+  )
 end)
