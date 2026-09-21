@@ -88,6 +88,38 @@ describe("ui.tabline.reopen", function()
       pcall(vim.api.nvim_buf_delete, b, { force = true })
     end)
 
+    it(
+      "records the slot from the tab that actually listed the buffer, not whichever tab is active when it closes",
+      function()
+        local a = open(write_file("owner-a.txt"))
+        local b = open(write_file("owner-b.txt"))
+        local c = open(write_file("owner-c.txt"))
+        vim.t.bufs = { a, b, c } -- b is at slot 2 in THIS tab
+
+        vim.cmd("tabnew") -- a second tab, now active -- b is not listed here
+        local d = open(write_file("owner-d.txt"))
+        vim.t.bufs = { d }
+
+        -- b belongs to the first tab, not this one -- BufDelete still fires
+        -- globally regardless of which tab is active when it does.
+        pcall(vim.api.nvim_buf_delete, b, { force = true })
+
+        local entry
+        for _, e in ipairs(reopen.list()) do
+          if e.path:find("owner%-b%.txt$") then
+            entry = e
+          end
+        end
+        assert.is_table(entry, "owner-b.txt was not recorded")
+        assert.equals(2, entry.slot)
+
+        pcall(vim.api.nvim_buf_delete, d, { force = true })
+        pcall(vim.cmd, "tabclose") -- back to the first tab
+        pcall(vim.api.nvim_buf_delete, a, { force = true })
+        pcall(vim.api.nvim_buf_delete, c, { force = true })
+      end
+    )
+
     it("keeps only the newest entry for the same path", function()
       local path = write_file("dup.txt")
       local buf1 = open(path)

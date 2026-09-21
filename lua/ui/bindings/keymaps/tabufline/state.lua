@@ -82,6 +82,19 @@ function M.is_pinned(bufnr)
   return vim.tbl_contains(vim.t.ui_pinned or {}, bufnr)
 end
 
+--- The current tab's pinned bufnrs, one `vim.t.ui_pinned` read. For a caller
+--- that needs to check MANY buffers against the pin set in one pass (the
+--- tabline's own per-chip render loop, the tab menu's close-set filters) --
+--- `vim.t`/`vim.g`/`vim.b` round-trip through a VimL value on every access,
+--- so calling `is_pinned()` once per buffer in a loop re-reads and
+--- re-converts the whole tab-local table each time. Read this ONCE outside
+--- the loop instead and check membership locally (`vim.tbl_contains(list,
+--- b)`, or build a lookup table for a larger n).
+---@return integer[]
+function M.pinned_bufs()
+  return vim.t.ui_pinned or {}
+end
+
 --- Pin or unpin `bufnr` in the current tab, then re-place it to keep the
 --- invariant `move_buf_to`/`move_buf` (below) both uphold: pinned buffers
 --- always sit before unpinned ones in `vim.t.bufs`. Pinning moves `bufnr` to

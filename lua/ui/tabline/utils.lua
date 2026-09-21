@@ -534,8 +534,9 @@ end
 ---@param bufnr integer
 ---@param index integer # this buffer's 1-based position in `vim.t.bufs`
 ---@param width integer # target chip width in columns; `bufwidth` in the tabline config
+---@param is_pinned? boolean # precomputed pin state; queried via `state.is_pinned(bufnr)` when omitted -- `ui.tabline.modules.buffers()` already knows this per chip (it just split pinned from unpinned) and passes it straight in, so this hot per-chip, per-redraw path does not pay for a second `vim.t.ui_pinned` read on top of that split's own one
 ---@return string
-function M.style_buf(bufnr, index, width)
+function M.style_buf(bufnr, index, width, is_pinned)
   M.register_click_handlers()
 
   local is_current = api.nvim_get_current_buf() == bufnr
@@ -569,7 +570,9 @@ function M.style_buf(bufnr, index, width)
   -- and the plain "x" both refuse to close a pinned chip anyway (see
   -- `guard_pinned_close`), so offering "x" here would be a dead end.
   local modified = api.nvim_get_option_value("modified", { buf = bufnr })
-  local is_pinned = require("ui.bindings.keymaps.tabufline.state").is_pinned(bufnr)
+  if is_pinned == nil then
+    is_pinned = require("ui.bindings.keymaps.tabufline.state").is_pinned(bufnr)
+  end
   local shape, close_or_dot
   if is_pinned then
     shape = "pinned"

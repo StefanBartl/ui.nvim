@@ -228,21 +228,22 @@ function M.items(bufnr)
   -- unfiltered "Close" entry, pinned or not, since clicking that on a
   -- pinned tab's own menu is exactly the deliberate action `guard_pinned_close`
   -- (ui.tabline.utils) lets through.
+  --
+  -- `pinned_list` read once, not `state.is_pinned(b)` per buffer per filter
+  -- below (up to 4 separate `vim.t.ui_pinned` reads for the same buffer
+  -- otherwise -- `others`, whichever of `left`/`right` it falls in, and
+  -- `saved`).
+  local pinned_list = state.pinned_bufs()
+  local function unpinned(b)
+    return not vim.tbl_contains(pinned_list, b)
+  end
   local others = vim.tbl_filter(function(b)
-    return b ~= bufnr and not state.is_pinned(b)
+    return b ~= bufnr and unpinned(b)
   end, bufs)
-  local left = idx
-      and vim.tbl_filter(function(b)
-        return not state.is_pinned(b)
-      end, slice(1, idx - 1))
-    or {}
-  local right = idx
-      and vim.tbl_filter(function(b)
-        return not state.is_pinned(b)
-      end, slice(idx + 1, total))
-    or {}
+  local left = idx and vim.tbl_filter(unpinned, slice(1, idx - 1)) or {}
+  local right = idx and vim.tbl_filter(unpinned, slice(idx + 1, total)) or {}
   local saved = vim.tbl_filter(function(b)
-    return not vim.bo[b].modified and not state.is_pinned(b)
+    return not vim.bo[b].modified and unpinned(b)
   end, bufs)
 
   contextmenu.group(
