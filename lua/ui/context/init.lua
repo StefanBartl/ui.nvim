@@ -30,6 +30,15 @@
 --- skipped before any of that runs. A window whose cursor sits on the rows
 --- the overlay would cover shows none, so the cursor line is never hidden.
 ---
+--- Markdown headings are drawn as headings rather than as raw source: each
+--- line takes its level's `@markup.heading.N.markdown` colours (the same
+--- groups the buffer's own headings use, so a colorscheme's per-level palette
+--- carries over), a full-width band in that level's background, and the
+--- leading `#` marker is overlaid with a level icon. The icon is exactly as
+--- wide as the marker it covers, so the text keeps its source columns and
+--- deeper levels indent by their level -- the hierarchy reads at a glance.
+--- `cfg.headings` is the knob.
+---
 --- Off by default; `ui.setup({ context = true })` or `:UI context on`.
 
 local M = {}
@@ -47,6 +56,15 @@ local AUGROUP = "UiContext"
 ---@field exclude_node_types? string[]
 ---@field exclude_filetypes? string[]
 ---@field zindex? integer
+---@field headings? boolean|Ui.Context.HeadingOpts
+
+---@class Ui.Context.HeadingOpts
+---@field enable? boolean
+---@field icons? string[]|false  # one glyph per level 1..6, each drawn over the `#` marker; false = keep the `#`s
+
+---@class Ui.Context.Headings
+---@field enable boolean
+---@field icons string[]|false
 
 ---@class Ui.Context.Config
 ---@field max_lines integer            # rows the overlay may take; 0 = unlimited
@@ -58,6 +76,7 @@ local AUGROUP = "UiContext"
 ---@field exclude_node_types string[]  # Lua patterns; a matching type is never a scope, checked first
 ---@field exclude_filetypes string[]
 ---@field zindex integer
+---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
 local cfg = {
   max_lines = 3,
   trim = "outer",
@@ -111,6 +130,18 @@ local cfg = {
     "mason",
   },
   zindex = 20,
+  headings = {
+    enable = true,
+    -- nf-md-numeric_N_box_outline, N = 1..6. `nr2char`, not a literal: an
+    -- editor pass has dropped private-use glyphs from source files before.
+    icons = (function()
+      local out = {}
+      for level = 1, 6 do
+        out[level] = vim.fn.nr2char(0xF0CA1 + (level - 1) * 2)
+      end
+      return out
+    end)(),
+  },
 }
 
 ---@type boolean
@@ -131,11 +162,24 @@ local refresher = nil
 --- they are set once.
 ---@return table<string, table>
 local function groups_spec()
-  return {
+  local spec = {
     UiContext = { link = "NormalFloat", default = true },
     UiContextLineNr = { link = "LineNr", default = true },
     UiContextBottom = { underline = true, sp = "#555555", default = true },
   }
+  -- One text group and one row band per heading level. The text group links
+  -- to the colorscheme's own heading group, so the palette carries over; the
+  -- band is that group's background alone, drawn across the whole row (a
+  -- colorscheme that gives headings no background gets no band).
+  for level = 1, 6 do
+    local src = "@markup.heading." .. level .. ".markdown"
+    spec["UiContextH" .. level] = { link = src, default = true }
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = src, link = false })
+    if ok and hl and hl.bg then
+      spec["UiContextH" .. level .. "Row"] = { bg = hl.bg, default = true }
+    end
+  end
+  return spec
 end
 
 ---@type Lib.UI.HL.PersistHandle|nil
@@ -321,6 +365,56 @@ local function gutter(win, row, textoff)
 end
 
 ---@internal
+---Heading level of a Markdown context line, or nil when it is not an ATX
+---heading (a Setext one has no marker to overlay) or headings are off.
+---@param buf integer
+---@param text string
+---@return integer|nil level
+local function heading_level(buf, text)
+  if not cfg.headings.enable or vim.bo[buf].filetype ~= "markdown" then
+    return nil
+  end
+  local marker = text:match("^(#+)%s")
+  if marker and #marker <= 6 then
+    return #marker
+  end
+  return nil
+end
+
+---@internal
+---Style one heading row: level colours on the text, a full-width band, and the
+---level icon over the `#` marker.
+---@param cbuf integer
+---@param row integer   0-based row in the overlay buffer
+---@param level integer
+---@param from integer  byte column where the source text starts (after the gutter)
+---@param line_len integer
+local function style_heading(cbuf, row, level, from, line_len)
+  local group = "UiContextH" .. level
+  pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, from, {
+    end_col = line_len,
+    hl_group = group,
+    priority = 300,
+  })
+  -- Below the bottom rule's priority (50), so the two combine instead of the
+  -- band replacing the underline on the last row.
+  pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, 0, {
+    line_hl_group = group .. "Row",
+    priority = 40,
+  })
+  local icons = cfg.headings.icons
+  if icons and icons[level] then
+    -- Exactly `level` cells, the width of the marker it covers: the icon and
+    -- padding, so the text keeps its source columns.
+    pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, from, {
+      virt_text = { { icons[level] .. string.rep(" ", level - 1), group } },
+      virt_text_pos = "overlay",
+      priority = 310,
+    })
+  end
+end
+
+---@internal
 ---Draw (or redraw) the overlay of `win` for `entries`.
 ---@param win integer
 ---@param buf integer
@@ -353,10 +447,11 @@ local function draw(win, buf, entries)
   local info = vim.fn.getwininfo(win)[1]
   local textoff = info and info.textoff or 0
 
-  local lines, gutters = {}, {}
+  local lines, gutters, levels = {}, {}, {}
   for i, e in ipairs(entries) do
     local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
     text = text:gsub("%s+$", "")
+    levels[i] = heading_level(buf, text)
     local g = gutter(win, e.row, textoff)
     gutters[i] = #g
     local full = g .. text
@@ -391,6 +486,11 @@ local function draw(win, buf, entries)
         hl_group = "UiContextLineNr",
         priority = 200,
       })
+    end
+  end
+  for i = 1, #lines do
+    if levels[i] then
+      style_heading(cbuf, i - 1, levels[i], gutters[i], #lines[i])
     end
   end
   pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, #lines - 1, 0, {
@@ -562,6 +662,19 @@ function M.setup(opts)
       cfg[k] = opts[k]
     end
   end
+  if opts.headings ~= nil then
+    local h = opts.headings
+    if type(h) == "boolean" then
+      cfg.headings.enable = h
+    elseif type(h) == "table" then
+      if h.enable ~= nil then
+        cfg.headings.enable = h.enable
+      end
+      if h.icons ~= nil then
+        cfg.headings.icons = h.icons
+      end
+    end
+  end
   for _, k in ipairs({ "node_types", "exclude_node_types", "exclude_filetypes" }) do
     if type(opts[k]) == "table" then
       cfg[k] = vim.deepcopy(opts[k])
@@ -569,6 +682,9 @@ function M.setup(opts)
   end
   if enabled then
     build_refresher()
+    -- A drawn overlay is cached by what it shows, not by how it is styled: a
+    -- changed option (headings, say) would otherwise wait for the next scroll.
+    M.close_all()
     M.refresh_all()
   end
 end

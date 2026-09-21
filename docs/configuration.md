@@ -43,8 +43,19 @@ draws over the buffer's first rows and a host asking for the keymaps and the
 command should not get that as a side effect. Pass `true` for the shipped
 tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
-exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20 }`) to
-override them; `:UI context` toggles it for the session either way.
+exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
+headings = { enable = true, icons = {...} } }`) to override them; `:UI context`
+toggles it for the session either way.
+
+In a Markdown buffer the pinned heading lines are drawn as headings, not as
+raw source: each takes its level's `@markup.heading.N.markdown` colours (through
+`UiContextH1`..`UiContextH6`, so a colorscheme's per-level palette carries over),
+a full-width band in that level's background (`UiContextH1Row`..`UiContextH6Row`),
+and a level icon over the `#` marker. The icon is as wide as the marker it covers,
+so the text keeps its source columns and deeper levels indent by their level.
+`headings = false` (or `{ enable = false }`) draws the raw lines as before;
+`headings = { icons = false }` keeps the `#`s and only colours the line;
+`headings = { icons = { "1", "2", "3", "4", "5", "6" } }` sets one glyph per level.
 
 `notify` is explicit-only for the same reason: it replaces `vim.notify`, and
 a host that routes notifications through noice or snacks should not lose
