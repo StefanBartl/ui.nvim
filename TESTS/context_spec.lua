@@ -66,6 +66,11 @@ end
 
 local has_lua_parser = pcall(vim.treesitter.language.add, "lua")
 
+-- The shipped icons, captured before any test can switch them off.
+local DEFAULT_ICONS = vim.deepcopy(context.config().headings.icons)
+local DEFAULT_NODE_TYPES = vim.deepcopy(context.config().node_types)
+local DEFAULT_EXCLUDES = vim.deepcopy(context.config().exclude_node_types)
+
 describe("ui.context", function()
   after_each(function()
     context.disable()
@@ -74,7 +79,9 @@ describe("ui.context", function()
       trim = "outer",
       min_window_height = 6,
       line_numbers = true,
-      headings = { enable = true, max_level = 6 },
+      headings = { enable = true, max_level = 6, icons = DEFAULT_ICONS },
+      node_types = DEFAULT_NODE_TYPES,
+      exclude_node_types = DEFAULT_EXCLUDES,
     })
     vim.cmd("silent! %bwipeout!")
   end)
@@ -269,12 +276,13 @@ describe("ui.context", function()
       "text eight",
     }
 
+    ---@param lines string[]|nil  default: DOC
     ---@return integer win, integer buf
-    local function open_doc()
+    local function open_doc(lines)
       vim.cmd("new")
       local win = vim.api.nvim_get_current_win()
       local buf = vim.api.nvim_get_current_buf()
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, DOC)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or DOC)
       vim.bo[buf].filetype = "markdown"
       vim.bo[buf].buftype = ""
       vim.api.nvim_win_set_height(win, 8)
@@ -380,6 +388,74 @@ describe("ui.context", function()
         assert.is_falsy(d.hl_group and d.hl_group:find("^UiContextH%d"))
         assert.is_falsy(d.virt_text)
       end
+    end)
+
+    ---@param head string[]  the headings, then enough body to scroll them off
+    ---@return string[]
+    local function with_body(head)
+      local lines = vim.list_extend({}, head)
+      for i = 1, 12 do
+        lines[#lines + 1] = "body " .. i
+      end
+      return lines
+    end
+
+    it("draws an indented ATX heading as a heading, the icon on its `#`", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      -- CommonMark: up to three spaces before the `#`s still make a heading.
+      local win = open_doc(with_body({ "# One", "", "   ## Two", "" }))
+      context.setup({ max_lines = 10 })
+      context.enable()
+      scroll_to(win, 8)
+      context.refresh(win)
+
+      local lines = overlay_lines(win)
+      assert.equals(2, #lines)
+      local marks = overlay_marks(win)
+      assert.is_true(has(marks, 1, "hl_group", "UiContextH2"), "level-2 text group")
+      assert.is_true(has(marks, 1, "line_hl_group", "UiContextH2Row"), "row band")
+
+      local icon = on_row(marks, 1, "virt_text")[1]
+      assert.is_truthy(icon, "an icon on the indented heading")
+      assert.equals(2, vim.fn.strdisplaywidth(icon.virt_text[1][1]))
+      -- The overlay starts on the first `#`, not on the indent before it: a
+      -- shifted icon would cover blanks and leave a `#` showing.
+      local marks_on_row = vim.api.nvim_buf_get_extmarks(
+        select(2, context.float(win)),
+        vim.api.nvim_get_namespaces().ui_context,
+        { 1, 0 },
+        { 1, -1 },
+        { details = true }
+      )
+      local icon_col
+      for _, m in ipairs(marks_on_row) do
+        if m[4].virt_text then
+          icon_col = m[3]
+        end
+      end
+      assert.equals((lines[2]:find("#", 1, true)) - 1, icon_col)
+    end)
+
+    it("draws an empty ATX heading (`##` alone) as a heading", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      local win = open_doc(with_body({ "# One", "", "##", "" }))
+      context.setup({ max_lines = 10 })
+      context.enable()
+      scroll_to(win, 8)
+      context.refresh(win)
+
+      local lines = overlay_lines(win)
+      assert.equals(2, #lines)
+      assert.truthy(lines[2]:find("##", 1, true))
+      local marks = overlay_marks(win)
+      assert.is_true(has(marks, 1, "hl_group", "UiContextH2"))
+      assert.equals(1, #on_row(marks, 1, "virt_text"))
     end)
 
     it("does not treat a hash line in a non-markdown buffer as a heading", function()
@@ -650,6 +726,211 @@ describe("ui.context", function()
         )
         assert.same({}, vim.fn.getcompletion("UI sticky on ", "cmdline"))
       end)
+    end)
+  end)
+
+  describe("which node types are scopes", function()
+    -- Node names as the grammars spell them (checked against real parsers for
+    -- Rust and Python, against nvim-treesitter's queries for the others), so
+    -- this part needs no parser and runs everywhere.
+    local PINNED = {
+      lua = {
+        "function_declaration",
+        "if_statement",
+        "elseif_statement",
+        "for_statement",
+        "while_statement",
+        "repeat_statement",
+        "do_statement",
+      },
+      c = { "function_definition", "struct_specifier", "switch_statement", "case_statement" },
+      markdown = { "section" },
+      rust = {
+        "function_item",
+        "impl_item",
+        "trait_item",
+        "struct_item",
+        "enum_item",
+        "mod_item",
+        "if_expression",
+        "for_expression",
+        "while_expression",
+        "loop_expression",
+        "match_expression",
+        "match_arm",
+        "else_clause",
+      },
+      python = {
+        "function_definition",
+        "class_definition",
+        "if_statement",
+        "elif_clause",
+        "else_clause",
+        "for_statement",
+        "while_statement",
+        "with_statement",
+        "try_statement",
+        "except_clause",
+        "finally_clause",
+        "match_statement",
+        "case_clause",
+      },
+      go = {
+        "function_declaration",
+        "method_declaration",
+        "func_literal",
+        "if_statement",
+        "for_statement",
+        "expression_switch_statement",
+        "expression_case",
+        "type_case",
+        "default_case",
+        "type_declaration",
+      },
+      java = {
+        "class_declaration",
+        "method_declaration",
+        "enhanced_for_statement",
+        "switch_expression",
+        "try_statement",
+        "catch_clause",
+        "finally_clause",
+        "record_declaration",
+      },
+      javascript = { "function_expression", "arrow_function", "method_definition", "switch_case" },
+      typescript = { "internal_module", "interface_declaration", "enum_declaration" },
+      kotlin = { "if_expression", "when_expression", "do_while_statement", "function_declaration" },
+      bash = { "function_definition", "elif_clause", "c_style_for_statement", "case_item" },
+    }
+    -- What must stay out: an expression or a call is not a place you are in.
+    local NOT_PINNED = {
+      rust = { "call_expression", "closure_expression", "struct_expression", "try_expression" },
+      go = { "call_expression", "composite_literal" },
+      java = { "method_invocation", "lambda_expression" },
+      javascript = { "call_expression" },
+      c_sharp = { "invocation_expression", "lambda_expression" },
+      kotlin = { "call_expression", "constructor_invocation" },
+      json = { "object", "array", "pair" },
+      markdown = { "atx_heading", "fenced_code_block", "list_item" },
+    }
+
+    for lang, types in pairs(PINNED) do
+      it(lang .. ": pins " .. table.concat(types, ", "), function()
+        for _, typ in ipairs(types) do
+          assert.is_true(context.is_scope_type(typ), typ .. " should be a scope")
+        end
+      end)
+    end
+
+    for lang, types in pairs(NOT_PINNED) do
+      it(lang .. ": leaves " .. table.concat(types, ", ") .. " out", function()
+        for _, typ in ipairs(types) do
+          assert.is_false(context.is_scope_type(typ), typ .. " should not be a scope")
+        end
+      end)
+    end
+
+    it("an exactly named node_types entry is not vetoed by the excludes", function()
+      -- `_expression$` excludes this, and would keep `foo_expression` out...
+      context.setup({ node_types = { "foo_expression" }, exclude_node_types = { "_expression$" } })
+      assert.is_false(context.is_scope_type("foo_expression"))
+      -- ...unless the entry spells the whole name.
+      context.setup({ node_types = { "^foo_expression$" } })
+      assert.is_true(context.is_scope_type("foo_expression"))
+      -- The exception is that one name, not its family.
+      assert.is_false(context.is_scope_type("bar_expression"))
+      assert.is_false(context.is_scope_type("foo_expression_list"))
+    end)
+
+    it("a plain `^prefix` or `suffix$` entry is a family, so the excludes still apply", function()
+      context.setup({ node_types = { "^if", "if$" }, exclude_node_types = { "_expression$" } })
+      assert.is_true(context.is_scope_type("if_statement"))
+      assert.is_false(context.is_scope_type("if_expression"), "`^if` is not an exact name")
+      assert.is_true(context.is_scope_type("elif"), "`if$` is not an exact name either")
+    end)
+
+    ---@param lang string
+    ---@return boolean
+    local function has_real_parser(lang)
+      return #vim.api.nvim_get_runtime_file("parser/" .. lang .. ".*", false) > 0
+        and pcall(vim.treesitter.language.add, lang)
+    end
+
+    ---@param lang string
+    ---@param lines string[]
+    ---@return integer buf
+    local function scratch(lang, lines)
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      vim.bo[buf].filetype = lang
+      return buf
+    end
+
+    ---@param buf integer
+    ---@param top integer  0-based top row
+    ---@return integer[] rows
+    local function context_rows(buf, top)
+      return vim.tbl_map(function(e)
+        return e.row
+      end, context.contexts(buf, top))
+    end
+
+    it("rust: a real buffer pins mod/if/for/while/loop/match, not the `?` or a call", function()
+      if not has_real_parser("rust") then
+        pending("no Rust parser available")
+        return
+      end
+      local buf = scratch("rust", {
+        "mod outer {",
+        "    pub fn run(items: Vec<i32>) -> i32 {",
+        "        let mut total = 0;",
+        "        if items.len() > 2 {",
+        "            for x in items.iter() {",
+        "                while total < 100 {",
+        "                    loop {",
+        "                        match x {",
+        "                            1 => {",
+        "                                total += helper(x)?;",
+        "                            }",
+        "                            _ => break,",
+        "                        }",
+        "                    }",
+        "                }",
+        "            }",
+        "        }",
+        "        total",
+        "    }",
+        "}",
+      })
+      -- mod, fn, if, for, while, loop, match, and the arm holding the top line.
+      assert.same({ 0, 1, 3, 4, 5, 6, 7, 8 }, context_rows(buf, 9))
+    end)
+
+    it("python: a real buffer pins the elif and except branch the top line is in", function()
+      if not has_real_parser("python") then
+        pending("no Python parser available")
+        return
+      end
+      local buf = scratch("python", {
+        "class Outer:",
+        "    def run(self, items):",
+        "        if items:",
+        "            pass",
+        "        elif self:",
+        "            pass",
+        "            pass",
+        "        try:",
+        "            pass",
+        "        except ValueError:",
+        "            pass",
+        "            pass",
+        "        finally:",
+        "            pass",
+        "            pass",
+      })
+      assert.same({ 0, 1, 2, 4 }, context_rows(buf, 6), "class, def, the if, and the elif")
+      assert.same({ 0, 1, 7, 9 }, context_rows(buf, 11), "class, def, the try, and the except")
+      assert.same({ 0, 1, 7, 12 }, context_rows(buf, 14), "class, def, the try, and the finally")
     end)
   end)
 

@@ -67,7 +67,44 @@ two values for the session.
 
 Outside Markdown the context comes from Tree-sitter, so a filetype without a
 parser (plain text) pins nothing. Which nodes count as a scope is `node_types`
-/ `exclude_node_types`, one Lua-pattern list for every grammar.
+/ `exclude_node_types`, one Lua-pattern list for every grammar. A node is a scope
+when its type matches a `node_types` entry and no `exclude_node_types` entry
+(the excludes are broad on purpose: `_expression$` keeps calls, struct literals
+and Rust's `x?` out). One exception makes it possible to take a single member of
+an excluded family back: a `node_types` entry anchored at both ends (`^name$`)
+names exactly that type, and the excludes cannot veto it. That is how Rust's
+`if_expression`, `for_expression`, `while_expression`, `loop_expression` and
+`match_expression` are pinned although `_expression$` is excluded. A plain
+`^prefix` or `suffix$` entry is a family and is still subject to the excludes.
+
+What the shipped lists pin per language (`:lua =vim.treesitter.get_node():type()`
+shows the type under the cursor; `require("ui.context").is_scope_type(type)`
+answers for one name):
+
+| Language | Pinned | Left out on purpose | Checked against |
+|---|---|---|---|
+| Lua | `function_declaration`/`function_definition`, `if`/`elseif`/`else`, `for`, `while`, `repeat`, `do` | | parser (spec) |
+| Markdown | `section`, i.e. the heading chain (see above) | fenced code, lists, quotes | parser (spec) |
+| Rust | `function_item`, `impl_item`, `trait_item`, `struct_item`, `enum_item`, `mod_item`, `if`/`for`/`while`/`loop`/`match` expressions, `match_arm`, `else_clause` | calls, closures, struct literals, `x?` (`try_expression`) | parser (spec) |
+| Python | `function_definition`, `class_definition`, `if`/`elif`/`else`, `for`, `while`, `with`, `try`/`except`/`finally`, `match`/`case` | decorators, comprehensions, lambdas | parser (spec) |
+| Go | `function_declaration`, `method_declaration`, `func_literal`, `if`, `for`, `switch`/`select` and their `case`s, `type_declaration` | calls, composite literals | queries |
+| Java | `class`/`interface`/`enum`/`record`, `method_declaration`, `constructor_declaration`, `if`, `for`/enhanced `for`, `while`, `do`, `switch`, `try`/`catch`/`finally` | `method_invocation`, lambdas | queries |
+| C# | `class`/`struct`/`interface`/`enum`/`record`, `namespace`, `method`, constructor, `if`, `for`/`foreach`, `while`, `switch`, `try`/`catch`/`finally` | invocations, lambdas, properties | queries |
+| JavaScript, TypeScript | `function`/`method`/`class` declarations, `arrow_function`, `function_expression`, `if`, `for`, `while`, `switch`/`case`, `try`/`catch`/`finally`; TypeScript also `interface`, `enum`, `namespace` | `call_expression` | queries |
+| Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` | queries |
+| Bash, Zsh | `function_definition`, `if`, `elif` (Bash; Zsh's queries do not name it), `else`, `for`, `c_style_for_statement`, `while`, `case` | subshells, `{ ...; }` groups | queries |
+| C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case` | | queries |
+| JSON, YAML, TOML | nothing: none of their node types is a scope | | queries |
+
+"Parser (spec)" means a real buffer is parsed in `TESTS/context_spec.lua`
+(skipped, not failed, where the parser is not installed); "queries" means the
+node names were taken from nvim-treesitter's `queries/<lang>/*.scm` and the
+match is asserted by name without a parser. A callback such as
+`describe("x", function () ... end)` is pinned by the function node
+(`function_expression`, `arrow_function`, `func_literal`), and so shows the
+`describe(` line; the call node itself is never pinned. For a language not in
+the table, `node_types` is the knob: add the grammar's node names, exactly
+(`"^block_mapping_pair$"`) when the type would otherwise fall under an exclude.
 
 In a Markdown buffer the pinned heading lines are drawn as headings, not as
 raw source: each takes its level's `@markup.heading.N.markdown` colours (through
@@ -75,6 +112,9 @@ raw source: each takes its level's `@markup.heading.N.markdown` colours (through
 a full-width band in that level's background (`UiContextH1Row`..`UiContextH6Row`),
 and a level icon over the `#` marker. The icon is as wide as the marker it covers,
 so the text keeps its source columns and deeper levels indent by their level.
+A heading is an ATX one as CommonMark has it -- up to three spaces of indent, and
+an empty `##` counts -- and the level cap and the drawing read it the same way,
+so an indented heading is both capped and drawn, with the icon on its `#`.
 `headings = false` (or `{ enable = false }`) draws the raw lines as before;
 `headings = { icons = false }` keeps the `#`s and only colours the line;
 `headings = { icons = { "1", "2", "3", "4", "5", "6" } }` sets one glyph per level.
