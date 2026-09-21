@@ -188,6 +188,122 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       vim.wo.winfixbuf = false
       b = nil -- close_buffer already ran on it
     end)
+
+    -- A tabline "x" or context-menu "Close" on a chip that is NOT the current
+    -- buffer used to hop the current window to that chip's neighbour before
+    -- deleting it, yanking the user off what they were editing.
+    it("leaves the current window alone when closing a background buffer", function()
+      vim.api.nvim_set_current_buf(c)
+      state.close_buffer(a)
+      assert.equals(c, vim.api.nvim_get_current_buf())
+      a = nil
+    end)
+
+    it("leaves the current window alone when closing a background terminal", function()
+      vim.api.nvim_set_current_buf(c)
+      local term = vim.api.nvim_create_buf(true, false)
+      -- `--version` exits at once, but the buffer stays `buftype=terminal`,
+      -- and needs no particular shell to exist on the machine running this.
+      vim.api.nvim_buf_call(term, function()
+        vim.fn.jobstart({ vim.v.progpath, "--version" }, { term = true })
+      end)
+      vim.t.bufs = { a, b, c, term }
+
+      state.close_buffer(term)
+
+      assert.equals(c, vim.api.nvim_get_current_buf())
+      assert.is_false(vim.tbl_contains(vim.t.bufs, term))
+      pcall(vim.api.nvim_buf_delete, term, { force = true })
+    end)
+  end)
+
+  describe("move_buf_to", function()
+    it("moves a buffer to an absolute slot, shifting the ones in between", function()
+      assert.is_true(state.move_buf_to(c, 1))
+      assert.same({ c, a, b }, vim.t.bufs)
+      assert.is_true(state.move_buf_to(c, 2))
+      assert.same({ a, c, b }, vim.t.bufs)
+    end)
+
+    it("does not need the buffer to be the current one", function()
+      vim.api.nvim_set_current_buf(a)
+      state.move_buf_to(b, 3)
+      assert.same({ a, c, b }, vim.t.bufs)
+      assert.equals(a, vim.api.nvim_get_current_buf())
+    end)
+
+    it("clamps a slot past either end instead of corrupting the list", function()
+      state.move_buf_to(a, 99)
+      assert.same({ b, c, a }, vim.t.bufs)
+      state.move_buf_to(a, -4)
+      assert.same({ a, b, c }, vim.t.bufs)
+    end)
+
+    it("reports false and changes nothing when there is nothing to do", function()
+      assert.is_false(state.move_buf_to(b, 2)) -- already there
+      assert.is_false(state.move_buf_to(999999, 1)) -- not in the list
+      ---@diagnostic disable-next-line: param-type-mismatch
+      assert.is_false(state.move_buf_to(b, "1")) -- not a number
+      assert.is_false(state.move_buf_to(b, 0 / 0)) -- NaN
+      assert.same({ a, b, c }, vim.t.bufs)
+    end)
+
+    it("does nothing when vim.t.bufs is unset, without throwing", function()
+      vim.t.bufs = nil
+      assert.has_no.errors(function()
+        assert.is_false(state.move_buf_to(a, 2))
+      end)
+    end)
+  end)
+
+  describe("index_of", function()
+    it("is the buffer's 1-based slot in vim.t.bufs, or nil", function()
+      assert.equals(1, state.index_of(a))
+      assert.equals(3, state.index_of(c))
+      assert.is_nil(state.index_of(999999))
+    end)
+  end)
+
+  describe("close_bufs", function()
+    it("closes exactly the buffers it is given", function()
+      assert.is_true(state.close_bufs({ a, c }))
+      assert.same({ b }, vim.t.bufs)
+      a, c = nil, nil
+    end)
+
+    it("asks once for the whole batch when several have unsaved changes", function()
+      vim.bo[a].modified = true
+      vim.bo[b].modified = true
+
+      local asked = 0
+      local original = vim.fn.confirm
+      vim.fn.confirm = function()
+        asked = asked + 1
+        return 1
+      end
+      local ok = state.close_bufs({ a, b })
+      vim.fn.confirm = original
+
+      assert.is_true(ok)
+      assert.equals(1, asked)
+      assert.same({ c }, vim.t.bufs)
+      a, b = nil, nil
+    end)
+
+    it("closes nothing when the discard prompt is declined", function()
+      vim.bo[a].modified = true
+
+      local original = vim.fn.confirm
+      vim.fn.confirm = function()
+        return 2
+      end
+      local ok = state.close_bufs({ a, b })
+      vim.fn.confirm = original
+
+      assert.is_false(ok)
+      assert.same({ a, b, c }, vim.t.bufs)
+      vim.bo[a].modified = false
+    end)
   end)
 
   describe("goto_buf", function()

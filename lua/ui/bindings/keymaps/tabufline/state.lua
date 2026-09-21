@@ -202,10 +202,26 @@ M.__needs_close_confirm = needs_close_confirm
 function M.close_buffer(bufnr, skip_confirm)
   bufnr = bufnr or api.nvim_get_current_buf()
 
+  -- Whether `bufnr` is what the current window shows. Only then does closing
+  -- it have to pick a new buffer for that window; closing a background
+  -- buffer (a tabline "x" or context-menu "Close" on a chip that is not the
+  -- current one) must leave the window, and so the user's place, alone --
+  -- this used to hop to `bufnr`'s neighbour first regardless, which yanked
+  -- the current window off what the user was editing.
+  local is_current = api.nvim_get_current_buf() == bufnr
+
   if vim.bo[bufnr].buftype == "terminal" then
-    hop_off_fixedbuf()
-    vim.cmd(vim.bo[bufnr].buflisted and "set nobl | enew" or "hide")
-    vim.cmd("redrawtabline")
+    if is_current then
+      hop_off_fixedbuf()
+      vim.cmd(vim.bo[bufnr].buflisted and "set nobl | enew" or "hide")
+      vim.cmd("redrawtabline")
+    else
+      -- `set nobl | enew` would replace what the current window shows, and
+      -- that is not this terminal. Unlist it and drop its chip instead --
+      -- the job keeps running, same as the current-buffer branch above.
+      vim.bo[bufnr].buflisted = false
+      M.forget_buffer(bufnr, api.nvim_get_current_tabpage())
+    end
     return
   end
 
@@ -226,27 +242,32 @@ function M.close_buffer(bufnr, skip_confirm)
     return
   end
 
-  -- Every branch below runs a command that changes what the current window
-  -- shows (`:b`, `nvim_set_current_buf`, `:enew`) -- hop off a
-  -- winfixbuf-locked window first, or the whole close aborts on E1513
-  -- before `bufnr` itself ever gets touched.
-  hop_off_fixedbuf()
+  if is_current then
+    -- Every branch below runs a command that changes what the current window
+    -- shows (`:b`, `nvim_set_current_buf`, `:enew`) -- hop off a
+    -- winfixbuf-locked window first, or the whole close aborts on E1513
+    -- before `bufnr` itself ever gets touched.
+    hop_off_fixedbuf()
 
-  if idx and vim.t.bufs and #vim.t.bufs > 1 then
-    local step = (idx == #vim.t.bufs) and -1 or 1
-    vim.cmd("b" .. vim.t.bufs[idx + step])
-  elseif not vim.bo[bufnr].buflisted then
-    local fallback = vim.t.bufs and vim.t.bufs[1]
-    if fallback then
-      local winid = vim.fn.bufwinid(fallback)
-      winid = winid ~= -1 and winid or 0
-      api.nvim_set_current_win(winid)
-      api.nvim_set_current_buf(fallback)
+    if idx and vim.t.bufs and #vim.t.bufs > 1 then
+      local step = (idx == #vim.t.bufs) and -1 or 1
+      vim.cmd("b" .. vim.t.bufs[idx + step])
+    elseif not vim.bo[bufnr].buflisted then
+      local fallback = vim.t.bufs and vim.t.bufs[1]
+      if fallback then
+        local winid = vim.fn.bufwinid(fallback)
+        winid = winid ~= -1 and winid or 0
+        api.nvim_set_current_win(winid)
+        api.nvim_set_current_buf(fallback)
+      end
+      vim.cmd("bw" .. bufnr)
+      return
+    else
+      vim.cmd("enew")
     end
+  elseif not vim.bo[bufnr].buflisted then
     vim.cmd("bw" .. bufnr)
     return
-  else
-    vim.cmd("enew")
   end
 
   if bufhidden ~= "delete" then
@@ -283,11 +304,21 @@ function M.close_all_bufs(include_cur_buf)
     end
   end
 
+  M.close_bufs(bufs)
+end
+
+--- Close every buffer in `bufnrs` (a subset of the tab's list, as the
+--- tabline context menu's "close others"/"close to the right" build) through
+--- `close_buffer()`, asking ONCE up front when any of them has unsaved
+--- changes. `close_all_bufs` above is this over the whole list.
+---@param bufnrs integer[]
+---@return boolean closed # false when the user declined the discard prompt
+function M.close_bufs(bufnrs)
   -- UI-01: confirm once for the whole batch, not once per modified buffer
   -- below -- without this, "close all" with N unsaved buffers popped N
   -- sequential `confirm bd` dialogs for a single `<leader>bq`.
   local modified = 0
-  for _, bufnr in ipairs(bufs) do
+  for _, bufnr in ipairs(bufnrs) do
     if needs_close_confirm(bufnr) then
       modified = modified + 1
     end
@@ -300,7 +331,7 @@ function M.close_all_bufs(include_cur_buf)
       2
     )
     if choice ~= 1 then
-      return
+      return false
     end
   end
 
@@ -309,9 +340,10 @@ function M.close_all_bufs(include_cur_buf)
   -- notifies on the whole batch failing. Without this, one already-invalid
   -- or otherwise failing bufnr would abort the rest of a "close all" batch,
   -- leaving everything after it in vim.t.bufs open.
-  for _, bufnr in ipairs(bufs) do
+  for _, bufnr in ipairs(bufnrs) do
     pcall(M.close_buffer, bufnr, true)
   end
+  return true
 end
 
 --- Drop `bufnr` from one tab's `vim.t.bufs`, leaving every other tab alone.
@@ -351,6 +383,47 @@ function M.forget_buffer(bufnr, tabpage)
   table.remove(bufs, idx)
   vim.t[tabpage].bufs = bufs
   vim.cmd("redrawtabline")
+end
+
+--- Place `bufnr` at slot `pos` in `vim.t.bufs`, shifting the buffers in
+--- between by one -- the absolute counterpart of `move_buf` below, which
+--- swaps the CURRENT buffer with a neighbour. This is what a drag on the
+--- tabline and the context menu's "move to position" both need: any buffer,
+--- any target slot.
+---
+--- `pos` is clamped into `1..#bufs` rather than rejected: "move to 99" in a
+--- five-tab bar reasonably means "to the end".
+---@param bufnr integer
+---@param pos integer
+---@return boolean moved # false when nothing changed (unknown buffer, bad `pos`, already there)
+function M.move_buf_to(bufnr, pos)
+  local bufs = vim.t.bufs
+  if not bufs or type(pos) ~= "number" or pos ~= pos then
+    return false
+  end
+
+  local idx = buf_index(bufnr, bufs)
+  if not idx then
+    return false
+  end
+
+  pos = math.min(math.max(math.floor(pos), 1), #bufs)
+  if pos == idx then
+    return false
+  end
+
+  table.remove(bufs, idx)
+  table.insert(bufs, pos, bufnr)
+  vim.t.bufs = bufs
+  vim.cmd("redrawtabline")
+  return true
+end
+
+--- 1-based slot of `bufnr` in the current tab's `vim.t.bufs`, or nil.
+---@param bufnr integer
+---@return integer|nil
+function M.index_of(bufnr)
+  return buf_index(bufnr)
 end
 
 --- Swap the current buffer with the neighbour `n` slots over in

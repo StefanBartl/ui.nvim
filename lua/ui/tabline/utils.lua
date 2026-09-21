@@ -39,6 +39,22 @@ M.DIVIDER = "│"
 local flashing = {}
 local FLASH_MS = 120
 
+-- How long a close waits behind its flash. Deliberately much shorter than
+-- `FLASH_MS`: the flash only has to reach the screen once before the chip
+-- disappears, and waiting out its whole 120ms made every click on an "x" feel
+-- laggy -- a click that lands should land now. The flash itself still runs its
+-- full course (the timer in `M.flash`), it just no longer holds the close up.
+local CLOSE_DELAY_MS = 25
+
+--- Read one of the tabline's mouse-behaviour toggles off the live config.
+--- `nil` in the config means "on": these are opt-outs.
+---@param name "context_menu"|"drag"|"middle_click_close"
+---@return boolean
+local function mouse_feature_enabled(name)
+  local cfg = require("ui.tabline.render").current()
+  return not (cfg and cfg[name] == false)
+end
+
 --- Briefly render `bufnr`'s chip with `UiTbBufFlash` instead of its normal
 --- On/Off group, then revert. Safe to call on any bufnr, current or not.
 ---
@@ -57,6 +73,21 @@ function M.flash(bufnr)
     flashing[bufnr] = nil
     pcall(vim.cmd.redrawtabline)
   end, FLASH_MS)
+end
+
+--- Keep `bufnr`'s chip in the flash look until the returned function is
+--- called -- how the tab context menu marks which chip it is about, the same
+--- way filetree's menu marks its node. Unlike `flash` there is no timeout; the
+--- caller owns the release.
+---@param bufnr integer
+---@return fun() release
+function M.hold(bufnr)
+  flashing[bufnr] = true
+  pcall(vim.cmd.redrawtabline)
+  return function()
+    flashing[bufnr] = nil
+    pcall(vim.cmd.redrawtabline)
+  end
 end
 
 --- Whether `bufnr` is currently mid-flash. Exposed for tests; `style_buf`
@@ -131,7 +162,28 @@ function M.close_buffer(bufnr)
     if not ok then
       notify.warn("close_buffer failed: " .. tostring(err))
     end
-  end, FLASH_MS)
+  end, CLOSE_DELAY_MS)
+end
+
+--- Close a chosen set of buffers -- the tab context menu's "close others",
+--- "close to the right" and friends. Same shape as `close_all_bufs` below
+--- (every listed buffer flashes together, one deferred close for the whole
+--- batch, one discard prompt for all the modified ones) over `bufnrs` instead
+--- of the whole tab.
+---@param bufnrs integer[]
+---@return nil
+function M.close_bufs(bufnrs)
+  for _, bufnr in ipairs(bufnrs) do
+    M.flash(bufnr)
+  end
+
+  vim.defer_fn(function()
+    -- Same pcall guard as `M.close_buffer` above, same reason.
+    local ok, err = pcall(require("ui.bindings.keymaps.tabufline.state").close_bufs, bufnrs)
+    if not ok then
+      notify.warn("close_bufs failed: " .. tostring(err))
+    end
+  end, CLOSE_DELAY_MS)
 end
 
 --- Close every buffer in the current tab -- the click target for the "close
@@ -161,7 +213,58 @@ function M.close_all_bufs(include_cur_buf)
     if not ok then
       notify.warn("close_all_bufs failed: " .. tostring(err))
     end
-  end, FLASH_MS)
+  end, CLOSE_DELAY_MS)
+end
+
+--- A left/right/middle click on a buffer chip's body, dispatched by the
+--- tabline click protocol's `button` argument ("l", "r", "m").
+---
+--- * left   -- switch to the buffer, and arm a drag so the chip can be
+---             carried along the bar (`ui.tabline.drag`)
+--- * right  -- open the tab context menu for it (`ui.tabline.menu`)
+--- * middle -- close it, the usual tab-bar convention
+---
+--- `cfg.context_menu`, `cfg.drag` and `cfg.middle_click_close` (each `false`
+--- to opt out) fall back to plain "switch to it": what any click on a chip
+--- did before these existed.
+---@param bufnr integer
+---@param button string
+---@return nil
+function M.on_chip_click(bufnr, button)
+  if button == "r" and mouse_feature_enabled("context_menu") then
+    -- Scheduled: opens a floating window and moves focus, which is not
+    -- something to do from inside the click handler Neovim is still in.
+    vim.schedule(function()
+      require("ui.tabline.menu").open(bufnr)
+    end)
+    return
+  end
+
+  if button == "m" and mouse_feature_enabled("middle_click_close") then
+    M.close_buffer(bufnr)
+    return
+  end
+
+  M.goto_buf(bufnr)
+  if button == "l" and mouse_feature_enabled("drag") then
+    require("ui.tabline.drag").begin(bufnr)
+  end
+end
+
+--- A click on a chip's close ("x") button. Left and middle close it; right
+--- opens the same tab context menu the rest of the chip does, rather than
+--- closing on a click that was reaching for a menu.
+---@param bufnr integer
+---@param button string
+---@return nil
+function M.on_close_click(bufnr, button)
+  if button == "r" and mouse_feature_enabled("context_menu") then
+    vim.schedule(function()
+      require("ui.tabline.menu").open(bufnr)
+    end)
+    return
+  end
+  M.close_buffer(bufnr)
 end
 
 local registered = false
@@ -180,12 +283,12 @@ function M.register_click_handlers()
 
   vim.cmd([[
     function! UiTbGoToBuf(bufnr, clicks, button, mod)
-      call luaeval('require("ui.tabline.utils").goto_buf(_A)', a:bufnr)
+      call luaeval('require("ui.tabline.utils").on_chip_click(_A[1], _A[2])', [a:bufnr, a:button])
     endfunction
   ]])
   vim.cmd([[
     function! UiTbKillBuf(bufnr, clicks, button, mod)
-      call luaeval('require("ui.tabline.utils").close_buffer(_A)', a:bufnr)
+      call luaeval('require("ui.tabline.utils").on_close_click(_A[1], _A[2])', [a:bufnr, a:button])
     endfunction
   ]])
   vim.cmd([[

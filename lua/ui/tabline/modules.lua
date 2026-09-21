@@ -89,21 +89,30 @@ end
 --- `ui.tabline.render.generate()` does, so a custom module in `order`
 --- affects the space `buffers()` sees too.
 ---@param cfg Ui.Tabline.Config
----@return integer
+---@return integer space
+---@return string prefix # the modules that sit left of "buffers" in `order`, rendered -- `ui.tabline.layout` needs their width
 local function available_space(cfg)
   local str = {}
+  local before = {}
+  local seen_buffers = false
   for _, key in ipairs(cfg.order or {}) do
-    if key ~= "buffers" then
+    if key == "buffers" then
+      seen_buffers = true
+    else
       local mod = (cfg.modules and cfg.modules[key]) or M[key]
       if type(mod) == "function" then
         local ok, rendered = pcall(mod, cfg)
-        str[#str + 1] = ok and rendered or ""
+        rendered = ok and rendered or ""
+        str[#str + 1] = rendered
+        if not seen_buffers then
+          before[#before + 1] = rendered
+        end
       end
     end
   end
 
   local width = api.nvim_eval_statusline(table.concat(str), { use_tabline = true }).width
-  return vim.o.columns - width
+  return vim.o.columns - width, table.concat(before)
 end
 
 --- A blank strip the width of the file-tree window, so the buffer chips
@@ -168,7 +177,7 @@ function M.buffers(cfg)
   -- inside the loop (as NvChad's own `available_space()` call site does) pays
   -- for a `nvim_eval_statusline` plus a full re-render of every other module
   -- again for every single open buffer -- on every tabline redraw.
-  local space = available_space(cfg)
+  local space, prefix = available_space(cfg)
 
   local bufwidth = cfg.bufwidth
   if is_invalid_width(bufwidth, "bufwidth") then
@@ -217,6 +226,10 @@ function M.buffers(cfg)
   end
 
   apply_boundaries(chips, chip_bufs, cur, cfg.style, flush_right)
+
+  -- After the boundary decoration, which rewrites chip strings in place --
+  -- a drag hit-tests against what is actually on screen.
+  require("ui.tabline.layout").record(prefix, chip_bufs, chips)
 
   return table.concat(chips) .. "%#UiTbFill#%="
 end

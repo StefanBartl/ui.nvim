@@ -3,7 +3,7 @@
 | Area | What it covers |
 | --- | --- |
 | Statusline | Several complete layouts, an LSP-aware breadcrumb segment, cursor-progress indicators, file icons, formatter and diagnostic state, test-runner and plugin-progress segments |
-| Tabline | Buffer and tab navigation, buffer reordering, moving a buffer to another tab |
+| Tabline | Buffer and tab navigation, buffer reordering (keys, a "move to position" prompt, dragging a chip), a right-click menu of per-tab actions, moving a buffer to another tab |
 | Theme | Palette assembly, a theme toggle, transparency, the `:UI` command that drives all of it |
 | Highlights | The groups the frame paints with, kept stable across theme switches |
 | Winbar | Owns the `vim.wo.winbar` write (`ui.winbar.set`) — a content plugin (breadcrumbs, typically) keeps producing the string and hands it over instead of writing the surface itself |

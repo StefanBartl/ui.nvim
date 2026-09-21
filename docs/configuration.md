@@ -282,6 +282,24 @@ mutates `cfg.style` directly on the table `ui.tabline.render.current()`
 already holds (the tabline config is a single instance, not reassembled
 per switch), then `:redrawtabline` makes it visible.
 
+## Tabline mouse behaviour
+
+Three opt-outs on the same tabline config, each on by default -- `false` turns
+the gesture back into a plain "switch to that buffer" click:
+
+```lua
+require("ui.config").setup({
+  tabline = {
+    context_menu = false,      -- right-click on a chip opens its tab menu
+    drag = false,              -- press-and-drag a chip along the bar to reorder it
+    middle_click_close = false, -- middle-click on a chip closes it
+  },
+})
+```
+
+What each gesture does, and what the menu holds, is in
+[BINDINGS.md](BINDINGS.md#tabline-mouse).
+
 ---
 
 ## Where the values live
