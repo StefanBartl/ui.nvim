@@ -118,8 +118,10 @@ switch, the same shape `my.nvim`'s own keymaps use.
 | `<leader>bq` | `close_all` | `n` | Close every listed buffer in the current tab -- all flash together first, then close as one batch |
 
 The flash on an uncounted close means a `:confirm`-style prompt for an
-unsaved buffer now appears ~120ms later than a direct close would. Usually
-unnoticeable; a deliberate trade-off for click-parity feedback, not a bug.
+unsaved buffer now appears ~25ms later than a direct close would. The delay
+is deliberately much shorter than the flash itself (~120ms, which still runs
+its full course): just long enough for the flash to reach the screen once, not
+long enough to make a click on an "x" feel laggy.
 
 ### Tabs
 
@@ -128,6 +130,66 @@ unnoticeable; a deliberate trade-off for click-parity feedback, not a bug.
 | `<leader>tr` | `move_right` | `n` | Move the current buffer one position right in the tabline |
 | `<leader>tl` | `move_left` | `n` | Move it one position left |
 | `<leader>tt` | `move_to_tab` | `n` | Move the current buffer into a new tab |
+
+### Tabline mouse
+
+Not keymaps -- the tabline's own click protocol reports which button hit which
+chip, so nothing here is bound and nothing needs `ui.setup({ keymaps = ... })`.
+
+| Gesture | On | Does |
+| --- | --- | --- |
+| Left click | a chip | Switch to that buffer (flashes) |
+| Left press and drag | a chip | Carry it along the bar; it re-slots live under the pointer, the drop needs no extra step |
+| Right click | a chip, or its "x" | Open that tab's context menu (below) |
+| Middle click | a chip | Close it |
+| Left click | a chip's "x" | Close it |
+
+Each of the last three has an opt-out on the tabline config --
+`context_menu`, `drag`, `middle_click_close` (see
+[configuration.md](configuration.md#tabline-mouse-behaviour)); with one off,
+that gesture just switches to the chip, as any click used to.
+
+**The tab context menu** (`ui.tabline.menu`) holds only actions on that tab,
+drawn through `ui.contextmenu` -- so nvzone/menu when it is installed, the kit
+menu otherwise -- with the chip kept lit while it is up. Entries gate
+themselves: nothing to close on the left of the first tab, `Save` only on a
+modified one.
+
+| Group | Entries |
+| --- | --- |
+| *(the file name)* | `Save` (modified only), `Close` |
+| Close | `Close others`, `Close to the left`, `Close to the right`, `Close saved` (only when saved and unsaved tabs both exist) |
+| Move | `Move to position…` (asks for a number: `3` is an absolute slot, `+2`/`-1` are relative), `Move left`, `Move right`, `Move to start`, `Move to end` |
+| Buffer | `Copy path ▸` (absolute, relative, file name), `Open in split`, `Open in vertical split`, `Move to new tab page` |
+
+Every "close" entry asks once, up front, when any of the buffers it would
+close has unsaved changes -- the same single prompt `<leader>bq` shows.
+Closing a tab that is not the current one leaves the current window where it
+is.
+
+**A host with its own global `<RightMouse>` mapping** still reaches the chip
+menu, provided that mapping replays the native click first
+(`vim.cmd.exec('"normal! \\<RightMouse>"')` -- which is what makes the chip's
+click handler fire). It then has to step aside, or two menus open on top of
+each other:
+
+```lua
+vim.keymap.set({ "n", "v" }, "<RightMouse>", function()
+  vim.cmd.exec('"normal! \\<RightMouse>"')
+  if require("ui.tabline.menu").pointer_on_tabline() then
+    return -- the chip's own menu is already on its way
+  end
+  -- ... the host's general menu ...
+end)
+```
+
+**Dragging is limited to the chips that fit.** When more buffers are open
+than the bar can show, the visible run follows the current buffer; a drag
+re-slots among the visible chips only. The mouse gesture claims `<LeftDrag>`
+and `<LeftRelease>` for exactly the length of one press-drag-release -- they
+are unmapped again on release (and after 5 s of silence, in case a release
+never arrives), and any mapping they shadowed is put back, so ordinary
+drag-select is untouched between drags.
 
 ### Theme
 

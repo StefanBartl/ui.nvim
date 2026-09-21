@@ -185,6 +185,30 @@ makes the editor feel broken.
 (own code, step 5, not `nvchad.tabufline`) -- they work with NvChad entirely
 absent.
 
+                                                          *ui-tabline-mouse*
+Tabline mouse ~
+
+The tabline's own click protocol reports the button, so these are not
+keymaps and need no `keymaps = true`:
+
+    left click     switch to the chip's buffer
+    left drag      carry the chip along the bar; it re-slots live
+    right click    that tab's context menu (also on a chip's "x")
+    middle click   close the chip
+    click on "x"   close the chip
+
+The tab menu (`ui.tabline.menu`) holds only actions on that tab: Save
+(modified only), Close, Close others / to the left / to the right / saved,
+Move to position... (`3` absolute, `+2`/`-1` relative), Move left / right /
+to start / to end, Copy path, Open in split / vertical split, Move to new tab
+page. `context_menu`, `drag` and `middle_click_close` on the tabline config
+each turn one gesture off (back to a plain switch).
+
+A host's own global `<RightMouse>` mapping keeps working if it replays the
+native click (`normal! <RightMouse>`) and then returns when
+`require("ui.tabline.menu").pointer_on_tabline()` is true. See
+docs/BINDINGS.md for the snippet.
+
 ==============================================================================
 6. STATUSLINE VARIANTS                                       *ui-variants*
 
