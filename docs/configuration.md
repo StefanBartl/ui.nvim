@@ -61,9 +61,11 @@ How deep the context reaches is two separate limits:
   after the level cap. One number for every filetype, or a table keyed by
   filetype: `max_lines = { default = 3, markdown = 6 }`. A buffer takes the entry
   for its filetype, else the entry named after the Tree-sitter language its
-  filetype resolves to (`markdown.mdx` -> `markdown`, `jsonc` -> `json`), else
-  `default`. `trim = "outer"` (the default) drops the outermost lines past the
-  cap, `"inner"` the innermost.
+  filetype resolves to, else `default`. Stock Neovim resolves `markdown.mdx` to
+  `markdown`; nvim-treesitter adds mappings such as `jsonc` -> `json` and
+  `sh` -> `bash`, so `max_lines = { bash = 5 }` also reaches `sh` files there, and
+  a host can register its own. `trim = "outer"` (the default) drops the outermost
+  lines past the cap, `"inner"` the innermost.
 
 **Markdown variants.** A buffer counts as Markdown -- level cap, heading
 drawing, the `markdown` entry of `max_lines` -- when its filetype is `markdown`
@@ -151,7 +153,7 @@ answers for one name):
 | JavaScript, TypeScript | `function`/`method`/`class` declarations, `arrow_function`, `function_expression`, `if`, `for`, `while`, `switch`/`case`, `try`/`catch`/`finally`; TypeScript also `interface`, `enum`, `namespace` | `call_expression`; the `else` limit as in Java | grammar (spec) |
 | Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions and the `when` branches, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` (so a `try {` line is not pinned, its `catch` is) | grammar (spec) |
 | Bash | `function_definition`, `if`, `elif`, `else`, `for`, `c_style_for_statement`, `while`, `case` and its items | subshells, `{ ...; }` groups | grammar (spec) |
-| Zsh | as Bash where the parser has the same names; the nvim-treesitter queries do not name `elif_clause` | | queries |
+| Zsh | not checked against a parser: none is installed here, and Neovim does not resolve `zsh` to `bash`, so a Zsh file pins nothing until a Zsh parser is installed; nvim-treesitter's Zsh queries do not name `elif_clause` | | queries |
 | C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case`, `else` | | parser (spec) |
 | YAML | `block_mapping_pair`: the parent keys of a deeply nested one (`jobs:` > `build:` > `steps:`) | list items (`- name: x`), scalars, flow mappings | parser (spec) |
 | JSON, TOML | nothing: none of their node types is a scope (JSON's `pair` would pin every key; TOML's `[a.b]` `table` is available as a `node_types` entry but not shipped) | | parser (spec) |

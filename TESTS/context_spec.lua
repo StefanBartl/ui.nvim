@@ -717,6 +717,8 @@ describe("ui.context", function()
           pending("no Markdown parser available")
           return
         end
+        -- Process-wide and there is no way to take it back; harmless here, since no
+        -- other test uses `rmd` and every spec file runs in its own Neovim.
         vim.treesitter.language.register("markdown", "rmd")
         local win = open_md(DEEP, "rmd")
         context.setup({ max_lines = { default = 1, markdown = 6 }, headings = { max_level = 2 } })
