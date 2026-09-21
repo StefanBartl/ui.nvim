@@ -372,6 +372,21 @@ end
 ---@field row integer   0-based source row of the context line
 ---@field type string   node type that made it a scope
 
+---@internal
+---Whether the source line at `row` is nothing but an opening bracket. A body
+---node (`switch_body`, `class_body`, `function_body`, Kotlin's
+---`control_structure_body`, ...) starts at its `{`; with the brace on a line of
+---its own (Allman style) that line would be pinned as a context row saying
+---nothing. The scope it belongs to starts on the line above and is pinned by the
+---node that owns it, so the lone bracket is skipped.
+---@param buf integer
+---@param row integer  0-based
+---@return boolean
+local function opens_alone(buf, row)
+  local text = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
+  return text:match("^%s*[{(%[]%s*$") ~= nil
+end
+
 ---The context of `top_row` (0-based): every enclosing scope that starts
 ---above it, outermost first, before `max_lines` trimming. `nil` when the
 ---buffer has no parser.
@@ -407,7 +422,12 @@ function M.contexts(buf, top_row)
   local seen_rows = {}
   while node do
     local srow = node:start()
-    if srow < top_row and M.is_scope_type(node:type()) and not seen_rows[srow] then
+    if
+      srow < top_row
+      and not seen_rows[srow]
+      and M.is_scope_type(node:type())
+      and not opens_alone(buf, srow)
+    then
       seen_rows[srow] = true
       table.insert(out, 1, { row = srow, type = node:type() })
     end
@@ -417,9 +437,39 @@ function M.contexts(buf, top_row)
 end
 
 ---@internal
+---The Tree-sitter language `buf`'s filetype resolves to, when it differs from
+---the filetype itself (`markdown.mdx` -> `markdown`, `jsonc` -> `json`, and
+---whatever the host registered with `vim.treesitter.language.register`).
+---@param buf integer
+---@return string|nil lang
+local function parser_language(buf)
+  local ft = vim.bo[buf].filetype
+  if ft == "" then
+    return nil
+  end
+  local lang = vim.treesitter.language.get_lang(ft)
+  if lang == nil or lang == ft then
+    return nil
+  end
+  return lang
+end
+
+---@internal
+---Whether `buf` holds Markdown: the filetype is `markdown`, or it parses as
+---Markdown. The second case is what `markdown.mdx`, `markdown.pandoc` and
+---`markdown.gfm` are, and `rmd`/`quarto` once the host has registered them for
+---the `markdown` parser -- there the heading chain is a `section` chain too, so
+---the level cap and the heading drawing apply to it as well.
+---@param buf integer
+---@return boolean
+local function is_markdown(buf)
+  return vim.bo[buf].filetype == "markdown" or parser_language(buf) == "markdown"
+end
+
+---@internal
 ---The `max_lines` that applies to `buf`: the number itself, or -- for the
----per-filetype table -- the buffer's filetype entry, else `default`, else the
----shipped 3.
+---per-filetype table -- the entry named after the buffer's filetype, else the one
+---named after its parser language, else `default`, else the shipped 3.
 ---@param buf integer
 ---@return integer|nil
 local function max_lines_for(buf)
@@ -427,8 +477,9 @@ local function max_lines_for(buf)
   if type(max) ~= "table" then
     return max
   end
-  local by_ft = max[vim.bo[buf].filetype]
-  if by_ft ~= nil then
+  local lang = parser_language(buf)
+  local by_ft = max[vim.bo[buf].filetype] or (lang and max[lang])
+  if by_ft then
     return by_ft
   end
   if max.default ~= nil then
@@ -488,7 +539,7 @@ end
 ---@return Ui.Context.Entry[]
 local function within_max_level(buf, entries)
   local max = cfg.headings.max_level
-  if vim.bo[buf].filetype ~= "markdown" or max >= MAX_HEADING_LEVEL then
+  if max >= MAX_HEADING_LEVEL or not is_markdown(buf) then
     return entries
   end
   local out = {}
@@ -596,7 +647,7 @@ end
 ---@return integer|nil level
 ---@return integer|nil indent  columns before the first `#`
 local function heading_level(buf, text)
-  if not cfg.headings.enable or vim.bo[buf].filetype ~= "markdown" then
+  if not cfg.headings.enable or not is_markdown(buf) then
     return nil, nil
   end
   return atx_heading(text)

@@ -30,7 +30,7 @@ with the same two commands.
 
 ## Layout
 
-54 spec files, 701 `it()` cases as of 2026-09-21 (the summary line of
+55 spec files, 717 `it()` cases as of 2026-09-21 (the summary line of
 `scripts/test.sh` is the live count). Grouped by area rather than listed
 alphabetically, since the file names already say what each one covers:
 
@@ -44,7 +44,8 @@ alphabetically, since the file names already say what each one covers:
 | Tabline / tabufline | `tabline_render_spec.lua`, `tabline_styles_spec.lua`, `tabufline_forget_spec.lua`, `tabufline_state_spec.lua`, `tabline_menu_spec.lua` (the per-tab right-click menu, its gating, and the left/right/middle click dispatch), `tabline_layout_drag_spec.lua` (which chip is under a column, and the transient drag mappings) |
 | `ui.kit` (floating-window widget toolkit) | `ui_kit_spec.lua` — ~230 assertions ported near-verbatim from the standalone `ui.kit` repo's own suite (`PLAN-ui-kit-migration.md` step 3), covering theme, surface, note, toast, input, prompt, layout, the native chooser + `hover_select` shim, the interactive picker, button-confirm, viewer, form, and live_input through the single `ui.kit` facade |
 | Context menu | `contextmenu_spec.lua` — ported the same way from the standalone `ui.contextmenu` repo |
-| Sticky context | `context_spec.lua` — a real window over real Lua/Markdown buffers with Neovim's bundled parsers: which scopes are pinned, the heading chain in Markdown, `headings.max_level` and the per-filetype `max_lines`, the `:UI sticky` command and its completion |
+| Sticky context | `context_spec.lua` — a real window over real Lua/Markdown buffers with Neovim's bundled parsers: which scopes are pinned, the heading chain in Markdown and its variants (`markdown.mdx`, registered `rmd`), `headings.max_level` and the per-filetype `max_lines`, the `:UI sticky` command and its completion |
+| Sticky context, real grammars | `context_languages_spec.lua` — Go, Java, C#, JavaScript, TypeScript, Kotlin and Bash against their real parsers; each is skipped where the parser is not installed (`:TSInstall go java c_sharp javascript typescript kotlin bash`) |
 | Misc widgets | `screenkey_spec.lua`, `winbar_spec.lua` |
 | Drift guards | `kit_drift_spec.lua` — `lib.nvim` deliberately kept its own frozen copy of `ui.kit`/`ui.contextmenu` (eleven of `lib.nvim`'s own call sites use it, and `lib.nvim` cannot depend on `ui.nvim` without inverting the fleet's dependency direction); this asserts that frozen copy has not silently drifted from this repo's live version. Skips (rather than fails) when no `lib.nvim` checkout is found beside this repo (`$LIB_NVIM_DIR`, `.deps/lib.nvim`, or a `../lib.nvim` sibling) — runs for real both in CI and locally whenever one of those resolves |
 | Source encoding | `source_encoding_spec.lua` — the repository's `lua/`, `TESTS/`, `docs/`, `doc/`, `scripts/` and `README.md` for double-encoded UTF-8: text read as Latin-1 or Windows-1252 and written back as UTF-8, which Lua, stylua and a reviewer all let through. It found the `<Space>` example label of `screenkey_spec.lua` and `docs/health.md` (the open-box glyph U+2423); a second case proves the patterns match built damage and leave clean text alone |

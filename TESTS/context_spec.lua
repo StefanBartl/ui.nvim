@@ -278,13 +278,14 @@ describe("ui.context", function()
     }
 
     ---@param lines string[]|nil  default: DOC
+    ---@param ft string|nil  default: "markdown"
     ---@return integer win, integer buf
-    local function open_doc(lines)
+    local function open_doc(lines, ft)
       vim.cmd("new")
       local win = vim.api.nvim_get_current_win()
       local buf = vim.api.nvim_get_current_buf()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or DOC)
-      vim.bo[buf].filetype = "markdown"
+      vim.bo[buf].filetype = ft or "markdown"
       vim.bo[buf].buftype = ""
       vim.api.nvim_win_set_height(win, 8)
       vim.wo[win].number = true
@@ -459,6 +460,24 @@ describe("ui.context", function()
       assert.equals(1, #on_row(marks, 1, "virt_text"))
     end)
 
+    it("draws a heading in a buffer that parses as Markdown, e.g. `markdown.mdx`", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      local win = open_doc(nil, "markdown.mdx")
+      context.enable()
+      scroll_to(win, 8)
+      assert.is_true(context.refresh(win) >= 2)
+      local lines = overlay_lines(win)
+      local marks = overlay_marks(win)
+      local last = #lines - 1
+      assert.truthy(lines[#lines]:find("### Detail", 1, true))
+      assert.is_true(has(marks, last, "hl_group", "UiContextH3"), "level-3 text group")
+      assert.is_true(has(marks, last, "line_hl_group", "UiContextH3Row"), "row band")
+      assert.equals("overlay", on_row(marks, last, "virt_text")[1].virt_text_pos)
+    end)
+
     it("does not treat a hash line in a non-markdown buffer as a heading", function()
       if not has_lua_parser then
         pending("no Lua parser available")
@@ -496,13 +515,14 @@ describe("ui.context", function()
     end
 
     ---@param lines string[]
+    ---@param ft string|nil  default: "markdown"
     ---@return integer win, integer buf
-    local function open_md(lines)
+    local function open_md(lines, ft)
       vim.cmd("new")
       local win = vim.api.nvim_get_current_win()
       local buf = vim.api.nvim_get_current_buf()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.bo[buf].filetype = "markdown"
+      vim.bo[buf].filetype = ft or "markdown"
       vim.bo[buf].buftype = ""
       vim.api.nvim_win_set_height(win, 8)
       vim.wo[win].number = true
@@ -647,6 +667,78 @@ describe("ui.context", function()
       scroll_to(win, 10)
       context.refresh(win)
       assert.same({ "# One", "## Two" }, texts(overlay_lines(win)))
+    end)
+
+    describe("Markdown variants", function()
+      -- `markdown.mdx`, `markdown.pandoc` and `markdown.gfm` resolve to the
+      -- `markdown` parser but are not the filetype `markdown`; a filetype the
+      -- host registered for that parser is the same case.
+      it("applies the level cap to a compound Markdown filetype", function()
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        local win = open_md(DEEP, "markdown.mdx")
+        context.setup({ max_lines = 10, headings = { max_level = 3 } })
+        context.enable()
+        scroll_to(win, 12)
+        context.refresh(win)
+        assert.same({ "# One", "## Two", "### Three" }, texts(overlay_lines(win)))
+      end)
+
+      it("takes max_lines from the parser language's entry when the filetype has none", function()
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        local win = open_md(DEEP, "markdown.mdx")
+        context.setup({ max_lines = { default = 1, markdown = 6 } })
+        context.enable()
+        scroll_to(win, 12)
+        context.refresh(win)
+        assert.equals(5, #overlay_lines(win), "the `markdown` entry, not `default`")
+      end)
+
+      it("lets an entry for the exact filetype win over the language's", function()
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        local win = open_md(DEEP, "markdown.mdx")
+        context.setup({ max_lines = { default = 1, markdown = 6, ["markdown.mdx"] = 2 } })
+        context.enable()
+        scroll_to(win, 12)
+        context.refresh(win)
+        assert.equals(2, #overlay_lines(win))
+      end)
+
+      it("treats a filetype registered for the markdown parser as Markdown", function()
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        vim.treesitter.language.register("markdown", "rmd")
+        local win = open_md(DEEP, "rmd")
+        context.setup({ max_lines = { default = 1, markdown = 6 }, headings = { max_level = 2 } })
+        context.enable()
+        scroll_to(win, 12)
+        context.refresh(win)
+        assert.same({ "# One", "## Two" }, texts(overlay_lines(win)))
+      end)
+
+      it("leaves a filetype with its own parser alone", function()
+        if not has_lua_parser then
+          pending("no Lua parser available")
+          return
+        end
+        -- Not Markdown, so the cap does not touch it and it takes `default`.
+        local win = open_source()
+        context.setup({ max_lines = { default = 1, markdown = 6 }, headings = { max_level = 1 } })
+        context.enable()
+        scroll_to(win, 7)
+        context.refresh(win)
+        assert.equals(1, #overlay_lines(win))
+      end)
     end)
 
     it("redraws an open overlay at once when the depth changes", function()
@@ -1402,6 +1494,127 @@ describe("ui.context", function()
       assert.same({ 0, 1, 3, 6 }, context_rows(buf, 7), "jobs, build, steps, with")
       assert.same({ 0, 1, 3, 9 }, context_rows(buf, 10), "jobs, build, steps, run")
       assert.same({}, context_rows(buf, 0), "nothing above the first key")
+    end)
+
+    it("c: a real buffer pins function, if, for, switch/case, else and while", function()
+      if not has_real_parser("c") then
+        pending("no C parser available")
+        return
+      end
+      local buf = scratch("c", {
+        "struct point {", -- 0
+        "    int x;",
+        "    int y;",
+        "};",
+        "",
+        "static int run(int n)", -- 5
+        "{",
+        "    int total = 0;",
+        "    if (n > 2) {", -- 8
+        "        for (int i = 0; i < n; i++) {",
+        "            switch (i) {",
+        "            case 1:", -- 11
+        "                total += helper(i);",
+        "                total += 1;",
+        "                break;",
+        "            default:", -- 15
+        "                total -= 1;",
+        "            }",
+        "        }",
+        "    } else {", -- 19
+        "        while (total < 10) {", -- 20
+        "            total++;",
+        "            total++;",
+        "        }",
+        "    }",
+        "    return total;",
+        "}",
+      })
+      assert.same({}, context_rows(buf, 0))
+      assert.same({ 0 }, context_rows(buf, 2), "the struct")
+      assert.same({ 5, 8, 9, 10, 11 }, context_rows(buf, 12), "fn, if, for, switch, case 1")
+      assert.same({ 5, 8, 9, 10, 15 }, context_rows(buf, 16), "the default case, not case 1")
+      assert.same({ 5, 8, 19 }, context_rows(buf, 20), "the else, not the if's own body")
+      assert.same({ 5, 8, 19, 20 }, context_rows(buf, 22), "else, while")
+      assert.same({ 5 }, context_rows(buf, 26), "back to just the function")
+    end)
+
+    it("skips a scope whose first line is only an opening bracket (Allman style)", function()
+      if not has_real_parser("c") then
+        pending("no C parser available")
+        return
+      end
+      -- `compound_statement` is the `{ ... }` body: it starts at its brace. Made a
+      -- scope on purpose, it is the shape of every `*_body` node in Java, C#,
+      -- Kotlin and TypeScript.
+      context.setup({
+        node_types = { "^compound_statement$", "^function_definition$" },
+        exclude_node_types = {},
+      })
+      local allman = scratch("c", {
+        "int run(int n)", -- 0
+        "{", -- 1: the function body, brace alone
+        "    if (n > 2)",
+        "    {", -- 3: the if body, brace alone
+        "        n++;",
+        "        n++;",
+        "    }",
+        "    return n;",
+        "}",
+      })
+      assert.same({ 0 }, context_rows(allman, 5), "only the function; no row for either lone `{`")
+
+      local knr = scratch("c", {
+        "int run(int n) {", -- 0: function and its body share the row
+        "    if (n > 2) {", -- 1: the if body starts on the `if` row
+        "        n++;",
+        "        n++;",
+        "    }",
+        "}",
+      })
+      assert.same({ 0, 1 }, context_rows(knr, 3), "a brace after the header is part of a real line")
+    end)
+
+    it("json and toml: a real buffer pins nothing, however deep the nesting", function()
+      if not has_real_parser("json") and not has_real_parser("toml") then
+        pending("no JSON or TOML parser available")
+        return
+      end
+      if has_real_parser("json") then
+        local json = scratch("json", {
+          "{",
+          '  "a": {',
+          '    "b": {',
+          '      "c": [',
+          "        1,",
+          "        2",
+          "      ]",
+          "    }",
+          "  }",
+          "}",
+        })
+        for top = 0, 9 do
+          assert.same({}, context_rows(json, top), "json, top row " .. top)
+        end
+      end
+      if has_real_parser("toml") then
+        -- `table` / `table_array_element` are the `[a.b]` headers; not pinned on purpose.
+        local toml = scratch("toml", {
+          "[package]",
+          'name = "demo"',
+          "",
+          "[dependencies.serde]",
+          'version = "1"',
+          'features = ["derive"]',
+          "",
+          "[[bin]]",
+          'name = "a"',
+          'path = "src/a.rs"',
+        })
+        for top = 0, 9 do
+          assert.same({}, context_rows(toml, top), "toml, top row " .. top)
+        end
+      end
     end)
   end)
 
