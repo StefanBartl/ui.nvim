@@ -438,8 +438,10 @@ end
 
 ---@internal
 ---The Tree-sitter language `buf`'s filetype resolves to, when it differs from
----the filetype itself (`markdown.mdx` -> `markdown`, `jsonc` -> `json`, and
----whatever the host registered with `vim.treesitter.language.register`).
+---the filetype itself: `markdown.mdx` -> `markdown` in stock Neovim, and whatever
+---was registered with `vim.treesitter.language.register` -- nvim-treesitter
+---registers `jsonc` -> `json` and `sh` -> `bash`, a host can add `rmd` ->
+---`markdown`.
 ---@param buf integer
 ---@return string|nil lang
 local function parser_language(buf)
@@ -477,9 +479,14 @@ local function max_lines_for(buf)
   if type(max) ~= "table" then
     return max
   end
-  local lang = parser_language(buf)
-  local by_ft = max[vim.bo[buf].filetype] or (lang and max[lang])
-  if by_ft then
+  ---@type integer|nil
+  local by_ft = max[vim.bo[buf].filetype]
+  if by_ft == nil then
+    -- Only when the filetype has no entry of its own: `get_lang` is not free.
+    local lang = parser_language(buf)
+    by_ft = lang and max[lang] or nil
+  end
+  if by_ft ~= nil then
     return by_ft
   end
   if max.default ~= nil then
