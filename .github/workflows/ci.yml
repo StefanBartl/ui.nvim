@@ -99,4 +99,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - run: git push origin HEAD:refs/heads/ci-verified --force
+      # Never move ci-verified backwards: two pushes can finish out of order,
+      # and the older run must not overwrite the newer verified commit.
+      - name: Publish ci-verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          status=$(gh api "repos/$REPO/compare/ci-verified...$SHA" --jq .status 2>/dev/null) || status=new
+          if [ "$status" = "behind" ] || [ "$status" = "identical" ]; then
+            echo "compare ci-verified...$SHA is '$status' (published or superseded); leaving it alone"
+            exit 0
+          fi
+          git push origin HEAD:refs/heads/ci-verified --force
