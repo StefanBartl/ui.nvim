@@ -84,3 +84,18 @@ jobs:
           name: test-output-tests-${{ matrix.os }}
           path: ${{ runner.temp }}/test-output.log
           if-no-files-found: ignore
+
+  # Publishes the commit that just passed every gate above as the
+  # `ci-verified` branch. Consumer repos pin their dependency checkout to it
+  # (ref: ci-verified) so a broken push here cannot turn their CI red.
+  publish-ci-verified:
+    name: publish ci-verified branch
+    needs: [stylua, luacheck, tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - run: git push origin HEAD:refs/heads/ci-verified --force
