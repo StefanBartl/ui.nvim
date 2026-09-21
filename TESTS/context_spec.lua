@@ -69,7 +69,13 @@ local has_lua_parser = pcall(vim.treesitter.language.add, "lua")
 describe("ui.context", function()
   after_each(function()
     context.disable()
-    context.setup({ max_lines = 3, trim = "outer", min_window_height = 6, line_numbers = true })
+    context.setup({
+      max_lines = 3,
+      trim = "outer",
+      min_window_height = 6,
+      line_numbers = true,
+      headings = { enable = true },
+    })
     vim.cmd("silent! %bwipeout!")
   end)
 
@@ -241,6 +247,155 @@ describe("ui.context", function()
       lines[1]:find("outer_RENAMED"),
       "overlay did not pick up the in-place rename: " .. lines[1]
     )
+  end)
+
+  describe("markdown headings", function()
+    local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+
+    local DOC = {
+      "# Title",
+      "",
+      "## Section",
+      "",
+      "### Detail",
+      "",
+      "text one",
+      "text two",
+      "text three",
+      "text four",
+      "text five",
+      "text six",
+      "text seven",
+      "text eight",
+    }
+
+    ---@return integer win, integer buf
+    local function open_doc()
+      vim.cmd("new")
+      local win = vim.api.nvim_get_current_win()
+      local buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, DOC)
+      vim.bo[buf].filetype = "markdown"
+      vim.bo[buf].buftype = ""
+      vim.api.nvim_win_set_height(win, 8)
+      vim.wo[win].number = true
+      return win, buf
+    end
+
+    ---@param win integer
+    ---@return table[] marks  { row, col, details }
+    local function overlay_marks(win)
+      local _, fbuf = context.float(win)
+      local ns = vim.api.nvim_get_namespaces().ui_context
+      return vim.api.nvim_buf_get_extmarks(fbuf, ns, 0, -1, { details = true })
+    end
+
+    ---@param marks table[]
+    ---@param row integer
+    ---@param key string
+    ---@return table[]
+    local function on_row(marks, row, key)
+      local out = {}
+      for _, m in ipairs(marks) do
+        if m[2] == row and m[4][key] then
+          out[#out + 1] = m[4]
+        end
+      end
+      return out
+    end
+
+    ---@param marks table[]
+    ---@param row integer
+    ---@param key string
+    ---@param value string
+    ---@return boolean
+    local function has(marks, row, key, value)
+      for _, d in ipairs(on_row(marks, row, key)) do
+        if d[key] == value then
+          return true
+        end
+      end
+      return false
+    end
+
+    it("styles a heading line with its level's group, a row band and an icon", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      local win = open_doc()
+      context.enable()
+      scroll_to(win, 8)
+      assert.is_true(context.refresh(win) >= 2)
+
+      local lines = overlay_lines(win)
+      local marks = overlay_marks(win)
+      -- The context is Title/Section/Detail, trimmed to the last three: the
+      -- deepest one is on the last row, and carries level 3.
+      local last = #lines - 1
+      assert.truthy(lines[#lines]:find("### Detail", 1, true))
+
+      assert.is_true(has(marks, last, "hl_group", "UiContextH3"), "level-3 text group")
+      assert.is_true(has(marks, last, "line_hl_group", "UiContextH3Row"), "row band")
+      -- The rule under the last row is still there next to the band.
+      assert.is_true(has(marks, last, "line_hl_group", "UiContextBottom"), "bottom rule")
+
+      local icon = on_row(marks, last, "virt_text")[1]
+      assert.equals("overlay", icon.virt_text_pos)
+      -- Level 3 covers the three cells of `###`.
+      assert.equals(3, vim.fn.strdisplaywidth(icon.virt_text[1][1]))
+    end)
+
+    it("leaves the marker alone with icons switched off", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      local win = open_doc()
+      context.setup({ headings = { icons = false } })
+      context.enable()
+      scroll_to(win, 8)
+      context.refresh(win)
+
+      local marks = overlay_marks(win)
+      for row = 0, #overlay_lines(win) - 1 do
+        assert.equals(0, #on_row(marks, row, "virt_text"))
+      end
+      assert.is_true(has(marks, #overlay_lines(win) - 1, "hl_group", "UiContextH3"))
+    end)
+
+    it("draws headings as plain source lines when headings are off", function()
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      local win = open_doc()
+      context.setup({ headings = false })
+      context.enable()
+      scroll_to(win, 8)
+      context.refresh(win)
+
+      for _, m in ipairs(overlay_marks(win)) do
+        local d = m[4]
+        assert.is_falsy(d.hl_group and d.hl_group:find("^UiContextH%d"))
+        assert.is_falsy(d.virt_text)
+      end
+    end)
+
+    it("does not treat a hash line in a non-markdown buffer as a heading", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      vim.bo.filetype = "lua"
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      for _, m in ipairs(overlay_marks(win)) do
+        assert.is_falsy(m[4].virt_text)
+      end
+    end)
   end)
 
   it("go_to_context jumps to the innermost, then outer, enclosing scope", function()
