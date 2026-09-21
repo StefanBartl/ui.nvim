@@ -290,6 +290,16 @@ in `order`/`modules`:
   own purpose (`git_clickable`'s right click opens its branch menu, for
   instance) keeps that; `git_clickable` still gets the management menu on
   double click.
+- **Saving the layout.** The same menu's "Layout" group has "Save current
+  layout" and "Clear saved layout". Saving writes the live `order` to a small
+  JSON file (`ui.statusline.state`, default
+  `stdpath("state")/ui.nvim/statusline_order.json`); `render.enable()` reads
+  it back and applies it on every start from then on — add/remove changes
+  made afterward are still session-only unless you save again. Clearing
+  deletes the file, so the next start uses your own `order` again. Like
+  `ui.context.state` (the `:UI sticky` persistence this mirrors), a missing,
+  unreadable or foreign file is just "nothing saved" — it never raises, and
+  `write`/`remove` refuse to touch a file that is not one this module wrote.
 
 Both are implemented once, centrally, not per module: `ui.statusline.render
 .generate()` wraps any segment that has no click region of its own in the

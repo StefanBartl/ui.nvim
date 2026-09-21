@@ -147,8 +147,25 @@ end)
 describe("ui.statusline.render enable/render/disable", function()
   local render = require("ui.statusline.render")
 
+  -- `enable()` now also restores a saved layout (`ui.statusline.state`) if
+  -- one exists -- a real one, on whatever machine happens to run this suite,
+  -- would silently override the `order` these tests pass in and break them
+  -- for a reason that has nothing to do with what they assert. Stubbed to
+  -- "nothing saved" for the whole describe; the restore behaviour itself has
+  -- its own describe ("ui.statusline.render's saved-layout restore" in
+  -- statusline_hover_menu_spec.lua).
+  local state = require("ui.statusline.state")
+  local original_read = state.read
+  before_each(function()
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return nil
+    end
+  end)
+
   after_each(function()
     render.disable()
+    state.read = original_read
   end)
 
   it("current() is nil before enable()", function()

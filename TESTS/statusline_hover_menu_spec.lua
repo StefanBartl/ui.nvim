@@ -171,9 +171,26 @@ describe("ui.statusline.menu", function()
   local render = require("ui.statusline.render")
   local catalog = require("ui.statusline.catalog")
 
+  -- Same reasoning as `statusline_render_spec.lua`'s "enable/render/disable"
+  -- describe: `render.enable()` restores a saved layout if one exists on
+  -- disk, which would make these fixed-`order` assumptions
+  -- (`{ "mode" }`, `in_order(cfg, "mode")`, ...) depend on whatever is
+  -- actually saved on the machine running the suite. Stubbed to "nothing
+  -- saved" here too; individual tests below still install their own
+  -- narrower stub for `state.read`/`write`/`remove` where they actually
+  -- exercise the save/load feature, which simply shadows this one for their
+  -- own duration.
+  local state_module = require("ui.statusline.state")
+  local original_state_read = state_module.read
+
   ---@type string
   local extra_key
   before_each(function()
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state_module.read = function()
+      return nil
+    end
+
     -- A catalog key that is not in any shipped preset's default `order`, so
     -- add/remove has something to actually toggle without disturbing a real
     -- module's state.
@@ -193,6 +210,7 @@ describe("ui.statusline.menu", function()
 
   after_each(function()
     render.disable()
+    state_module.read = original_state_read
   end)
 
   it("items() offers 'Remove' only for a key currently in order", function()
@@ -289,4 +307,234 @@ describe("ui.statusline.menu", function()
     hover.pointer_target = original
     assert.is_true(result)
   end)
+
+  it("'Save current layout' is only offered when order is non-empty", function()
+    render.current().order = {}
+    assert.is_false(vim.tbl_contains(
+      vim.tbl_map(function(i)
+        return i.name
+      end, menu.items("mode")),
+      "Save current layout"
+    ))
+  end)
+
+  it("'Clear saved layout' is only offered once something is actually saved", function()
+    local state = require("ui.statusline.state")
+    local original_read = state.read
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return nil
+    end
+
+    local function has(items, name)
+      return vim.tbl_contains(
+        vim.tbl_map(function(i)
+          return i.name
+        end, items),
+        name
+      )
+    end
+
+    assert.is_false(has(menu.items("mode"), "Clear saved layout"))
+
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return { order = { "mode" } }
+    end
+    assert.is_true(has(menu.items("mode"), "Clear saved layout"))
+
+    state.read = original_read
+  end)
+
+  it("'Save current layout' writes ui.statusline.state, 'Clear saved layout' removes it", function()
+    local state = require("ui.statusline.state")
+    local written, removed = nil, false
+    local original_write, original_remove, original_read = state.write, state.remove, state.read
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.write = function(order)
+      written = order
+      return true
+    end
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.remove = function()
+      removed = true
+      return true
+    end
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return written and { order = written } or nil
+    end
+
+    local function find(items, name)
+      for _, item in ipairs(items) do
+        if item.name == name then
+          return item
+        end
+      end
+    end
+
+    find(menu.items("mode"), "Save current layout").cmd()
+    assert.same(render.current().order, written)
+
+    find(menu.items("mode"), "Clear saved layout").cmd()
+    assert.is_true(removed)
+
+    state.write, state.remove, state.read = original_write, original_remove, original_read
+  end)
+end)
+
+describe("ui.statusline.state", function()
+  local state = require("ui.statusline.state")
+
+  ---@return string, fun(): nil cleanup
+  local function tmp_path()
+    local path = vim.fn.tempname() .. ".json"
+    return path, function()
+      pcall(vim.fn.delete, path)
+    end
+  end
+
+  it("read() returns nil when nothing is there", function()
+    local path = tmp_path()
+    assert.is_nil(state.read(path))
+  end)
+
+  it("round-trips an order through write() and read()", function()
+    local path, cleanup = tmp_path()
+    local ok = state.write({ "mode", "%=", "cwd" }, path)
+    assert.is_true(ok)
+
+    local saved = state.read(path)
+    cleanup()
+
+    assert.is_not_nil(saved)
+    assert.same({ "mode", "%=", "cwd" }, saved.order)
+  end)
+
+  it("remove() deletes a file this module wrote", function()
+    local path = tmp_path()
+    state.write({ "mode" }, path)
+    local ok = state.remove(path)
+    assert.is_true(ok)
+    assert.is_nil(state.read(path))
+  end)
+
+  it("remove() is not an error when nothing is there", function()
+    local path = tmp_path()
+    local ok = state.remove(path)
+    assert.is_true(ok)
+  end)
+
+  it("read() ignores a file that is not JSON", function()
+    local path, cleanup = tmp_path()
+    vim.fn.writefile({ "not json at all" }, path)
+    local saved = state.read(path)
+    cleanup()
+    assert.is_nil(saved)
+  end)
+
+  it("read() ignores non-string entries in a saved order", function()
+    local path, cleanup = tmp_path()
+    vim.fn.writefile({ vim.json.encode({ order = { "mode", 5, "cwd", vim.NIL } }) }, path)
+    local saved = state.read(path)
+    cleanup()
+    assert.same({ "mode", "cwd" }, saved.order)
+  end)
+
+  it("write()/remove() refuse a path that holds a foreign JSON file", function()
+    local path, cleanup = tmp_path()
+    vim.fn.writefile({ vim.json.encode({ something_else = true }) }, path)
+
+    local write_ok = state.write({ "mode" }, path)
+    local remove_ok = state.remove(path)
+    local survived = vim.uv.fs_stat(path) ~= nil
+    cleanup()
+
+    assert.is_false(write_ok)
+    assert.is_false(remove_ok)
+    assert.is_true(survived)
+  end)
+
+  it("read() treats an oversized file as corrupt rather than trusting it", function()
+    local path, cleanup = tmp_path()
+    local huge_order = {}
+    for i = 1, 2000 do
+      huge_order[i] = ("padding_%d_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"):format(i)
+    end
+    vim.fn.writefile({ vim.json.encode({ order = huge_order }) }, path)
+    local saved = state.read(path)
+    cleanup()
+    assert.is_nil(saved)
+  end)
+
+  it("default_path() sits under stdpath('state')/ui.nvim", function()
+    -- Compared normalized-to-normalized: `vim.fs.normalize` may rewrite
+    -- separators (e.g. backslashes on Windows), so the raw `stdpath('state')`
+    -- value is not always a literal substring of the normalized result.
+    local normalized_state_dir = vim.fs.normalize(vim.fn.stdpath("state"))
+    assert.is_true(state.default_path():find(normalized_state_dir, 1, true) ~= nil)
+    assert.is_true(state.default_path():find("ui.nvim", 1, true) ~= nil)
+  end)
+end)
+
+describe("ui.statusline.render's saved-layout restore", function()
+  local render = require("ui.statusline.render")
+  local state = require("ui.statusline.state")
+
+  after_each(function()
+    render.disable()
+  end)
+
+  it("enable() applies a saved order over the config's own one", function()
+    local original_read = state.read
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return { order = { "cwd", "mode" } }
+    end
+
+    render.enable({
+      order = { "mode", "cwd" },
+      modules = {
+        mode = function()
+          return "M"
+        end,
+        cwd = function()
+          return "C"
+        end,
+      },
+    })
+
+    state.read = original_read
+    assert.same({ "cwd", "mode" }, render.current().order)
+  end)
+
+  it("enable() leaves order alone when nothing was saved", function()
+    local original_read = state.read
+    ---@diagnostic disable-next-line: duplicate-set-field
+    state.read = function()
+      return nil
+    end
+
+    render.enable({ order = { "mode" }, modules = {} })
+
+    state.read = original_read
+    assert.same({ "mode" }, render.current().order)
+  end)
+
+  it(
+    "enable() requires a standalone catalog module the saved order names but modules lacks",
+    function()
+      local original_read = state.read
+      ---@diagnostic disable-next-line: duplicate-set-field
+      state.read = function()
+        return { order = { "undo_depth" } } -- a real, standalone catalog entry
+      end
+
+      render.enable({ order = { "mode" }, modules = {} })
+
+      state.read = original_read
+      assert.same({ "undo_depth" }, render.current().order)
+      assert.equals("function", type(render.current().modules.undo_depth))
+    end
+  )
 end)

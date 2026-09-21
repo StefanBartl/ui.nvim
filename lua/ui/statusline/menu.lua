@@ -8,14 +8,19 @@
 --- no pointer hit-testing of its own to know which module was clicked; the
 --- click protocol already hands that over as `key`.
 ---
---- Changes are runtime-only, exactly like `:UI variant <name>` (`ui.statusline
---- .modules.variant`): they mutate the live `Ui.Statusline.Config` table
---- `ui.statusline.render.enable()` was last given and trigger a redraw, but
---- nothing is written back to a host's own config -- a restart reverts to
---- whatever `order`/`modules` the host's `ui.config.setup()` call still says.
+--- Add/remove changes are runtime-only, exactly like `:UI variant <name>`
+--- (`ui.statusline.modules.variant`): they mutate the live
+--- `Ui.Statusline.Config` table `ui.statusline.render.enable()` was last
+--- given and trigger a redraw, but nothing is written back to a host's own
+--- config -- a restart reverts to whatever `order`/`modules` the host's
+--- `ui.config.setup()` call still says, UNLESS "Save current layout" (the
+--- menu's own "Layout" group) was used -- that writes `order` to
+--- `ui.statusline.state`'s JSON file, which `render.enable()` reads back and
+--- applies on every future start ("Clear saved layout" deletes it again).
 
 local contextmenu = require("ui.contextmenu")
 local catalog = require("ui.statusline.catalog")
+local state = require("ui.statusline.state")
 local notify = require("lib.nvim.notify").create("[ui.statusline.menu]")
 
 local M = {}
@@ -44,25 +49,42 @@ local function add_module(entry)
     return
   end
 
-  -- A builtin key resolves against `ui.statusline.themes.default` with no
-  -- `modules` entry at all (see `ui.statusline.catalog`'s own doc comment on
-  -- `builtin`); a standalone one needs its module required in explicitly, or
-  -- `render.generate()` would warn "no module for %q" on every redraw.
-  if not entry.builtin and entry.source then
-    cfg.modules = cfg.modules or {}
-    if cfg.modules[entry.key] == nil then
-      local ok, mod = pcall(require, entry.source)
-      if not ok then
-        notify.error(("could not load %q: %s"):format(entry.source, tostring(mod)))
-        return
-      end
-      cfg.modules[entry.key] = mod
-    end
+  -- Shared with `ui.statusline.render`'s own saved-layout restore on
+  -- `enable()`, so "does this key need its module required in" never
+  -- drifts between the two call sites.
+  local ok, err = require("ui.statusline.render").ensure_module_loaded(cfg, entry)
+  if not ok then
+    notify.error(("could not load %q: %s"):format(entry.source, tostring(err)))
+    return
   end
 
   cfg.order[#cfg.order + 1] = entry.key
   notify.info(("Added %q to the statusline (this session only)"):format(entry.key))
   pcall(vim.cmd, "redrawstatus!")
+end
+
+---@return nil
+local function save_current_layout()
+  local cfg = active_cfg()
+  if not cfg or not cfg.order or #cfg.order == 0 then
+    return
+  end
+  local ok, err = state.write(cfg.order)
+  if not ok then
+    notify.error("could not save the statusline layout: " .. tostring(err))
+    return
+  end
+  notify.info("Saved the current statusline layout -- restored on every future start")
+end
+
+---@return nil
+local function clear_saved_layout()
+  local ok, err = state.remove()
+  if not ok then
+    notify.error("could not clear the saved statusline layout: " .. tostring(err))
+    return
+  end
+  notify.info("Cleared the saved statusline layout -- future starts use your normal config again")
 end
 
 ---@param key string
@@ -119,6 +141,17 @@ function M.items(key)
     end
   end
   contextmenu.group(items, contextmenu.submenu("Add module", add_items))
+
+  contextmenu.group(
+    items,
+    contextmenu.heading("Layout"),
+    contextmenu.entry(
+      cfg ~= nil and #(cfg.order or {}) > 0,
+      "Save current layout",
+      save_current_layout
+    ),
+    contextmenu.entry(state.read() ~= nil, "Clear saved layout", clear_saved_layout)
+  )
 
   return items
 end

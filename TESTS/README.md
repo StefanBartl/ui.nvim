@@ -30,7 +30,7 @@ with the same two commands.
 
 ## Layout
 
-54 spec files, 658 `it()` cases as of 2026-09-21 (the summary line of
+54 spec files, 673 `it()` cases as of 2026-09-21 (the summary line of
 `scripts/test.sh` is the live count). Grouped by area rather than listed
 alphabetically, since the file names already say what each one covers:
 
