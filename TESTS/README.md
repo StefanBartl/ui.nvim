@@ -30,9 +30,9 @@ with the same two commands.
 
 ## Layout
 
-38 spec files, ~330 `it()`-level assertions as of this pass. Grouped by area
-rather than listed alphabetically, since the file names already say what
-each one covers:
+53 spec files, 650 `it()` cases as of 2026-09-21 (the summary line of
+`scripts/test.sh` is the live count). Grouped by area rather than listed
+alphabetically, since the file names already say what each one covers:
 
 | Area | Files |
 | --- | --- |
