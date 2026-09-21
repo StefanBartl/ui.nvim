@@ -126,6 +126,7 @@ ownership pattern this mirrors.
 | --- | --- |
 | ✅ `ui.context is on (max_lines N, heading depth D, M scope patterns)` | The sticky code-context overlay is enabled, with its current row cap (`3`, or `3 (markdown 6)` when filetypes have their own), the deepest Markdown heading level it pins and the number of node-type patterns it treats as scopes |
 | ℹ️ `ui.context is off` | The shipped default. `:UI sticky on` for the session, `ui.setup({ context = true })` for good |
+| ℹ️ `:UI sticky depth`/`lines` are saved to PATH (set: depth D, lines … / nothing set)` | Only with `persist = true`: where the depth and row-cap overrides are stored, and which of them are set right now |
 | ✅ `Tree-sitter parser available for the current buffer (ft)` | The overlay can work in this buffer |
 | ℹ️ `No Tree-sitter parser for the current buffer` | The overlay needs a parser per filetype; a buffer without one simply shows no context. Not an error — `:checkhealth` itself runs in such a buffer |
 | ❌ `ui.context did not load` | The module errored on require; `:UI context` will fail the same way |

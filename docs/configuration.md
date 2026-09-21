@@ -45,7 +45,8 @@ command should not get that as a side effect. Pass `true` for the shipped
 tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
-headings = { enable = true, max_level = 6, icons = {...} } }`) to override them;
+headings = { enable = true, max_level = 6, icons = {...} },
+persist = false, state_file = nil }`) to override them;
 `:UI sticky` (`:UI context` is the older spelling) toggles it for the session
 either way.
 
@@ -63,7 +64,20 @@ How deep the context reaches is two separate limits:
   lines past the cap, `"inner"` the innermost.
 
 At runtime `:UI sticky depth 4` and `:UI sticky lines markdown 6` change the same
-two values for the session.
+two values. By default that lasts until Neovim exits (the confirmation says so).
+With `persist = true` they are also written to a JSON file
+(`state_file`, default `stdpath("state")/ui.nvim/sticky.json`) and read back the
+next time `ui.setup` / `require("ui.context").setup` runs with `persist = true`,
+applied on top of the configured values. Only what a command changed is stored,
+so the configuration stays the source of the rest; `:UI sticky status` lists
+what is set that way, and `:UI sticky reset` drops it, returns to the
+configured values and deletes the file. A saved value wins over the
+configuration until reset -- if you edit the configured `max_lines` and see no
+effect, `:UI sticky status` shows the override that covers it. A missing or
+unreadable file, or an entry that is out of range (depth outside 1..6, a
+negative cap), is ignored rather than raising. A `setup` that restates
+`max_lines` or `headings.max_level` without `persist` replaces the command's
+value for that setting.
 
 Outside Markdown the context comes from Tree-sitter, so a filetype without a
 parser (plain text) pins nothing. Which nodes count as a scope is `node_types`
@@ -94,7 +108,8 @@ answers for one name):
 | Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` | queries |
 | Bash, Zsh | `function_definition`, `if`, `elif` (Bash; Zsh's queries do not name it), `else`, `for`, `c_style_for_statement`, `while`, `case` | subshells, `{ ...; }` groups | queries |
 | C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case` | | queries |
-| JSON, YAML, TOML | nothing: none of their node types is a scope | | queries |
+| YAML | `block_mapping_pair`: the parent keys of a deeply nested one (`jobs:` > `build:` > `steps:`) | list items (`- name: x`), scalars, flow mappings | parser (spec) |
+| JSON, TOML | nothing: none of their node types is a scope (JSON's `pair` would pin every key) | | queries |
 
 "Parser (spec)" means a real buffer is parsed in `TESTS/context_spec.lua`
 (skipped, not failed, where the parser is not installed); "queries" means the

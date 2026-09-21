@@ -243,12 +243,23 @@ end
 ---                    of the window (1 = innermost) -- works with the overlay
 ---                    off as well, it only needs the parser
 ---
----`depth`/`lines` change the running session only; the persistent form is
----`ui.setup({ context = { headings = { max_level = N }, max_lines = ... } })`.
+---  `reset`           drop what `depth`/`lines` changed, back to the configured values
+---
+---`depth`/`lines` change the running session; with `persist = true` in the
+---`ui.setup({ context = { ... } })` table they are also saved and come back at
+---the next start (`reset` deletes them). The configured form of the same values
+---is `ui.setup({ context = { headings = { max_level = N }, max_lines = ... } })`.
 ---@param args string[]
 local function ui_sticky(args)
   local action = args[2]
   local cfg = context.config()
+
+  ---How a `depth`/`lines` change is kept, for the message that reports it.
+  ---@return string
+  local function keep_note()
+    return context.is_persisting() and " -- saved for the next start"
+      or " -- this session only (`persist = true` keeps it)"
+  end
 
   if action == "on" then
     context.enable()
@@ -263,14 +274,37 @@ local function ui_sticky(args)
   end
 
   if action == "status" then
+    local changed = context.describe_overrides()
     notify.info(
       prefix(
         ICON.context,
-        ("Sticky context %s -- depth %d (deepest Markdown heading), lines %s"):format(
+        ("Sticky context %s -- depth %d (deepest Markdown heading), lines %s%s"):format(
           context.is_enabled() and "on" or "off",
           cfg.headings.max_level,
-          context.describe_max_lines()
+          context.describe_max_lines(),
+          changed
+              and (" -- set by command: %s%s"):format(
+                changed,
+                context.is_persisting() and ", saved" or ", this session only"
+              )
+            or ""
         )
+      )
+    )
+    return
+  end
+
+  if action == "reset" then
+    local had = context.reset()
+    notify.info(
+      prefix(
+        ICON.context,
+        had
+            and ("Depth and lines back to the configured values (%d, %s)"):format(
+              cfg.headings.max_level,
+              context.describe_max_lines()
+            )
+          or "Nothing to reset -- depth and lines are still as configured"
       )
     )
     return
@@ -294,7 +328,10 @@ local function ui_sticky(args)
     notify.info(
       prefix(
         ICON.context,
-        ("Depth: Markdown headings down to level %d"):format(context.set_max_level(level))
+        ("Depth: Markdown headings down to level %d%s"):format(
+          context.set_max_level(level),
+          keep_note()
+        )
       )
     )
     return
@@ -312,7 +349,9 @@ local function ui_sticky(args)
       notify.warn(prefix(ICON.context, "Usage: :UI sticky lines [filetype] <n>  (0 = unlimited)"))
       return
     end
-    notify.info(prefix(ICON.context, ("Lines: %s"):format(context.describe_max_lines())))
+    notify.info(
+      prefix(ICON.context, ("Lines: %s%s"):format(context.describe_max_lines(), keep_note()))
+    )
     return
   end
 
@@ -665,6 +704,7 @@ local function ui_help(_args)
 │  :UI sticky status          Show state, depth, lines │
 │  :UI sticky depth [1-6]     Deepest heading pinned   │
 │  :UI sticky lines [ft] [n]  Row cap (0 = unlimited)  │
+│  :UI sticky reset           Back to configured values│
 │  :UI sticky up [n]          Jump to the n-th scope   │
 │  :UI context ...            Same command, older name │
 │                                                      │
@@ -815,7 +855,7 @@ local function complete(arglead, cmdline, _cursorpos)
     end
 
     if subcmd == "sticky" or subcmd == "context" then
-      return filter(arglead, { "on", "off", "toggle", "status", "depth", "lines", "up" })
+      return filter(arglead, { "on", "off", "toggle", "status", "depth", "lines", "reset", "up" })
     end
 
     if subcmd == "zen" then
