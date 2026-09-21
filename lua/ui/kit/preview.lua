@@ -297,6 +297,7 @@ function M.open()
   autocmd.create({ "TextChanged", "TextChangedI" }, schedule_render, {
     group = group,
     buffer = config_buf,
+    record = false, -- throwaway per-buffer hook: not recorded (see ui.kit.surface)
     desc = "ui.kit.preview: debounced live re-render",
   })
 
