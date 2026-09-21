@@ -59,9 +59,26 @@ How deep the context reaches is two separate limits:
   section, pinned or not.
 - `max_lines` (default 3, 0 = unlimited) is how many rows the context may take,
   after the level cap. One number for every filetype, or a table keyed by
-  filetype: `max_lines = { default = 3, markdown = 6 }`. A filetype without an
-  entry takes `default`. `trim = "outer"` (the default) drops the outermost
-  lines past the cap, `"inner"` the innermost.
+  filetype: `max_lines = { default = 3, markdown = 6 }`. A buffer takes the entry
+  for its filetype, else the entry named after the Tree-sitter language its
+  filetype resolves to (`markdown.mdx` -> `markdown`, `jsonc` -> `json`), else
+  `default`. `trim = "outer"` (the default) drops the outermost lines past the
+  cap, `"inner"` the innermost.
+
+**Markdown variants.** A buffer counts as Markdown -- level cap, heading
+drawing, the `markdown` entry of `max_lines` -- when its filetype is `markdown`
+**or** it parses with the `markdown` parser. That covers the compound filetypes
+`markdown.mdx` (Neovim's `.mdx`), `markdown.pandoc` and `markdown.gfm`, and any
+filetype the host maps to that parser. `rmd` and `quarto` are not mapped by
+default (Neovim resolves them to a language of their own, for which no parser is
+installed, so they pin nothing); to treat them as Markdown:
+
+```lua
+vim.treesitter.language.register("markdown", { "rmd", "quarto" })
+```
+
+An entry for the exact filetype (`["markdown.mdx"] = 2`) still wins over the
+language's.
 
 At runtime `:UI sticky depth 4` and `:UI sticky lines markdown 6` change the same
 two values. By default that lasts until Neovim exits (the confirmation says so).
@@ -111,6 +128,13 @@ names exactly that type, and the excludes cannot veto it. That is how Rust's
 `match_expression` are pinned although `_expression$` is excluded. A plain
 `^prefix` or `suffix$` entry is a family and is still subject to the excludes.
 
+A scope whose first line is nothing but an opening bracket (`{`, `(`, `[`) is
+skipped. Body nodes (`switch_body`, `class_body`, `function_body`, Kotlin's
+`control_structure_body`, ...) start at their brace, so with the brace on a line
+of its own (Allman style, common in C# and Java) they would pin a row that says
+nothing; the scope they belong to starts on the line above and is pinned by the
+node that owns it.
+
 What the shipped lists pin per language (`:lua =vim.treesitter.get_node():type()`
 shows the type under the cursor; `require("ui.context").is_scope_type(type)`
 answers for one name):
@@ -121,20 +145,26 @@ answers for one name):
 | Markdown | `section`, i.e. the heading chain (see above) | fenced code, lists, quotes | parser (spec) |
 | Rust | `function_item`, `impl_item`, `trait_item`, `struct_item`, `enum_item`, `mod_item`, `if`/`for`/`while`/`loop`/`match` expressions, `match_arm`, `else_clause` | calls, closures, struct literals, `x?` (`try_expression`) | parser (spec) |
 | Python | `function_definition`, `class_definition`, `if`/`elif`/`else`, `for`, `while`, `with`, `try`/`except`/`finally`, `match`/`case` | decorators, comprehensions, lambdas | parser (spec) |
-| Go | `function_declaration`, `method_declaration`, `func_literal`, `if`, `for`, `switch`/`select` and their `case`s, `type_declaration` | calls, composite literals | queries |
-| Java | `class`/`interface`/`enum`/`record`, `method_declaration`, `constructor_declaration`, `if`, `for`/enhanced `for`, `while`, `do`, `switch`, `try`/`catch`/`finally` | `method_invocation`, lambdas | queries |
-| C# | `class`/`struct`/`interface`/`enum`/`record`, `namespace`, `method`, constructor, `if`, `for`/`foreach`, `while`, `switch`, `try`/`catch`/`finally` | invocations, lambdas, properties | queries |
-| JavaScript, TypeScript | `function`/`method`/`class` declarations, `arrow_function`, `function_expression`, `if`, `for`, `while`, `switch`/`case`, `try`/`catch`/`finally`; TypeScript also `interface`, `enum`, `namespace` | `call_expression` | queries |
-| Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` | queries |
-| Bash, Zsh | `function_definition`, `if`, `elif` (Bash; Zsh's queries do not name it), `else`, `for`, `c_style_for_statement`, `while`, `case` | subshells, `{ ...; }` groups | queries |
-| C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case` | | queries |
+| Go | `function_declaration`, `method_declaration`, `func_literal`, `if`, `for`, `switch`/`select` and their `case`s, `type_declaration` | calls, composite literals | grammar (spec) |
+| Java | `class`/`interface`/`enum`/`record`, `method_declaration`, `constructor_declaration`, `if`, `for`/enhanced `for`, `while`, `do`, `switch`, `try`/`catch`/`finally` | `method_invocation`, lambdas; no `else` node exists, so inside an `else { }` the `if` line stays pinned | grammar (spec) |
+| C# | `class`/`struct`/`interface`/`enum`/`record`, `namespace`, `method`, constructor, `if`, `for`/`foreach`, `while`, `switch` and its sections, `try`/`catch`/`finally` | invocations, lambdas, properties; the `else` limit as in Java | grammar (spec) |
+| JavaScript, TypeScript | `function`/`method`/`class` declarations, `arrow_function`, `function_expression`, `if`, `for`, `while`, `switch`/`case`, `try`/`catch`/`finally`; TypeScript also `interface`, `enum`, `namespace` | `call_expression`; the `else` limit as in Java | grammar (spec) |
+| Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions and the `when` branches, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` (so a `try {` line is not pinned, its `catch` is) | grammar (spec) |
+| Bash | `function_definition`, `if`, `elif`, `else`, `for`, `c_style_for_statement`, `while`, `case` and its items | subshells, `{ ...; }` groups | grammar (spec) |
+| Zsh | as Bash where the parser has the same names; the nvim-treesitter queries do not name `elif_clause` | | queries |
+| C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case`, `else` | | parser (spec) |
 | YAML | `block_mapping_pair`: the parent keys of a deeply nested one (`jobs:` > `build:` > `steps:`) | list items (`- name: x`), scalars, flow mappings | parser (spec) |
-| JSON, TOML | nothing: none of their node types is a scope (JSON's `pair` would pin every key) | | queries |
+| JSON, TOML | nothing: none of their node types is a scope (JSON's `pair` would pin every key; TOML's `[a.b]` `table` is available as a `node_types` entry but not shipped) | | parser (spec) |
 
-"Parser (spec)" means a real buffer is parsed in `TESTS/context_spec.lua`
-(skipped, not failed, where the parser is not installed); "queries" means the
-node names were taken from nvim-treesitter's `queries/<lang>/*.scm` and the
-match is asserted by name without a parser. A callback such as
+"Parser (spec)" means a real buffer is parsed in `TESTS/context_spec.lua` with a
+parser Neovim bundles or that is common (Lua, Markdown, C) or installed on the
+development machine (Rust, Python, YAML, JSON, TOML); "grammar (spec)" is the
+same in `TESTS/context_languages_spec.lua`, for the grammars that are usually
+not installed (`:TSInstall go java c_sharp javascript typescript kotlin bash`).
+Both are skipped, not failed, where the parser is missing, which is the ordinary
+case on CI for the second file. "Queries" means the node names were taken from
+nvim-treesitter's `queries/<lang>/*.scm` and the match is asserted by name
+without a parser. A callback such as
 `describe("x", function () ... end)` is pinned by the function node
 (`function_expression`, `arrow_function`, `func_literal`), and so shows the
 `describe(` line; the call node itself is never pinned. For a language not in
