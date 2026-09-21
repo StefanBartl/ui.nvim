@@ -50,6 +50,40 @@ local function real_file_path(buf)
   return path
 end
 
+--- `buf`'s 1-based slot in whichever tab actually lists it, or 1 if none
+--- does. `BufDelete` is a global event -- the tab active when it fires is
+--- not necessarily the tab `buf` belonged to (a buffer closed via a raw
+--- `:bdelete N`/`:bufdo` while looking at a different tab, say), and
+--- `vim.t.bufs` only ever reads the CURRENT tab's list. Checked there
+--- first (the fast, overwhelmingly common path -- closing what you are
+--- actually looking at), falling back to a bounded scan of every other tab
+--- only when it is not.
+---@param buf integer
+---@return integer
+local function slot_in_owning_tab(buf)
+  local cur = vim.t.bufs
+  if cur then
+    for i, b in ipairs(cur) do
+      if b == buf then
+        return i
+      end
+    end
+  end
+
+  for _, tab in ipairs(api.nvim_list_tabpages()) do
+    local bufs = vim.t[tab].bufs
+    if bufs then
+      for i, b in ipairs(bufs) do
+        if b == buf then
+          return i
+        end
+      end
+    end
+  end
+
+  return 1
+end
+
 --- Record `buf` closing. Called from `state.lua`'s `BufDelete` handler while
 --- the buffer (and its name/marks) still exists -- a no-op for anything
 --- `real_file_path` rejects.
@@ -61,14 +95,7 @@ function M.record(buf)
     return
   end
 
-  local bufs = vim.t.bufs or {}
-  local slot = 1
-  for i, b in ipairs(bufs) do
-    if b == buf then
-      slot = i
-      break
-    end
-  end
+  local slot = slot_in_owning_tab(buf)
 
   local ok, mark = pcall(api.nvim_buf_get_mark, buf, '"')
   local cursor = (ok and type(mark) == "table" and mark[1] and mark[1] > 0) and mark or { 1, 0 }

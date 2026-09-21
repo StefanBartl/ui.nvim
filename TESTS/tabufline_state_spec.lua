@@ -374,6 +374,16 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       assert.is_false(state.is_pinned(a))
     end)
 
+    it("pinned_bufs is empty until something is pinned, then lists exactly it", function()
+      assert.same({}, state.pinned_bufs())
+      state.set_pinned(a, true)
+      assert.same({ a }, state.pinned_bufs())
+      state.set_pinned(c, true)
+      assert.is_true(vim.tbl_contains(state.pinned_bufs(), a))
+      assert.is_true(vim.tbl_contains(state.pinned_bufs(), c))
+      assert.equals(2, #state.pinned_bufs())
+    end)
+
     it("pinning moves the buffer to the end of the pin block", function()
       state.set_pinned(b, true) -- { a, b, c } -> { b, a, c }
       assert.same({ b, a, c }, vim.t.bufs)

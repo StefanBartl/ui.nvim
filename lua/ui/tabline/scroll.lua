@@ -128,7 +128,19 @@ function M.on_drag(col)
     TICK_MS,
     TICK_MS,
     vim.schedule_wrap(function()
-      nudge(dir)
+      -- `uv_timer:stop()` in `stop_timer()` only blocks FUTURE ticks -- a
+      -- tick that had already fired (into this `vim.schedule_wrap` shim,
+      -- which defers the real work to the next safe point on the main
+      -- loop) is already queued and runs regardless. Without this guard, a
+      -- drag ending (or redirecting) right after such a tick fired would
+      -- still let one stray `nudge()` through afterwards, un-nil-ing
+      -- `offset` right after `M.reset()` cleared it and leaving the
+      -- tabline's "keep current buffer visible" logic silently overridden
+      -- until the next drag. Same pattern `ui.tabline.drag`'s own idle
+      -- timer already uses (`if active == drag then`).
+      if timer == uv_timer then
+        nudge(dir)
+      end
     end)
   )
 end

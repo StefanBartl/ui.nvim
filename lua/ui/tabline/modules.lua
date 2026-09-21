@@ -219,9 +219,17 @@ function M.buffers(cfg)
 
   -- Pinned buffers first, always rendered -- see the doc comment above for
   -- why this cannot share the unpinned loop's front-dropping window.
+  --
+  -- `pinned_list` is read ONCE here, not via `state.is_pinned(bufnr)` per
+  -- buffer: this loop (and `style_buf` right below it) run on nearly every
+  -- tabline redraw, and `vim.t.ui_pinned` round-trips through a VimL value
+  -- on every access -- `is_pinned()` per buffer would pay that conversion
+  -- cost once per open buffer, per redraw, for no reason (the pin set does
+  -- not change mid-loop).
+  local pinned_list = state.pinned_bufs()
   local pinned_bufs, other_bufs = {}, {}
   for i, bufnr in ipairs(bufs) do
-    if state.is_pinned(bufnr) then
+    if vim.tbl_contains(pinned_list, bufnr) then
       pinned_bufs[#pinned_bufs + 1] = { bufnr = bufnr, index = i }
     else
       other_bufs[#other_bufs + 1] = { bufnr = bufnr, index = i }
@@ -230,7 +238,11 @@ function M.buffers(cfg)
 
   local chips, chip_bufs = {}, {}
   for _, entry in ipairs(pinned_bufs) do
-    chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+    -- `is_pinned` handed straight in (true, unconditionally): this chip is
+    -- already known pinned by construction above, so `style_buf` does not
+    -- need to re-query `state.is_pinned` (another `vim.t.ui_pinned` read)
+    -- for it.
+    chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth, true)
     chip_bufs[#chip_bufs + 1] = entry.bufnr
   end
   if #chips * (bufwidth + ICON_WIDTH_SLACK) >= space then
@@ -255,7 +267,7 @@ function M.buffers(cfg)
         flush_right = true
         break
       end
-      chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+      chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth, false)
       chip_bufs[#chip_bufs + 1] = entry.bufnr
     end
   else
@@ -272,7 +284,8 @@ function M.buffers(cfg)
       end
 
       seen_current = seen_current or (cur == entry.bufnr)
-      unpinned_chips[#unpinned_chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+      unpinned_chips[#unpinned_chips + 1] =
+        utils.style_buf(entry.bufnr, entry.index, bufwidth, false)
       unpinned_bufs[#unpinned_bufs + 1] = entry.bufnr
     end
     vim.list_extend(chips, unpinned_chips)

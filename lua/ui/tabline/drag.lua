@@ -66,13 +66,21 @@ end
 --- Safe to call with no gesture running.
 ---@return nil
 function M.cancel()
+  -- Ahead of the early return below (not gated on a gesture being active):
+  -- `M.begin()` calls this first to clear a previous gesture whose release
+  -- was lost, and that path must leave `scroll` clean too -- a stray
+  -- scroll offset surviving from before (see scroll.lua's own timer-race
+  -- guard) would otherwise carry over into the new gesture instead of
+  -- starting fresh. `scroll.reset()` is itself a no-op when nothing is
+  -- scrolling, so this costs nothing on the common "no gesture" path.
+  scroll.reset()
+
   local drag = active
   if not drag then
     return
   end
   active = nil
   stop_timer(drag)
-  scroll.reset()
 
   for _, mode in ipairs(MODES) do
     for _, key in ipairs(KEYS) do

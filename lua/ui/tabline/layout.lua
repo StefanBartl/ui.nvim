@@ -19,6 +19,7 @@ local M = {}
 ---@field prefix string     # rendered tabline text left of the first chip (the tree offset)
 ---@field bufs integer[]    # buffer of each visible chip, left to right
 ---@field chips string[]    # the chip strings, parallel to `bufs`
+---@field bounds? integer[] # {left, right} from `chip_run_bounds()`, memoized lazily -- see that function's own comment
 
 ---@type Ui.Tabline.Layout|nil
 local last = nil
@@ -79,6 +80,14 @@ end
 --- `vim.t.bufs`). `ui.tabline.scroll` uses this to tell "the pointer is
 --- resting against this edge, during a drag" from "it is still well inside
 --- the bar".
+---
+--- Memoized on `last` itself, computed at most once per `record()` (i.e.
+--- once per actual tabline redraw): `ui.tabline.scroll.on_drag` calls this
+--- on every single `<LeftDrag>` mouse event, which during a real drag fires
+--- many times a second, and `record()` is NOT called again just because the
+--- pointer moved without crossing into a new chip slot -- summing every
+--- chip's `nvim_eval_statusline` width from scratch on every one of those
+--- events would repeat the exact same work for as long as the hold lasts.
 ---@return integer|nil left
 ---@return integer|nil right
 function M.chip_run_bounds()
@@ -86,12 +95,16 @@ function M.chip_run_bounds()
     return nil, nil
   end
 
-  local left = width_of(last.prefix) + 1
-  local right = left - 1
-  for _, chip in ipairs(last.chips) do
-    right = right + width_of(chip)
+  if not last.bounds then
+    local left = width_of(last.prefix) + 1
+    local right = left - 1
+    for _, chip in ipairs(last.chips) do
+      right = right + width_of(chip)
+    end
+    last.bounds = { left, right }
   end
-  return left, right
+
+  return last.bounds[1], last.bounds[2]
 end
 
 return M
