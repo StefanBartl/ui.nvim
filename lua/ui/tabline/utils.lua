@@ -32,6 +32,19 @@ M.RIGHT_CAP = "\xEE\x82\xB4" --
 -- Unicode font, so it gets no byte-escape treatment.
 M.DIVIDER = "│"
 
+-- A pinned chip's close-button slot shows this instead of "x"/the modified
+-- dot -- clicking it unpins rather than closes (see `M.on_pin_click`).
+-- Resolved once, lazily (not at module load: `nerd_font.available()` reads
+-- live config, and this module can load before that is settled), then
+-- cached -- this is on the hot per-chip render path, same reasoning as
+-- `ensure_icon_hl`'s own cache below.
+---@type string|nil
+local pin_glyph_cache = nil
+local function pin_glyph()
+  pin_glyph_cache = pin_glyph_cache or require("lib.nvim.ui.nerd_font").glyph("F0403", "P")
+  return pin_glyph_cache
+end
+
 -- Buffers currently mid-"flash" (a brief highlight swap on click, before
 -- `goto_buf` actually switches to it -- the same kind of momentary feedback
 -- `lib.nvim.contextmenu` gives on a selection) and the duration of one.
@@ -216,6 +229,35 @@ function M.close_all_bufs(include_cur_buf)
   end, CLOSE_DELAY_MS)
 end
 
+--- Whether `bufnr` is pinned -- and, if so, warn once for this call. Guards
+--- middle-click and the "x" button below: a pinned chip refuses those two
+--- accidental, one-click closes so a pin actually protects, per the
+--- roadmap's own "Tabs anpinnen" spec. The tab menu's own "Close"/"Close
+--- others"/etc. (`ui.tabline.menu`) do NOT go through this guard -- those
+--- are a deliberate choice through a menu, not a stray click.
+---@param bufnr integer
+---@return boolean
+local function guard_pinned_close(bufnr)
+  local pinned = require("ui.bindings.keymaps.tabufline.state").is_pinned(bufnr)
+  if pinned then
+    notify.info("tab is pinned -- unpin it first to close")
+  end
+  return pinned
+end
+
+--- Click on a pinned chip's pin glyph (the close-button slot on a pinned
+--- chip): unpin. There is no click target to PIN a chip from the bar itself
+--- -- only the tab menu's "Pin" entry does that -- so this only ever runs on
+--- an already-pinned chip.
+---@param bufnr integer
+---@return nil
+function M.on_pin_click(bufnr)
+  local ok, err = pcall(require("ui.bindings.keymaps.tabufline.state").set_pinned, bufnr, false)
+  if not ok then
+    notify.warn("unpin failed: " .. tostring(err))
+  end
+end
+
 --- A left/right/middle click on a buffer chip's body, dispatched by the
 --- tabline click protocol's `button` argument ("l", "r", "m").
 ---
@@ -241,6 +283,9 @@ function M.on_chip_click(bufnr, button)
   end
 
   if button == "m" and mouse_feature_enabled("middle_click_close") then
+    if guard_pinned_close(bufnr) then
+      return
+    end
     M.close_buffer(bufnr)
     return
   end
@@ -262,6 +307,9 @@ function M.on_close_click(bufnr, button)
     vim.schedule(function()
       require("ui.tabline.menu").open(bufnr)
     end)
+    return
+  end
+  if guard_pinned_close(bufnr) then
     return
   end
   M.close_buffer(bufnr)
@@ -289,6 +337,11 @@ function M.register_click_handlers()
   vim.cmd([[
     function! UiTbKillBuf(bufnr, clicks, button, mod)
       call luaeval('require("ui.tabline.utils").on_close_click(_A[1], _A[2])', [a:bufnr, a:button])
+    endfunction
+  ]])
+  vim.cmd([[
+    function! UiTbTogglePin(bufnr, clicks, button, mod)
+      call luaeval('require("ui.tabline.utils").on_pin_click(_A[1])', [a:bufnr])
     endfunction
   ]])
   vim.cmd([[
@@ -439,27 +492,27 @@ local function gen_unique_name(name, index)
   return nil
 end
 
--- `close_or_dot`'s rendered width, keyed by `modified` -- only two shapes
--- ever exist (the close button " 󰅖 " or the modified-buffer dot " ● "),
--- and neither changes with the highlight group name or the click-id
--- embedded in it, so this is measured at most twice per session, ever, not
--- per chip per redraw. `nvim_eval_statusline` (not `strdisplaywidth`)
--- because the real string carries `%#Group#`/`%N@Func@...%X` tabline
--- directives, which `strdisplaywidth` would count as literal text instead
--- of the zero-width markup they are.
----@type table<boolean, integer>
+-- `close_or_dot`'s rendered width, keyed by its shape -- three ever exist
+-- (the close button " 󰅖 ", the modified-buffer dot " ● ", the pin glyph on
+-- a pinned chip), and none changes with the highlight group name or the
+-- click-id embedded in it, so this is measured at most three times per
+-- session, ever, not per chip per redraw. `nvim_eval_statusline` (not
+-- `strdisplaywidth`) because the real string carries `%#Group#`/
+-- `%N@Func@...%X` tabline directives, which `strdisplaywidth` would count
+-- as literal text instead of the zero-width markup they are.
+---@type table<"modified"|"unmodified"|"pinned", integer>
 local close_width_cache = {}
 
----@param modified boolean
+---@param shape "modified"|"unmodified"|"pinned"
 ---@param rendered string
 ---@return integer
-local function close_width(modified, rendered)
-  local cached = close_width_cache[modified]
+local function close_width(shape, rendered)
+  local cached = close_width_cache[shape]
   if cached then
     return cached
   end
   local w = api.nvim_eval_statusline(rendered, { use_tabline = true }).width
-  close_width_cache[modified] = w
+  close_width_cache[shape] = w
   return w
 end
 
@@ -510,10 +563,27 @@ function M.style_buf(bufnr, index, width)
   -- save/discard/cancel for a modified buffer, so wiring the same handler
   -- here is safe -- only the icon/highlight differs from the plain close
   -- button, as a reminder that closing will prompt.
+  --
+  -- A pinned chip takes over this same slot with a pin glyph instead: it
+  -- clicks through to `UiTbTogglePin` (unpin), not `KillBuf` -- middle-click
+  -- and the plain "x" both refuse to close a pinned chip anyway (see
+  -- `guard_pinned_close`), so offering "x" here would be a dead end.
   local modified = api.nvim_get_option_value("modified", { buf = bufnr })
-  local close_or_dot = modified
-      and M.txt(M.btn(" ● ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Modified")
-    or M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
+  local is_pinned = require("ui.bindings.keymaps.tabufline.state").is_pinned(bufnr)
+  local shape, close_or_dot
+  if is_pinned then
+    shape = "pinned"
+    close_or_dot = M.txt(
+      M.btn(" " .. pin_glyph() .. " ", nil, "TogglePin", bufnr),
+      "Buf" .. hl_suffix .. "Pinned"
+    )
+  elseif modified then
+    shape = "modified"
+    close_or_dot = M.txt(M.btn(" ● ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Modified")
+  else
+    shape = "unmodified"
+    close_or_dot = M.txt(M.btn(" 󰅖 ", nil, "KillBuf", bufnr), "Buf" .. hl_suffix .. "Close")
+  end
 
   -- icon + the single space that always follows it -- `strdisplaywidth`
   -- (not `#icon`) since devicon glyphs are multi-byte and occasionally
@@ -525,7 +595,7 @@ function M.style_buf(bufnr, index, width)
   -- this narrow) looks like a rendering glitch, not a deliberately tight
   -- chip.
   local min_side_pad = 1
-  local fixed = icon_part_width + close_width(modified, close_or_dot) + min_side_pad * 2
+  local fixed = icon_part_width + close_width(shape, close_or_dot) + min_side_pad * 2
 
   -- `math.max(0, ...)`, not `math.max(1, ...)`: below `fixed` (icon +
   -- padding + close/modified button, no name at all), there is no name

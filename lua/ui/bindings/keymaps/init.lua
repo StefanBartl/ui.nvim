@@ -55,6 +55,8 @@ function M.setup(opts)
       "prev",
       "close",
       "close_all",
+      "toggle_pin",
+      "reopen_closed",
       "move_right",
       "move_left",
       "move_to_tab",
@@ -103,6 +105,28 @@ function M.setup(opts)
           local ok2, err2 = pcall(require("ui.tabline.utils").close_all_bufs)
           if not ok2 then
             notify.warn("[ui.bindings.keymaps] Close-all failed: " .. tostring(err2))
+          end
+        end,
+      },
+      toggle_pin = {
+        default = "<leader>bp",
+        mode = "n",
+        desc = "pin/unpin the current buffer's tab",
+        rhs = function()
+          local ok2, err2 = pcall(tabufline_state.toggle_pinned, vim.api.nvim_get_current_buf())
+          if not ok2 then
+            notify.warn("[ui.bindings.keymaps] Pin toggle failed: " .. tostring(err2))
+          end
+        end,
+      },
+      reopen_closed = {
+        default = "<leader>bu",
+        mode = "n",
+        desc = "reopen the most recently closed tab",
+        rhs = function()
+          local ok2, err2 = pcall(require("ui.tabline.reopen").reopen)
+          if not ok2 then
+            notify.warn("[ui.bindings.keymaps] Reopen closed tab failed: " .. tostring(err2))
           end
         end,
       },

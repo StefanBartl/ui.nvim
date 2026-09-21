@@ -341,5 +341,103 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       assert.is_false(vim.tbl_contains(vim.t.bufs, c))
       a, c = nil, nil
     end)
+
+    it("never closes a pinned buffer, even without include_cur_buf", function()
+      state.set_pinned(a, true)
+      state.close_all_bufs()
+      assert.same({ a }, vim.t.bufs)
+      b, c = nil, nil
+    end)
+  end)
+
+  describe("pins", function()
+    it("is_pinned is false until set_pinned(true)", function()
+      assert.is_false(state.is_pinned(a))
+      assert.is_true(state.set_pinned(a, true))
+      assert.is_true(state.is_pinned(a))
+    end)
+
+    it("set_pinned reports false and changes nothing when already in that state", function()
+      assert.is_false(state.set_pinned(a, false)) -- already unpinned
+      state.set_pinned(a, true)
+      assert.is_false(state.set_pinned(a, true)) -- already pinned
+    end)
+
+    it("set_pinned reports false for an unlisted buffer", function()
+      assert.is_false(state.set_pinned(999999, true))
+    end)
+
+    it("toggle_pinned flips the state", function()
+      assert.is_true(state.toggle_pinned(a))
+      assert.is_true(state.is_pinned(a))
+      assert.is_true(state.toggle_pinned(a))
+      assert.is_false(state.is_pinned(a))
+    end)
+
+    it("pinning moves the buffer to the end of the pin block", function()
+      state.set_pinned(b, true) -- { a, b, c } -> { b, a, c }
+      assert.same({ b, a, c }, vim.t.bufs)
+      state.set_pinned(c, true) -- pin block grows to its right: { b, c, a }
+      assert.same({ b, c, a }, vim.t.bufs)
+    end)
+
+    it("unpinning moves the buffer to the front of the unpinned block", function()
+      state.set_pinned(b, true)
+      state.set_pinned(c, true) -- { b, c, a }
+      state.set_pinned(b, false) -- b leaves the pin block, lands right after it
+      assert.same({ c, b, a }, vim.t.bufs)
+      assert.is_false(state.is_pinned(b))
+      assert.is_true(state.is_pinned(c))
+    end)
+
+    it("move_buf_to clamps a pinned buffer's target to the pin block", function()
+      state.set_pinned(a, true) -- { a, b, c }, pin block = [1, 1]
+      assert.is_false(state.move_buf_to(a, 3)) -- clamped to 1, already there
+      assert.same({ a, b, c }, vim.t.bufs)
+
+      state.set_pinned(b, true) -- pin block = [1, 2]: { a, b, c }
+      assert.is_true(state.move_buf_to(a, 2)) -- swaps within the pin block
+      assert.same({ b, a, c }, vim.t.bufs)
+    end)
+
+    it("move_buf_to clamps an unpinned buffer's target out of the pin block", function()
+      state.set_pinned(a, true) -- { a, b, c }, pin block = [1, 1]
+      assert.is_false(state.move_buf_to(b, 1)) -- clamped to 2, already there
+      assert.same({ a, b, c }, vim.t.bufs)
+    end)
+
+    it("move_buf clamps a pinned buffer's swap partner to the pin block", function()
+      state.set_pinned(a, true)
+      state.set_pinned(b, true) -- pin block = [1, 2]: { a, b, c }
+      vim.api.nvim_set_current_buf(a)
+      state.move_buf(-1) -- would wrap to the last slot without the clamp
+      assert.same({ b, a, c }, vim.t.bufs)
+      assert.is_true(state.is_pinned(a))
+      assert.is_true(state.is_pinned(b))
+    end)
+
+    it(
+      "move_buf wraps an unpinned buffer within its own region instead of crossing into the pin block",
+      function()
+        state.set_pinned(a, true) -- { a, b, c }, pin block = [1, 1], unpinned region = [2, 3]
+        vim.api.nvim_set_current_buf(b) -- b is at the LEFT edge of its own region (slot 2)
+        state.move_buf(-1) -- wraps to the RIGHT edge of that same region, same as the
+        -- unclamped move_buf's own "wraps at either end" behaviour -- just scoped to
+        -- [2, 3] instead of the whole list, so it never reaches into the pin block.
+        assert.same({ a, c, b }, vim.t.bufs)
+        assert.is_true(state.is_pinned(a))
+        assert.is_false(state.is_pinned(b))
+      end
+    )
+
+    it("BufDelete drops the pin along with the buffer", function()
+      state.set_pinned(b, true)
+      vim.api.nvim_buf_delete(b, { force = true })
+      b = nil
+      -- Re-pinning a NEW buffer reusing no particular number just confirms
+      -- the old pin entry does not linger and misfire on it -- is_pinned on
+      -- an unrelated valid buffer must read false regardless.
+      assert.is_false(state.is_pinned(a))
+    end)
   end)
 end)

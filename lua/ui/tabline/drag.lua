@@ -16,6 +16,7 @@
 --- pointer as it goes, so the drop needs no separate commit step.
 
 local layout = require("ui.tabline.layout")
+local scroll = require("ui.tabline.scroll")
 local state = require("ui.bindings.keymaps.tabufline.state")
 
 local M = {}
@@ -71,6 +72,7 @@ function M.cancel()
   end
   active = nil
   stop_timer(drag)
+  scroll.reset()
 
   for _, mode in ipairs(MODES) do
     for _, key in ipairs(KEYS) do
@@ -117,6 +119,8 @@ local function on_drag()
   if not ok or type(pos) ~= "table" or pos.screenrow ~= 1 then
     return
   end
+
+  scroll.on_drag(pos.screencol)
 
   local target = layout.slot_at(pos.screencol)
   if not target or target == drag.bufnr then

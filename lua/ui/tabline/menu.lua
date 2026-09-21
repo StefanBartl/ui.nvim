@@ -21,6 +21,7 @@ local nerd = require("lib.nvim.ui.nerd_font")
 local notify = require("lib.nvim.notify").create("[ui.tabline.menu]")
 local state = require("ui.bindings.keymaps.tabufline.state")
 local utils = require("ui.tabline.utils")
+local reopen = require("ui.tabline.reopen")
 
 local api = vim.api
 
@@ -135,6 +136,29 @@ local function copy(text)
   notify.info("Copied: " .. text)
 end
 
+--- The "Reopen closed tab" submenu's items, newest close first -- one entry
+--- per `ui.tabline.reopen` ring slot, each reopening exactly that entry (not
+--- always the newest: `contextmenu.entry` is built with `entry.path` bound
+--- into its own closure, so picking the third one down still reopens that
+--- file, not whatever became newest by the time the menu was clicked).
+--- Empty when nothing has been closed yet -- `contextmenu.submenu` then
+--- drops the whole entry rather than showing a fly-out with nothing in it.
+---@return Ui.ContextMenu.Item[]
+local function reopen_items()
+  local items = {}
+  for _, entry in ipairs(reopen.list()) do
+    -- ":~:." -- relative to cwd, falling back to "~/..." outside it: the
+    -- same short, readable form the tab menu's own "Relative path" copy
+    -- uses, so two files that share a bare name (already a real case: see
+    -- `gen_unique_name` in ui.tabline.utils) still read as different entries.
+    local label = vim.fn.fnamemodify(entry.path, ":~:.")
+    items[#items + 1] = contextmenu.entry(true, label, function()
+      reopen.reopen(entry)
+    end)
+  end
+  return items
+end
+
 --- Send `bufnr` to a new tab page and drop it from this one's list.
 ---@param bufnr integer
 local function move_to_new_tab(bufnr)
@@ -182,41 +206,59 @@ function M.items(bufnr)
 
   local items = {}
 
+  local pinned = state.is_pinned(bufnr)
+
   contextmenu.group(
     items,
     contextmenu.heading(name),
     contextmenu.entry(modified and has_file and vim.bo[bufnr].buftype == "", "Save", function()
       save(bufnr)
     end, nil, icon("F0193", "S")),
+    contextmenu.entry(true, pinned and "Unpin" or "Pin", function()
+      state.toggle_pinned(bufnr)
+    end, nil, icon("F0403", "P")),
     contextmenu.entry(true, "Close", function()
       utils.close_buffer(bufnr)
     end, nil, icon("F0156", "x"))
   )
 
+  -- Every close SET below excludes pinned tabs (the roadmap's own
+  -- recommendation: a pin should survive a bulk close, not just a stray
+  -- click) -- `bufnr` itself is still offered plainly above via the
+  -- unfiltered "Close" entry, pinned or not, since clicking that on a
+  -- pinned tab's own menu is exactly the deliberate action `guard_pinned_close`
+  -- (ui.tabline.utils) lets through.
+  local others = vim.tbl_filter(function(b)
+    return b ~= bufnr and not state.is_pinned(b)
+  end, bufs)
+  local left = idx
+      and vim.tbl_filter(function(b)
+        return not state.is_pinned(b)
+      end, slice(1, idx - 1))
+    or {}
+  local right = idx
+      and vim.tbl_filter(function(b)
+        return not state.is_pinned(b)
+      end, slice(idx + 1, total))
+    or {}
+  local saved = vim.tbl_filter(function(b)
+    return not vim.bo[b].modified and not state.is_pinned(b)
+  end, bufs)
+
   contextmenu.group(
     items,
     contextmenu.heading("Close"),
-    contextmenu.entry(total > 1, "Close others", function()
-      close_set(
-        vim.tbl_filter(function(b)
-          return b ~= bufnr
-        end, bufs),
-        bufnr
-      )
+    contextmenu.entry(#others > 0, "Close others", function()
+      close_set(others, bufnr)
     end),
-    contextmenu.entry(idx ~= nil and idx > 1, "Close to the left", function()
-      close_set(slice(1, idx - 1), bufnr)
+    contextmenu.entry(#left > 0, "Close to the left", function()
+      close_set(left, bufnr)
     end),
-    contextmenu.entry(idx ~= nil and idx < total, "Close to the right", function()
-      close_set(slice(idx + 1, total), bufnr)
+    contextmenu.entry(#right > 0, "Close to the right", function()
+      close_set(right, bufnr)
     end),
-    contextmenu.entry(has_saved and has_unsaved, "Close saved", function()
-      close_set(
-        vim.tbl_filter(function(b)
-          return not vim.bo[b].modified
-        end, bufs),
-        bufnr
-      )
+    contextmenu.entry(has_saved and has_unsaved and #saved > 0, "Close saved", function()
+      close_set(saved, bufnr)
     end)
   )
 
@@ -266,7 +308,13 @@ function M.items(bufnr)
     end),
     contextmenu.entry(total > 1, "Move to new tab page", function()
       move_to_new_tab(bufnr)
-    end)
+    end),
+    -- Not really about `bufnr` -- reopening a closed file lands wherever the
+    -- CURRENT tab is, same as the `<leader>bu` keymap -- but it needs
+    -- SOME chip's menu to hang off, and every chip's menu is otherwise
+    -- already a function of the live `vim.t.bufs` regardless of which one
+    -- was clicked.
+    contextmenu.submenu("Reopen closed tab", reopen_items(), icon("F0713", "R"))
   )
 
   return items

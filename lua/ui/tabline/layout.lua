@@ -73,4 +73,25 @@ function M.slot_at(col)
   return last.bufs[#last.bufs], #last.bufs
 end
 
+--- The screen-column bounds of the rendered chip run: `left` is the first
+--- column of the first chip, `right` the last column of the last one. `nil`
+--- before the first render, or once every chip has been dropped (an empty
+--- `vim.t.bufs`). `ui.tabline.scroll` uses this to tell "the pointer is
+--- resting against this edge, during a drag" from "it is still well inside
+--- the bar".
+---@return integer|nil left
+---@return integer|nil right
+function M.chip_run_bounds()
+  if not last or #last.bufs == 0 then
+    return nil, nil
+  end
+
+  local left = width_of(last.prefix) + 1
+  local right = left - 1
+  for _, chip in ipairs(last.chips) do
+    right = right + width_of(chip)
+  end
+  return left, right
+end
+
 return M

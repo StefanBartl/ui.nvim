@@ -10,6 +10,7 @@ local utils = require("ui.tabline.utils")
 local menu = require("ui.tabline.menu")
 local render = require("ui.tabline.render")
 local drag = require("ui.tabline.drag")
+local reopen = require("ui.tabline.reopen")
 
 --- A named, listed buffer, made current -- which is what feeds `vim.t.bufs`.
 ---@param name string
@@ -276,6 +277,106 @@ describe("ui.tabline.menu.items", function()
       end
       find(menu.items(c), "Move to position…").cmd()
       assert.equals("3", seen)
+    end)
+  end)
+
+  describe("pins", function()
+    it("offers 'Pin' on an unpinned tab, 'Unpin' on a pinned one", function()
+      assert.is_true(has(menu.items(b), "Pin"))
+      assert.is_false(has(menu.items(b), "Unpin"))
+
+      state.set_pinned(b, true)
+      assert.is_false(has(menu.items(b), "Pin"))
+      assert.is_true(has(menu.items(b), "Unpin"))
+    end)
+
+    it("the 'Pin'/'Unpin' entry toggles the clicked tab's pin state", function()
+      find(menu.items(b), "Pin").cmd()
+      assert.is_true(state.is_pinned(b))
+      find(menu.items(b), "Unpin").cmd()
+      assert.is_false(state.is_pinned(b))
+    end)
+
+    it("Close others excludes a pinned tab from the set it closes", function()
+      state.set_pinned(a, true)
+
+      find(menu.items(b), "Close others").cmd()
+      vim.wait(1000, function()
+        return not vim.api.nvim_buf_is_loaded(c)
+      end)
+      assert.is_true(vim.api.nvim_buf_is_loaded(a)) -- pinned: survived "Close others"
+      assert.is_false(vim.api.nvim_buf_is_loaded(c))
+      assert.is_true(vim.api.nvim_buf_is_loaded(b))
+      -- `c` deliberately not nilled out: the outer after_each's
+      -- `ipairs({ a, b, c })` stops dead at the first nil hole -- see
+      -- tabufline_state_spec.lua's own `wipe()` helper doc comment for why.
+      -- Deleting an already-closed buffer there is a harmless pcall no-op.
+    end)
+
+    it("Close to the left drops a pinned tab from the slice it closes", function()
+      state.set_pinned(b, true) -- pin block regroups b to the front: { b, a, c }
+      -- "Close to the left" of c would otherwise be { b, a } -- b is excluded,
+      -- but a alone still makes the entry worth offering.
+      local entry = find(menu.items(c), "Close to the left")
+      assert.is_table(entry, "entry should still be offered: a is left to close")
+      entry.cmd()
+      vim.wait(1000, function()
+        return not vim.api.nvim_buf_is_loaded(a)
+      end)
+      assert.is_false(vim.api.nvim_buf_is_loaded(a))
+      assert.is_true(vim.api.nvim_buf_is_loaded(b)) -- pinned: survived
+    end)
+
+    it("hides 'Close to the left' once the only tab to the left is pinned", function()
+      state.set_pinned(a, true)
+      assert.is_false(has(menu.items(b), "Close to the left"))
+    end)
+
+    it("hides 'Close others' once every other tab is pinned", function()
+      state.set_pinned(a, true)
+      state.set_pinned(c, true)
+      assert.is_false(has(menu.items(b), "Close others"))
+    end)
+  end)
+
+  describe("reopen closed tab", function()
+    before_each(function()
+      reopen.clear()
+    end)
+
+    after_each(function()
+      reopen.clear()
+    end)
+
+    it("is absent from the menu while nothing has been closed", function()
+      assert.is_false(has(menu.items(b), "Reopen closed tab"))
+    end)
+
+    it("lists a closed file once something has been recorded", function()
+      local scratch_dir = vim.fn.stdpath("run") .. "/ui-tabline-menu-reopen-spec"
+      vim.fn.mkdir(scratch_dir, "p")
+      local path = scratch_dir .. "/reopen-me.txt"
+      vim.fn.writefile({ "x" }, path)
+
+      local buf = vim.fn.bufadd(path)
+      vim.fn.bufload(buf)
+      vim.bo[buf].buflisted = true
+      vim.t.bufs = { a, b, c, buf }
+      reopen.record(buf)
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+      vim.t.bufs = { a, b, c }
+
+      local entry = find(menu.items(b), "Reopen closed tab")
+      assert.is_table(entry)
+      assert.is_table(entry.items)
+      assert.equals(1, #entry.items)
+
+      entry.items[1].cmd()
+      assert.equals(path, vim.api.nvim_buf_get_name(0))
+      assert.is_false(reopen.has_any())
+
+      pcall(vim.api.nvim_buf_delete, 0, { force = true })
+      pcall(vim.fn.delete, scratch_dir, "rf")
     end)
   end)
 end)
