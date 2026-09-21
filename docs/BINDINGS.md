@@ -37,7 +37,7 @@ theme list.
 | `:UI zen` | `on`/`off` for an explicit state | Toggle the distraction-free box (`ui.zen`): the current buffer alone in a centred 120-column float over a dimmed backdrop, statusline/tabline/ruler hidden and the gutter emptied; closing the float any way restores everything |
 | `:UI notify` | `on`/`off` for an explicit state; `history` opens the recorded notifications in a viewer; `clear` forgets them | Toggle `ui.notify`: `vim.notify` rendered as level-coloured `ui.kit.toast`s with per-level timeouts, every message recorded in a ring buffer -- off by default; `ui.setup({ notify = true })` turns it on at startup |
 | `:UI keys [prefix]` | a key prefix as typed (`<leader>s`, `<C-w>`, `g`); default `<leader>` | Open the mappings under that prefix as a `ui.kit.menu`: one row per next key with the mapping's `desc`, prefixes with more below them as drill-down groups (named via `ui.keys.setup({ groups = ... })`), picking a row runs the mapping. Asked for, never timeout-triggered -- which-key's popup without the pending-key interception |
-| `:UI context` | `on`/`off` for an explicit state; `up [n]` jumps to the n-th enclosing scope above the window's top (1 = innermost, works with the overlay off) | Toggle the sticky code-context overlay (`ui.context`): the enclosing function/class/loop lines pinned over the window's first rows while the body scrolls -- off by default; `ui.setup({ context = true })` turns it on at startup |
+| `:UI sticky` (older spelling: `:UI context`) | `on`/`off`/`toggle` for an explicit state; `status` prints state, depth and row cap; `depth [1-6\|all]` the deepest Markdown heading level that is pinned; `lines [filetype] [n]` how many rows the context may take (0 = unlimited), for one filetype or for all the others; `up [n]` jumps to the n-th enclosing scope above the window's top (1 = innermost, works with the overlay off) | Toggle the sticky code-context overlay (`ui.context`): the enclosing function/class/loop lines, or in Markdown the heading chain, pinned over the window's first rows while the body scrolls -- off by default; `ui.setup({ sticky = true })` (or the older `context = true`) turns it on at startup. `depth` and `lines` change the running session only; for good, set `headings.max_level` and `max_lines` in that setup table |
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
@@ -55,10 +55,10 @@ loads — `require("ui.kit")` from any plugin, not just this one's own
 debounced delay after the last keystroke, not on every one (see the
 in-buffer reference block, or `EVAL_DEBOUNCE_MS` in `preview.lua`).
 
-**Completion is two-level:** the first argument completes over the thirteen
-subcommands, the argument after `theme`/`variant`/`tabline-style` over the
+**Completion is two-level, three for `sticky`:** the first argument completes
+over the subcommands, the argument after `theme`/`variant`/`tabline-style` over the
 theme list / the variant registry / the tabline-style registry
-respectively (`screenkey`/`transparency`/`zen` complete `on`/`off` the same way, `context` adds `up`, `notify` adds `history`/`clear`). The theme list is `vim.fn.getcompletion("", "color")` at the
+respectively (`screenkey`/`transparency`/`zen` complete `on`/`off` the same way, `sticky`/`context` add `toggle`/`status`/`depth`/`lines`/`up`, `notify` adds `history`/`clear`). A third argument completes after `sticky depth` (`1`-`6`, `all`) and `sticky lines` (filetypes). The theme list is `vim.fn.getcompletion("", "color")` at the
 moment `<Tab>` is pressed, so a colorscheme installed mid-session is
 offered; the variant and tabline-style lists are
 `ui.config.variants.list()`/`ui.tabline.styles.list()`, so an entry a host

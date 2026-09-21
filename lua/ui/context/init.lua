@@ -39,7 +39,16 @@
 --- deeper levels indent by their level -- the hierarchy reads at a glance.
 --- `cfg.headings` is the knob.
 ---
---- Off by default; `ui.setup({ context = true })` or `:UI context on`.
+--- How deep a Markdown context reaches is two separate limits.
+--- `headings.max_level` (1..6) leaves every heading deeper than that level out
+--- of the pinned chain; `max_lines` caps how many rows the chain may take, as
+--- one integer for every filetype or as a table keyed by filetype
+--- (`{ default = 3, markdown = 6 }`). The level cap runs first: inside an H5
+--- with `max_level = 4` the chain is H1..H4, and that is then trimmed to
+--- `max_lines`.
+---
+--- Off by default; `ui.setup({ context = true })` or `:UI sticky on` (`:UI
+--- context` is the older spelling of the same command).
 
 local M = {}
 
@@ -47,7 +56,7 @@ local NS = vim.api.nvim_create_namespace("ui_context")
 local AUGROUP = "UiContext"
 
 ---@class Ui.Context.Opts
----@field max_lines? integer
+---@field max_lines? integer|table<string, integer>
 ---@field trim? "outer"|"inner"
 ---@field min_window_height? integer
 ---@field debounce_ms? integer
@@ -60,14 +69,16 @@ local AUGROUP = "UiContext"
 
 ---@class Ui.Context.HeadingOpts
 ---@field enable? boolean
+---@field max_level? integer  # 1..6; a heading deeper than this is not pinned (6 = every level)
 ---@field icons? string[]|false  # one glyph per level 1..6, each drawn over the `#` marker; false = keep the `#`s
 
 ---@class Ui.Context.Headings
 ---@field enable boolean
+---@field max_level integer
 ---@field icons string[]|false
 
 ---@class Ui.Context.Config
----@field max_lines integer            # rows the overlay may take; 0 = unlimited
+---@field max_lines integer|table<string, integer> # rows the overlay may take; 0 = unlimited; a table maps filetype -> rows, `default` for the rest
 ---@field trim "outer"|"inner"         # which contexts to drop past `max_lines`: the outer (default) or the inner ones
 ---@field min_window_height integer    # a window shorter than this shows no context
 ---@field debounce_ms integer          # after a scroll/edit; 0 = refresh at once
@@ -77,8 +88,11 @@ local AUGROUP = "UiContext"
 ---@field exclude_filetypes string[]
 ---@field zindex integer
 ---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
+local DEFAULT_MAX_LINES = 3
+local MAX_HEADING_LEVEL = 6
+
 local cfg = {
-  max_lines = 3,
+  max_lines = DEFAULT_MAX_LINES,
   trim = "outer",
   min_window_height = 6,
   debounce_ms = 30,
@@ -132,6 +146,7 @@ local cfg = {
   zindex = 20,
   headings = {
     enable = true,
+    max_level = MAX_HEADING_LEVEL,
     -- nf-md-numeric_N_box_outline, N = 1..6. `nr2char`, not a literal: an
     -- editor pass has dropped private-use glyphs from source files before.
     icons = (function()
@@ -279,11 +294,80 @@ function M.contexts(buf, top_row)
 end
 
 ---@internal
----Apply `max_lines`/`trim` to a context list.
+---The `max_lines` that applies to `buf`: the number itself, or -- for the
+---per-filetype table -- the buffer's filetype entry, else `default`, else the
+---shipped 3.
+---@param buf integer
+---@return integer|nil
+local function max_lines_for(buf)
+  local max = cfg.max_lines
+  if type(max) ~= "table" then
+    return max
+  end
+  local by_ft = max[vim.bo[buf].filetype]
+  if by_ft ~= nil then
+    return by_ft
+  end
+  if max.default ~= nil then
+    return max.default
+  end
+  return DEFAULT_MAX_LINES
+end
+
+---@internal
+---Heading level of the Markdown section that starts on `row`: an ATX `#`
+---marker (up to three spaces of indent, then 1..6 `#` and a blank or the end
+---of the line, as CommonMark has it), or a Setext underline on the next row
+---(`===` is 1, `---` is 2). nil when neither is there.
+---@param buf integer
+---@param row integer  0-based
+---@return integer|nil
+local function section_level(buf, row)
+  local lines = vim.api.nvim_buf_get_lines(buf, row, row + 2, false)
+  local first = lines[1] or ""
+  local marker = first:match("^ ? ? ?(#+)[ \t]") or first:match("^ ? ? ?(#+)$")
+  if marker then
+    return #marker <= MAX_HEADING_LEVEL and #marker or nil
+  end
+  local underline = lines[2] or ""
+  if underline:match("^=+%s*$") then
+    return 1
+  end
+  if underline:match("^%-+%s*$") then
+    return 2
+  end
+  return nil
+end
+
+---@internal
+---Drop the Markdown sections deeper than `headings.max_level`. Other
+---filetypes, and a level of 6, pass through untouched. A section whose level
+---cannot be read is kept: better one line too many than a hole in the chain.
+---@param buf integer
 ---@param entries Ui.Context.Entry[]
 ---@return Ui.Context.Entry[]
-local function trimmed(entries)
-  local max = cfg.max_lines
+local function within_max_level(buf, entries)
+  local max = cfg.headings.max_level
+  if vim.bo[buf].filetype ~= "markdown" or max >= MAX_HEADING_LEVEL then
+    return entries
+  end
+  local out = {}
+  for _, e in ipairs(entries) do
+    local level = e.type == "section" and section_level(buf, e.row) or nil
+    if not level or level <= max then
+      out[#out + 1] = e
+    end
+  end
+  return out
+end
+
+---@internal
+---Apply `max_lines`/`trim` to a context list.
+---@param buf integer
+---@param entries Ui.Context.Entry[]
+---@return Ui.Context.Entry[]
+local function trimmed(buf, entries)
+  local max = max_lines_for(buf)
   if type(max) ~= "number" or max <= 0 or #entries <= max then
     return entries
   end
@@ -540,11 +624,14 @@ function M.refresh(win)
     return vim.fn.line("w0")
   end) - 1
   local entries = M.contexts(buf, top)
+  if entries then
+    entries = within_max_level(buf, entries)
+  end
   if not entries or #entries == 0 then
     close_float(win)
     return 0
   end
-  entries = trimmed(entries)
+  entries = trimmed(buf, entries)
 
   -- Never over the cursor line: in the window that has focus, the rows the
   -- overlay would cover must not be where the cursor is.
@@ -646,12 +733,46 @@ end
 
 -- ---------------------------------------------------------------- lifecycle
 
----Override the shipped tunables. Safe before or after `enable()`.
+---@internal
+---A `max_lines` value if it is a non-negative number, else nil.
+---@param v any
+---@return integer|nil
+local function as_line_count(v)
+  if type(v) == "number" and v >= 0 then
+    return math.floor(v)
+  end
+  return nil
+end
+
+---@internal
+---A heading level clamped into 1..6, or nil for anything that is not a number.
+---@param v any
+---@return integer|nil
+local function as_heading_level(v)
+  if type(v) ~= "number" then
+    return nil
+  end
+  return math.min(math.max(math.floor(v), 1), MAX_HEADING_LEVEL)
+end
+
+---Override the shipped tunables. Safe before or after `enable()`. A value of
+---the wrong type is ignored, the previous one stays.
 ---@param opts Ui.Context.Opts|nil
 function M.setup(opts)
   opts = opts or {}
+  if type(opts.max_lines) == "table" then
+    local map = {}
+    for ft, n in pairs(opts.max_lines) do
+      local count = type(ft) == "string" and as_line_count(n) or nil
+      if count then
+        map[ft] = count
+      end
+    end
+    cfg.max_lines = map
+  elseif as_line_count(opts.max_lines) then
+    cfg.max_lines = as_line_count(opts.max_lines)
+  end
   for _, k in ipairs({
-    "max_lines",
     "trim",
     "min_window_height",
     "debounce_ms",
@@ -670,6 +791,7 @@ function M.setup(opts)
       if h.enable ~= nil then
         cfg.headings.enable = h.enable
       end
+      cfg.headings.max_level = as_heading_level(h.max_level) or cfg.headings.max_level
       if h.icons ~= nil then
         cfg.headings.icons = h.icons
       end
@@ -755,6 +877,65 @@ end
 ---@return boolean
 function M.is_enabled()
   return enabled
+end
+
+---Cap the Markdown heading level that gets pinned (`:UI sticky depth N`).
+---@param level integer  clamped into 1..6
+---@return integer applied
+function M.set_max_level(level)
+  M.setup({ headings = { max_level = level } })
+  return cfg.headings.max_level
+end
+
+---Set the row cap. With `ft` it sets that filetype's entry and leaves the
+---rest alone; without, it sets the number every filetype falls back to
+---(`default`, or the plain number when no table is in use). A value that is
+---not a non-negative number changes nothing -- `setup` would drop it and, with
+---it, the entry it was meant to replace.
+---@param n integer
+---@param ft string|nil
+---@return boolean applied
+function M.set_max_lines(n, ft)
+  local count = as_line_count(n)
+  if not count then
+    return false
+  end
+  local cur = cfg.max_lines
+  if ft then
+    local map = type(cur) == "table" and vim.deepcopy(cur) or { default = cur }
+    map[ft] = count
+    M.setup({ max_lines = map })
+  elseif type(cur) == "table" then
+    local map = vim.deepcopy(cur)
+    map.default = count
+    M.setup({ max_lines = map })
+  else
+    M.setup({ max_lines = count })
+  end
+  return true
+end
+
+---`max_lines` as one readable string: `3`, or `3 (markdown 6, text 1)` when
+---per-filetype entries exist.
+---@return string
+function M.describe_max_lines()
+  local max = cfg.max_lines
+  if type(max) ~= "table" then
+    return tostring(max)
+  end
+  local fts = vim.tbl_filter(function(ft)
+    return ft ~= "default"
+  end, vim.tbl_keys(max))
+  table.sort(fts)
+  local parts = {}
+  for _, ft in ipairs(fts) do
+    parts[#parts + 1] = ft .. " " .. max[ft]
+  end
+  local base = tostring(max.default or DEFAULT_MAX_LINES)
+  if #parts == 0 then
+    return base
+  end
+  return base .. " (" .. table.concat(parts, ", ") .. ")"
 end
 
 ---The active configuration (read-only by convention).

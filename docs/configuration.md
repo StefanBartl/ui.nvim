@@ -33,6 +33,7 @@ require("ui").setup({
   usrcmds = true,  -- the :UI command and theme management
   menu = false,    -- opt out of ui.contextmenu's renderer/trigger
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
+                   -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
 })
 ```
@@ -44,8 +45,29 @@ command should not get that as a side effect. Pass `true` for the shipped
 tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
-headings = { enable = true, icons = {...} } }`) to override them; `:UI context`
-toggles it for the session either way.
+headings = { enable = true, max_level = 6, icons = {...} } }`) to override them;
+`:UI sticky` (`:UI context` is the older spelling) toggles it for the session
+either way.
+
+How deep the context reaches is two separate limits:
+
+- `headings.max_level` (1..6, default 6) is the deepest Markdown heading level
+  that is pinned. Inside an H5 section with `max_level = 4` the chain is H1..H4;
+  the H5 itself is not pinned. Setext headings count too (`===` is level 1,
+  `---` level 2). It only affects Markdown; `:UI sticky up` still reaches every
+  section, pinned or not.
+- `max_lines` (default 3, 0 = unlimited) is how many rows the context may take,
+  after the level cap. One number for every filetype, or a table keyed by
+  filetype: `max_lines = { default = 3, markdown = 6 }`. A filetype without an
+  entry takes `default`. `trim = "outer"` (the default) drops the outermost
+  lines past the cap, `"inner"` the innermost.
+
+At runtime `:UI sticky depth 4` and `:UI sticky lines markdown 6` change the same
+two values for the session.
+
+Outside Markdown the context comes from Tree-sitter, so a filetype without a
+parser (plain text) pins nothing. Which nodes count as a scope is `node_types`
+/ `exclude_node_types`, one Lua-pattern list for every grammar.
 
 In a Markdown buffer the pinned heading lines are drawn as headings, not as
 raw source: each takes its level's `@markup.heading.N.markdown` colours (through

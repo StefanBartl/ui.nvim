@@ -221,24 +221,98 @@ local function ui_keys_cmd(args)
   end
 end
 
----Handle context command -- the sticky code-context overlay, off by default
----(see `ui.context`'s own doc comment). `on`/`off` set an explicit state,
----no argument toggles, and `up [n]` jumps the cursor to the n-th enclosing
----scope above the top of the window (1 = innermost) -- that one works with
----the overlay off as well, it only needs the parser.
+---@param s string|nil
+---@return integer|nil # `s` as a whole number, nil for anything else
+local function whole_number(s)
+  local n = tonumber(s)
+  if n and n == math.floor(n) then
+    return n
+  end
+  return nil
+end
+
+---Handle sticky command (also spelled `context`) -- the sticky code-context
+---overlay, off by default (see `ui.context`'s own doc comment).
+---
+---  `on`/`off`        set an explicit state; no argument (or `toggle`) toggles
+---  `status`          state, heading depth and row cap
+---  `depth [1-6]`     the deepest Markdown heading level that gets pinned
+---  `lines [ft] [n]`  how many rows the context may take, for one filetype or
+---                    for the default; 0 = unlimited
+---  `up [n]`          jump the cursor to the n-th enclosing scope above the top
+---                    of the window (1 = innermost) -- works with the overlay
+---                    off as well, it only needs the parser
+---
+---`depth`/`lines` change the running session only; the persistent form is
+---`ui.setup({ context = { headings = { max_level = N }, max_lines = ... } })`.
 ---@param args string[]
-local function ui_context(args)
+local function ui_sticky(args)
   local action = args[2]
+  local cfg = context.config()
 
   if action == "on" then
     context.enable()
-    notify.info(prefix(ICON.context, "Context enabled"))
+    notify.info(prefix(ICON.context, "Sticky context enabled"))
     return
   end
 
   if action == "off" then
     context.disable()
-    notify.info(prefix(ICON.context, "Context disabled"))
+    notify.info(prefix(ICON.context, "Sticky context disabled"))
+    return
+  end
+
+  if action == "status" then
+    notify.info(
+      prefix(
+        ICON.context,
+        ("Sticky context %s -- depth %d (deepest Markdown heading), lines %s"):format(
+          context.is_enabled() and "on" or "off",
+          cfg.headings.max_level,
+          context.describe_max_lines()
+        )
+      )
+    )
+    return
+  end
+
+  if action == "depth" then
+    if args[3] == nil then
+      notify.info(
+        prefix(
+          ICON.context,
+          ("Depth: Markdown headings down to level %d"):format(cfg.headings.max_level)
+        )
+      )
+      return
+    end
+    local level = args[3] == "all" and 6 or whole_number(args[3])
+    if not level or level < 1 or level > 6 then
+      notify.warn(prefix(ICON.context, "Usage: :UI sticky depth <1-6|all>"))
+      return
+    end
+    notify.info(
+      prefix(
+        ICON.context,
+        ("Depth: Markdown headings down to level %d"):format(context.set_max_level(level))
+      )
+    )
+    return
+  end
+
+  if action == "lines" then
+    -- `lines <n>` or `lines <filetype> <n>`; bare `lines` shows the current cap
+    if args[3] == nil then
+      notify.info(prefix(ICON.context, ("Lines: %s"):format(context.describe_max_lines())))
+      return
+    end
+    local ft = args[4] ~= nil and args[3] or nil
+    local n = whole_number(args[4] ~= nil and args[4] or args[3])
+    if not n or not context.set_max_lines(n, ft) then
+      notify.warn(prefix(ICON.context, "Usage: :UI sticky lines [filetype] <n>  (0 = unlimited)"))
+      return
+    end
+    notify.info(prefix(ICON.context, ("Lines: %s"):format(context.describe_max_lines())))
     return
   end
 
@@ -250,8 +324,15 @@ local function ui_context(args)
     return
   end
 
+  if action ~= nil and action ~= "toggle" then
+    notify.warn(prefix(ICON.context, ("Unknown sticky action '%s' -- see :UI help"):format(action)))
+    return
+  end
+
   local now_enabled = context.toggle()
-  notify.info(prefix(ICON.context, ("Context %s"):format(now_enabled and "enabled" or "disabled")))
+  notify.info(
+    prefix(ICON.context, ("Sticky context %s"):format(now_enabled and "enabled" or "disabled"))
+  )
 end
 
 ---Handle theme command
@@ -579,10 +660,13 @@ local function ui_help(_args)
 │  :UI screenkey on           Enable screenkey         │
 │  :UI screenkey off          Disable screenkey        │
 │                                                      │
-│  :UI context                Toggle the code context  │
-│  :UI context on             Enable the context       │
-│  :UI context off            Disable the context      │
-│  :UI context up [n]         Jump to the n-th scope   │
+│  :UI sticky                 Toggle the sticky context│
+│  :UI sticky on|off          Explicit state           │
+│  :UI sticky status          Show state, depth, lines │
+│  :UI sticky depth [1-6]     Deepest heading pinned   │
+│  :UI sticky lines [ft] [n]  Row cap (0 = unlimited)  │
+│  :UI sticky up [n]          Jump to the n-th scope   │
+│  :UI context ...            Same command, older name │
 │                                                      │
 │  :UI color [#hex]           Open the colour picker   │
 │                                                      │
@@ -635,7 +719,8 @@ end
 local SUBCOMMANDS = {
   { name = "transparency", fn = ui_transparency },
   { name = "screenkey", fn = ui_screenkey },
-  { name = "context", fn = ui_context },
+  { name = "sticky", fn = ui_sticky },
+  { name = "context", fn = ui_sticky }, -- the older name; same command
   { name = "color", fn = ui_color },
   { name = "zen", fn = ui_zen },
   { name = "winpick", fn = ui_winpick },
@@ -729,8 +814,8 @@ local function complete(arglead, cmdline, _cursorpos)
       return filter(arglead, { "on", "off" })
     end
 
-    if subcmd == "context" then
-      return filter(arglead, { "on", "off", "up" })
+    if subcmd == "sticky" or subcmd == "context" then
+      return filter(arglead, { "on", "off", "toggle", "status", "depth", "lines", "up" })
     end
 
     if subcmd == "zen" then
@@ -756,6 +841,17 @@ local function complete(arglead, cmdline, _cursorpos)
       -- Same registry-not-static-list reasoning as "variant" above, one
       -- module over: require("ui.tabline.styles").register(name, fn).
       return filter(arglead, require("ui.tabline.styles").list())
+    end
+  end
+
+  -- Complete third argument: only `sticky` has one, its `depth` level and the
+  -- filetype of its `lines`.
+  if num_args == 3 and (parts[2] == "sticky" or parts[2] == "context") then
+    if parts[3] == "depth" then
+      return filter(arglead, { "1", "2", "3", "4", "5", "6", "all" })
+    end
+    if parts[3] == "lines" then
+      return filter(arglead, vim.fn.getcompletion("", "filetype"))
     end
   end
 
