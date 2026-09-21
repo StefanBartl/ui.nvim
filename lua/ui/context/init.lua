@@ -52,8 +52,15 @@
 --- with `max_level = 4` the chain is H1..H4, and that is then trimmed to
 --- `max_lines`.
 ---
+--- `:UI sticky depth` / `lines` set those two at runtime. With `persist = true`
+--- the values a command set are also written to a JSON file (`ui.context.state`)
+--- and applied on top of the configured ones at the next `setup`; `reset` drops
+--- them again and returns to what the configuration said.
+---
 --- Off by default; `ui.setup({ context = true })` or `:UI sticky on` (`:UI
 --- context` is the older spelling of the same command).
+
+local state = require("ui.context.state")
 
 local M = {}
 
@@ -71,6 +78,8 @@ local AUGROUP = "UiContext"
 ---@field exclude_filetypes? string[]
 ---@field zindex? integer
 ---@field headings? boolean|Ui.Context.HeadingOpts
+---@field persist? boolean  # keep what `:UI sticky depth`/`lines` set across restarts (default false)
+---@field state_file? string  # where; default `stdpath("state")/ui.nvim/sticky.json`
 
 ---@class Ui.Context.HeadingOpts
 ---@field enable? boolean
@@ -96,7 +105,10 @@ local MAX_HEADING_LEVEL = 6
 ---@field exclude_filetypes string[]
 ---@field zindex integer
 ---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
+---@field persist boolean              # `:UI sticky depth`/`lines` are written to `state_file` and read back at the next `setup`
+---@field state_file string|nil        # nil = `ui.context.state.default_path()`
 local cfg = {
+  persist = false,
   max_lines = DEFAULT_MAX_LINES,
   trim = "outer",
   min_window_height = 6,
@@ -152,6 +164,7 @@ local cfg = {
     "^do_while_statement$", -- kotlin
     "^record_declaration$", -- java, c#
     "^internal_module$", -- typescript: `namespace Foo {`
+    "^block_mapping_pair$", -- yaml: the parent keys of a deeply nested key (`jobs:` > `build:` > `steps:`)
   },
   exclude_node_types = {
     "call",
@@ -191,6 +204,15 @@ local cfg = {
 
 ---@type boolean
 local enabled = false
+
+--- What the host's configuration set for the two values `:UI sticky depth` and
+--- `lines` change, so `reset` can go back to it.
+---@type { max_level: integer, max_lines: integer|table<string, integer> }
+local configured = { max_level = MAX_HEADING_LEVEL, max_lines = DEFAULT_MAX_LINES }
+
+--- What commands changed on top of `configured`; this is what `persist` writes out.
+---@type Ui.Context.Saved
+local overrides = {}
 
 --- Per window: the float and what it currently shows.
 ---@type table<integer, { win: integer, buf: integer, key: string }>
@@ -866,11 +888,34 @@ local function as_heading_level(v)
   return math.min(math.max(math.floor(v), 1), MAX_HEADING_LEVEL)
 end
 
----Override the shipped tunables. Safe before or after `enable()`. A value of
----the wrong type is ignored, the previous one stays.
----@param opts Ui.Context.Opts|nil
-function M.setup(opts)
-  opts = opts or {}
+---@internal
+---Write `overrides` to the state file, or delete the file once nothing is
+---overridden. Does nothing unless `persist` is on. A failure is a warning, never
+---an error: the value is set for this session either way.
+---@return nil
+local function persist_overrides()
+  if not cfg.persist then
+    return
+  end
+  local path = cfg.state_file or state.default_path()
+  local ok, err
+  if next(overrides) == nil then
+    ok, err = state.remove(path)
+  else
+    ok, err = state.write(path, overrides)
+  end
+  if not ok then
+    vim.notify("ui.context: could not save sticky settings: " .. tostring(err), vim.log.levels.WARN)
+  end
+end
+
+---@internal
+---Apply the tunables in `opts` to `cfg`. A value of the wrong type is ignored,
+---the previous one stays.
+---@param opts Ui.Context.Opts
+---@return boolean lines_set, boolean level_set # whether `max_lines` / `headings.max_level` were taken from `opts`
+local function apply(opts)
+  local lines_set, level_set = false, false
   if type(opts.max_lines) == "table" then
     local map = {}
     for ft, n in pairs(opts.max_lines) do
@@ -880,8 +925,10 @@ function M.setup(opts)
       end
     end
     cfg.max_lines = map
+    lines_set = true
   elseif as_line_count(opts.max_lines) then
     cfg.max_lines = as_line_count(opts.max_lines)
+    lines_set = true
   end
   for _, k in ipairs({
     "trim",
@@ -902,7 +949,11 @@ function M.setup(opts)
       if h.enable ~= nil then
         cfg.headings.enable = h.enable
       end
-      cfg.headings.max_level = as_heading_level(h.max_level) or cfg.headings.max_level
+      local level = as_heading_level(h.max_level)
+      if level then
+        cfg.headings.max_level = level
+        level_set = true
+      end
       if h.icons ~= nil then
         cfg.headings.icons = h.icons
       end
@@ -921,6 +972,80 @@ function M.setup(opts)
     M.close_all()
     M.refresh_all()
   end
+  return lines_set, level_set
+end
+
+---@internal
+---Set the row cap for `ft`, or for every filetype without an entry when `ft`
+---is nil. Refuses what is not a non-negative number, since `apply` would drop it
+---and, with it, the entry it was meant to replace.
+---@param n any
+---@param ft string|nil
+---@return integer|nil applied
+local function assign_max_lines(n, ft)
+  local count = as_line_count(n)
+  if not count then
+    return nil
+  end
+  local cur = cfg.max_lines
+  if ft then
+    local map = type(cur) == "table" and vim.deepcopy(cur) or { default = cur }
+    map[ft] = count
+    apply({ max_lines = map })
+  elseif type(cur) == "table" then
+    local map = vim.deepcopy(cur)
+    map.default = count
+    apply({ max_lines = map })
+  else
+    apply({ max_lines = count })
+  end
+  return count
+end
+
+---@internal
+---Put `overrides` on top of the current values.
+---@return nil
+local function reapply_overrides()
+  if overrides.max_level then
+    apply({ headings = { max_level = overrides.max_level } })
+  end
+  for ft, n in pairs(overrides.lines or {}) do
+    assign_max_lines(n, ft ~= "default" and ft or nil)
+  end
+end
+
+---Override the shipped tunables. Safe before or after `enable()`. A value of
+---the wrong type is ignored, the previous one stays.
+---
+---Stating `max_lines` or `headings.max_level` here is stating the host's
+---configuration: it becomes what `reset()` returns to, and replaces an override a
+---command made earlier for that value. With `persist = true` (or a `state_file`)
+---in `opts`, the saved overrides are read from the state file and applied on top.
+---@param opts Ui.Context.Opts|nil
+function M.setup(opts)
+  opts = opts or {}
+  local lines_set, level_set = apply(opts)
+  if lines_set then
+    configured.max_lines = vim.deepcopy(cfg.max_lines)
+    overrides.lines = nil
+  end
+  if level_set then
+    configured.max_level = cfg.headings.max_level
+    overrides.max_level = nil
+  end
+  if opts.persist ~= nil then
+    cfg.persist = opts.persist == true
+  end
+  if type(opts.state_file) == "string" then
+    cfg.state_file = opts.state_file
+  end
+  if cfg.persist and (opts.persist ~= nil or opts.state_file ~= nil) then
+    local saved = state.read(cfg.state_file or state.default_path())
+    if saved then
+      overrides = saved
+    end
+  end
+  reapply_overrides()
 end
 
 ---Turn the overlay on: highlight groups, autocmds, a first refresh.
@@ -995,36 +1120,67 @@ end
 ---@param level integer  clamped into 1..6
 ---@return integer applied
 function M.set_max_level(level)
-  M.setup({ headings = { max_level = level } })
+  local _, level_set = apply({ headings = { max_level = level } })
+  if level_set then
+    overrides.max_level = cfg.headings.max_level
+    persist_overrides()
+  end
   return cfg.headings.max_level
 end
 
 ---Set the row cap. With `ft` it sets that filetype's entry and leaves the
 ---rest alone; without, it sets the number every filetype falls back to
 ---(`default`, or the plain number when no table is in use). A value that is
----not a non-negative number changes nothing -- `setup` would drop it and, with
+---not a non-negative number changes nothing -- `apply` would drop it and, with
 ---it, the entry it was meant to replace.
 ---@param n integer
 ---@param ft string|nil
 ---@return boolean applied
 function M.set_max_lines(n, ft)
-  local count = as_line_count(n)
+  local count = assign_max_lines(n, ft)
   if not count then
     return false
   end
-  local cur = cfg.max_lines
-  if ft then
-    local map = type(cur) == "table" and vim.deepcopy(cur) or { default = cur }
-    map[ft] = count
-    M.setup({ max_lines = map })
-  elseif type(cur) == "table" then
-    local map = vim.deepcopy(cur)
-    map.default = count
-    M.setup({ max_lines = map })
-  else
-    M.setup({ max_lines = count })
-  end
+  overrides.lines = overrides.lines or {}
+  overrides.lines[ft or "default"] = count
+  persist_overrides()
   return true
+end
+
+---Drop what `:UI sticky depth` / `lines` changed and go back to the values the
+---configuration set. Deletes the state file when `persist` is on.
+---@return boolean had_overrides
+function M.reset()
+  local had = next(overrides) ~= nil
+  overrides = {}
+  apply({ max_lines = configured.max_lines, headings = { max_level = configured.max_level } })
+  persist_overrides()
+  return had
+end
+
+---What commands changed, as one readable string (`depth 3, lines markdown 2`), or
+---nil when nothing is overridden.
+---@return string|nil
+function M.describe_overrides()
+  local parts = {}
+  if overrides.max_level then
+    parts[#parts + 1] = "depth " .. overrides.max_level
+  end
+  local fts = vim.tbl_keys(overrides.lines or {})
+  table.sort(fts)
+  for _, ft in ipairs(fts) do
+    parts[#parts + 1] = "lines " .. (ft == "default" and "" or ft .. " ") .. overrides.lines[ft]
+  end
+  if #parts == 0 then
+    return nil
+  end
+  return table.concat(parts, ", ")
+end
+
+---Whether `depth` / `lines` changes are written to the state file.
+---@return boolean
+function M.is_persisting()
+  return cfg.persist
 end
 
 ---`max_lines` as one readable string: `3`, or `3 (markdown 6, text 1)` when

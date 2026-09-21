@@ -79,6 +79,7 @@ describe("ui.context", function()
       trim = "outer",
       min_window_height = 6,
       line_numbers = true,
+      persist = false,
       headings = { enable = true, max_level = 6, icons = DEFAULT_ICONS },
       node_types = DEFAULT_NODE_TYPES,
       exclude_node_types = DEFAULT_EXCLUDES,
@@ -665,6 +666,154 @@ describe("ui.context", function()
       assert.same({ "### Three" }, texts(overlay_lines(win)))
     end)
 
+    describe("saved settings (persist)", function()
+      local file
+
+      ---@param tbl table
+      local function write_saved(tbl)
+        vim.fn.mkdir(vim.fs.dirname(file), "p")
+        vim.fn.writefile({ vim.json.encode(tbl) }, file)
+      end
+
+      ---@return table|nil
+      local function read_saved()
+        if vim.fn.filereadable(file) ~= 1 then
+          return nil
+        end
+        return vim.json.decode(table.concat(vim.fn.readfile(file), "\n"))
+      end
+
+      before_each(function()
+        file = vim.fn.tempname() .. "/ui.nvim/sticky.json"
+      end)
+
+      after_each(function()
+        vim.fn.delete(vim.fs.dirname(file), "rf")
+      end)
+
+      it("writes nothing while persist is off", function()
+        context.setup({ state_file = file })
+        context.set_max_level(3)
+        context.set_max_lines(2, "markdown")
+        assert.is_nil(read_saved())
+        assert.equals("depth 3, lines markdown 2", context.describe_overrides())
+      end)
+
+      it("writes what depth and lines set, and only that", function()
+        context.setup({ persist = true, state_file = file })
+        context.set_max_level(3)
+        assert.same({ max_level = 3 }, read_saved())
+        context.set_max_lines(2, "markdown")
+        context.set_max_lines(4)
+        assert.same({ max_level = 3, lines = { markdown = 2, default = 4 } }, read_saved())
+        context.set_max_lines(-1, "markdown")
+        assert.same(
+          { max_level = 3, lines = { markdown = 2, default = 4 } },
+          read_saved(),
+          "a refused value is not saved"
+        )
+      end)
+
+      it("applies the saved values on top of the configuration at setup", function()
+        write_saved({ max_level = 3, lines = { markdown = 2 } })
+        context.setup({
+          max_lines = { default = 3, markdown = 6 },
+          headings = { max_level = 5 },
+          persist = true,
+          state_file = file,
+        })
+        assert.equals(3, context.config().headings.max_level)
+        assert.equals("3 (markdown 2)", context.describe_max_lines())
+        assert.is_true(context.is_persisting())
+      end)
+
+      it("reset returns to the configured values and deletes the file", function()
+        write_saved({ max_level = 3, lines = { markdown = 2 } })
+        context.setup({
+          max_lines = { default = 3, markdown = 6 },
+          headings = { max_level = 5 },
+          persist = true,
+          state_file = file,
+        })
+        assert.is_true(context.reset())
+        assert.equals(5, context.config().headings.max_level)
+        assert.equals("3 (markdown 6)", context.describe_max_lines())
+        assert.is_nil(context.describe_overrides())
+        assert.is_nil(read_saved())
+        assert.is_false(context.reset(), "nothing left to reset")
+      end)
+
+      it("reset without persist restores the configuration and leaves the file alone", function()
+        context.setup({ max_lines = 3, headings = { max_level = 5 }, state_file = file })
+        write_saved({ max_level = 2 })
+        context.set_max_level(1)
+        context.set_max_lines(9)
+        assert.is_true(context.reset())
+        assert.equals(5, context.config().headings.max_level)
+        assert.equals(3, context.config().max_lines)
+        assert.same({ max_level = 2 }, read_saved())
+      end)
+
+      it("a config that restates a value replaces the command's earlier override", function()
+        context.set_max_lines(2, "markdown")
+        context.set_max_level(2)
+        context.setup({ max_lines = 3, headings = { max_level = 6 } })
+        assert.equals("3", context.describe_max_lines())
+        assert.equals(6, context.config().headings.max_level)
+        assert.is_nil(context.describe_overrides())
+      end)
+
+      it("ignores a missing, malformed or invalid file", function()
+        assert.has_no.errors(function()
+          context.setup({ persist = true, state_file = file })
+        end)
+        assert.equals(6, context.config().headings.max_level, "no file: nothing applied")
+
+        vim.fn.mkdir(vim.fs.dirname(file), "p")
+        vim.fn.writefile({ "{ not json" }, file)
+        assert.has_no.errors(function()
+          context.setup({ persist = true, state_file = file })
+        end)
+        assert.equals(6, context.config().headings.max_level)
+
+        write_saved({ max_level = 9, lines = { markdown = -1, lua = "x" } })
+        context.setup({ persist = true, state_file = file })
+        assert.equals(6, context.config().headings.max_level, "level out of 1..6 is dropped")
+        assert.equals("3", context.describe_max_lines(), "bad line caps are dropped")
+
+        write_saved({ max_level = 2, lines = { markdown = -1, lua = 4 } })
+        context.setup({ persist = true, state_file = file })
+        assert.equals(
+          2,
+          context.config().headings.max_level,
+          "a valid entry survives its neighbours"
+        )
+        assert.equals("3 (lua 4)", context.describe_max_lines())
+      end)
+
+      it("creates the missing state directory", function()
+        context.setup({ persist = true, state_file = file })
+        assert.equals(0, vim.fn.isdirectory(vim.fs.dirname(file)))
+        context.set_max_level(4)
+        assert.same({ max_level = 4 }, read_saved())
+      end)
+
+      it("survives a restart: a second setup reads what the first one saved", function()
+        context.setup({ persist = true, state_file = file })
+        context.set_max_level(2)
+        context.set_max_lines(1, "markdown")
+        -- What a fresh session does: the configuration again, then the saved values.
+        context.setup({
+          max_lines = { default = 3, markdown = 6 },
+          headings = { max_level = 6 },
+          persist = true,
+          state_file = file,
+        })
+        assert.equals(2, context.config().headings.max_level)
+        assert.equals("3 (markdown 1)", context.describe_max_lines())
+      end)
+    end)
+
     describe(":UI sticky", function()
       before_each(function()
         require("ui.bindings.usrcmds").setup()
@@ -709,9 +858,21 @@ describe("ui.context", function()
         assert.equals(0, context.config().max_lines.markdown, "0 means unlimited")
       end)
 
+      it("reset drops what depth and lines changed", function()
+        vim.cmd("UI sticky depth 2")
+        vim.cmd("UI sticky lines markdown 1")
+        vim.cmd("UI sticky reset")
+        assert.equals(6, context.config().headings.max_level)
+        assert.equals("3", context.describe_max_lines())
+        assert.has_no.errors(function()
+          vim.cmd("UI sticky reset")
+        end)
+      end)
+
       it("completes the actions", function()
         local got = vim.fn.getcompletion("UI sticky d", "cmdline")
         assert.same({ "depth" }, got)
+        assert.is_truthy(vim.tbl_contains(vim.fn.getcompletion("UI sticky r", "cmdline"), "reset"))
         assert.is_truthy(vim.tbl_contains(vim.fn.getcompletion("UI context ", "cmdline"), "lines"))
       end)
 
@@ -801,6 +962,7 @@ describe("ui.context", function()
       typescript = { "internal_module", "interface_declaration", "enum_declaration" },
       kotlin = { "if_expression", "when_expression", "do_while_statement", "function_declaration" },
       bash = { "function_definition", "elif_clause", "c_style_for_statement", "case_item" },
+      yaml = { "block_mapping_pair" },
     }
     -- What must stay out: an expression or a call is not a place you are in.
     local NOT_PINNED = {
@@ -990,6 +1152,30 @@ describe("ui.context", function()
       assert.same({ 0, 1, 2, 4 }, context_rows(buf, 6), "class, def, the if, and the elif")
       assert.same({ 0, 1, 7, 9 }, context_rows(buf, 11), "class, def, the try, and the except")
       assert.same({ 0, 1, 7, 12 }, context_rows(buf, 14), "class, def, the try, and the finally")
+    end)
+
+    it("yaml: a real buffer pins the parent keys, not the list item or the scalar", function()
+      if not has_real_parser("yaml") then
+        pending("no YAML parser available")
+        return
+      end
+      local buf = scratch("yaml", {
+        "jobs:",
+        "  build:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - name: Checkout",
+        "        uses: actions/checkout@v4",
+        "        with:",
+        "          fetch-depth: 0",
+        "      - name: Test",
+        "        run: |",
+        "          echo one",
+        "          echo two",
+      })
+      assert.same({ 0, 1, 3, 6 }, context_rows(buf, 7), "jobs, build, steps, with")
+      assert.same({ 0, 1, 3, 9 }, context_rows(buf, 10), "jobs, build, steps, run")
+      assert.same({}, context_rows(buf, 0), "nothing above the first key")
     end)
   end)
 
