@@ -106,6 +106,16 @@ match is asserted by name without a parser. A callback such as
 the table, `node_types` is the knob: add the grammar's node names, exactly
 (`"^block_mapping_pair$"`) when the type would otherwise fall under an exclude.
 
+Two things to know when changing the lists. Set them through
+`ui.setup({ context = { node_types = {...} } })` or `require("ui.context").setup`,
+not by editing the table `config()` returns: the answer per node type is
+remembered until `setup` runs. And an entry that is not a valid Lua pattern
+(`"["`, or a non-string) is skipped with one warning instead of raising on every
+cursor move. A side effect of the exact `function_expression` entry: Nix (and
+OCaml) use that name for the file-level lambda, so a Nix file keeps its
+`{ pkgs, ... }:` header pinned. A `node_types` you pass replaces the shipped list
+rather than extending it, so to drop that entry pass the list without it.
+
 In a Markdown buffer the pinned heading lines are drawn as headings, not as
 raw source: each takes its level's `@markup.heading.N.markdown` colours (through
 `UiContextH1`..`UiContextH6`, so a colorscheme's per-level palette carries over),

@@ -849,6 +849,65 @@ describe("ui.context", function()
       assert.is_true(context.is_scope_type("elif"), "`if$` is not an exact name either")
     end)
 
+    it("a `$` behind an odd run of `%` is a literal dollar, not the anchor", function()
+      context.setup({ node_types = { "^foo%$" }, exclude_node_types = { "foo" } })
+      assert.is_false(context.is_scope_type("foo$"), "`^foo%$` is a family: the exclude applies")
+      context.setup({ node_types = { "^foo%%$" } })
+      assert.is_true(context.is_scope_type("foo%"), "`%%` is a literal percent, so `$` anchors")
+    end)
+
+    it("answers false for anything that is not a type name", function()
+      -- Wrong types on purpose: the public function must not raise on them.
+      ---@diagnostic disable: param-type-mismatch
+      assert.is_false(context.is_scope_type(nil))
+      assert.is_false(context.is_scope_type(5))
+      assert.is_false(context.is_scope_type({}))
+      ---@diagnostic enable: param-type-mismatch
+    end)
+
+    describe("with a broken node_types list", function()
+      local real_notify_once = vim.notify_once
+      local warned
+
+      before_each(function()
+        warned = {}
+        vim.notify_once = function(msg)
+          warned[#warned + 1] = msg
+        end
+      end)
+
+      after_each(function()
+        vim.notify_once = real_notify_once
+      end)
+
+      it("ignores a malformed pattern instead of raising, and says so", function()
+        context.setup({ node_types = { "[", "^good$" } })
+        local ok, hit = pcall(context.is_scope_type, "anything")
+        assert.is_true(ok, "a bad pattern must not raise on every refresh")
+        assert.is_false(hit)
+        assert.is_true(context.is_scope_type("good"), "the valid entries still work")
+        assert.is_truthy(warned[1] and warned[1]:find("[", 1, true), "the pattern is named")
+      end)
+
+      it("ignores an entry that is not a string", function()
+        ---@diagnostic disable-next-line: assign-type-mismatch
+        context.setup({ node_types = { {}, false, "^good$" } })
+        local ok, hit = pcall(context.is_scope_type, "good")
+        assert.is_true(ok)
+        assert.is_true(hit)
+      end)
+    end)
+
+    it("forgets its answers when setup changes a list", function()
+      assert.is_true(context.is_scope_type("function_declaration"))
+      assert.is_false(context.is_scope_type("call_expression"))
+      context.setup({ node_types = { "^call_expression$" }, exclude_node_types = {} })
+      assert.is_false(context.is_scope_type("function_declaration"), "no stale `true`")
+      assert.is_true(context.is_scope_type("call_expression"), "no stale `false`")
+      context.setup({ node_types = DEFAULT_NODE_TYPES, exclude_node_types = DEFAULT_EXCLUDES })
+      assert.is_true(context.is_scope_type("function_declaration"))
+    end)
+
     ---@param lang string
     ---@return boolean
     local function has_real_parser(lang)
