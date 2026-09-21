@@ -100,14 +100,19 @@ local function open_context_menu()
   contextmenu.open(items)
 end
 
+-- No `dbl` handler: Neovim's click protocol calls this function once per
+-- physical click, `clicks` naming which one it was, NOT once per completed
+-- gesture -- the first click of a double click still fires with clicks == 1
+-- before the second one arrives with clicks == 2 (the exact "warn if you
+-- map both <LeftMouse> and <2-LeftMouse>" gotcha, here in the statusline
+-- click protocol's own numbering rather than a keymap). A `dbl` here would
+-- have opened `ui.statusline.menu` on top of the `vim.ui.select` branch
+-- picker `switch_branch` (this module's own `l`) just opened for that same
+-- gesture's first click. Right click already reaches a menu (this module's
+-- own, below) without that collision, so double click is left to just run
+-- `l` again -- redundant with a plain second click, but never two floats
+-- fighting over the same gesture.
 return clickable.wrap(primitives.git, {
   l = switch_branch,
   r = open_context_menu,
-  -- Right click already owns this module's own branch menu; double click is
-  -- the "manage the statusline itself" gesture every module gets (see
-  -- ui.statusline.render's generic wrap), reached here explicitly since a
-  -- module with its own click protocol never falls into that generic path.
-  dbl = function()
-    require("ui.statusline.menu").open("git_clickable")
-  end,
 })

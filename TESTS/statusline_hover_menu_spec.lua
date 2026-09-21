@@ -90,6 +90,43 @@ describe("ui.statusline.layout", function()
       assert.equals("b", layout.key_at(winid, 4, 10))
     end
   )
+
+  it(
+    "makes exactly one nvim_eval_statusline call per key_at(), regardless of order length or hit column",
+    function()
+      -- Regression guard: an earlier version re-evaluated each candidate
+      -- key's own text in a SEPARATE `nvim_eval_statusline` call, which
+      -- meant up to one extra call per module at or before the hovered
+      -- column -- on every single `<MouseMove>` tick. `<MouseMove>` fires
+      -- on every screen cell the pointer crosses, so this is real,
+      -- continuously-paid cost, not a one-off.
+      local winid = vim.api.nvim_get_current_win()
+      local order, rendered = {}, {}
+      for i = 1, 8 do
+        local key = "k" .. i
+        order[#order + 1] = key
+        rendered[key] = "text" .. i
+      end
+      layout.record(winid, order, rendered)
+
+      local calls = 0
+      local original = vim.api.nvim_eval_statusline
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.api.nvim_eval_statusline = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+
+      -- The rightmost key ("k8", "text8" at columns 36-40 -- 7 * len("textN")
+      -- before it): the worst case for an implementation that walks
+      -- candidates left to right and re-evaluates each one it passes.
+      local found = layout.key_at(winid, 38, 50)
+
+      vim.api.nvim_eval_statusline = original
+      assert.equals("k8", found)
+      assert.equals(1, calls)
+    end
+  )
 end)
 
 describe("ui.statusline.hover", function()
@@ -231,6 +268,49 @@ describe("ui.statusline.menu", function()
     assert.is_false(vim.tbl_contains(labels, "Remove " .. extra_key))
   end)
 
+  it("truncates a long, multi-byte summary on a character boundary, not a byte one", function()
+    -- Regression guard: the "Add module" row used to measure/cut with
+    -- `#`/`:sub` (byte count, byte index). A catalog summary containing a
+    -- multi-byte glyph straddling the cut point -- several real ones do,
+    -- e.g. the traffic-light emoji -- would have a lead byte sliced off its
+    -- trailing continuation bytes, corrupting the label (same defect class
+    -- `ui.statusline.modules.formatters`'s `ellipsize_middle` was fixed for;
+    -- see TESTS/README.md). A fixture entry is used rather than relying on
+    -- today's real catalog text landing exactly on the boundary by luck.
+    local fixture_key = "zzz_test_multibyte_fixture"
+    local summary = ("a"):rep(40) .. "🟢" .. ("b"):rep(10)
+    table.insert(catalog, { key = fixture_key, summary = summary, builtin = false, used_by = {} })
+
+    -- `catalog` is a shared module-level singleton (every spec in this
+    -- process `require()`s the same table) -- a `pcall` here, cleaning the
+    -- fixture up regardless of whether the body under test errors, is what
+    -- keeps a failure in this one test from permanently polluting it for
+    -- every test that runs afterward.
+    local ok, label = pcall(function()
+      local found
+      for _, item in ipairs(menu.items("mode")) do
+        if item.name == "Add module" then
+          for _, sub in ipairs(item.items) do
+            if sub.name:find(fixture_key, 1, true) == 1 then
+              found = sub.name
+            end
+          end
+        end
+      end
+      return found
+    end)
+
+    for i, entry in ipairs(catalog) do
+      if entry.key == fixture_key then
+        table.remove(catalog, i)
+        break
+      end
+    end
+
+    assert.is_true(ok, tostring(label))
+    assert.equals(fixture_key .. " — " .. ("a"):rep(40) .. "🟢" .. "…", label)
+  end)
+
   it("add_module (via the 'Add module' submenu) appends the key to the live order", function()
     local items = menu.items("mode")
     local add_submenu = nil
@@ -294,18 +374,61 @@ describe("ui.statusline.menu", function()
     assert.is_true(#opened_with > 0)
   end)
 
-  it("pointer_on_statusline() reflects ui.statusline.hover.pointer_target()", function()
+  it("pointer_on_statusline() is true when the pointer sits on an actual module", function()
     local hover = require("ui.statusline.hover")
-    local original = hover.pointer_target
+    local layout = require("ui.statusline.layout")
+    local original_target, original_key_at = hover.pointer_target, layout.key_at
     ---@diagnostic disable-next-line: duplicate-set-field
     hover.pointer_target = function()
       return { winid = 1, col = 1, maxwidth = nil, screenrow = 1, screencol = 1 }
     end
+    ---@diagnostic disable-next-line: duplicate-set-field
+    layout.key_at = function()
+      return "mode"
+    end
 
     local result = menu.pointer_on_statusline()
 
-    hover.pointer_target = original
+    hover.pointer_target, layout.key_at = original_target, original_key_at
     assert.is_true(result)
+  end)
+
+  it(
+    "pointer_on_statusline() is false on the statusline row but off any module -- "
+      .. "e.g. the padding a '%=' expanded into, which has no click region for a "
+      .. "host's replayed click to land on",
+    function()
+      local hover = require("ui.statusline.hover")
+      local layout = require("ui.statusline.layout")
+      local original_target, original_key_at = hover.pointer_target, layout.key_at
+      ---@diagnostic disable-next-line: duplicate-set-field
+      hover.pointer_target = function()
+        return { winid = 1, col = 40, maxwidth = 80, screenrow = 1, screencol = 40 }
+      end
+      ---@diagnostic disable-next-line: duplicate-set-field
+      layout.key_at = function()
+        return nil
+      end
+
+      local result = menu.pointer_on_statusline()
+
+      hover.pointer_target, layout.key_at = original_target, original_key_at
+      assert.is_false(result)
+    end
+  )
+
+  it("pointer_on_statusline() is false when the pointer is not on the statusline at all", function()
+    local hover = require("ui.statusline.hover")
+    local original_target = hover.pointer_target
+    ---@diagnostic disable-next-line: duplicate-set-field
+    hover.pointer_target = function()
+      return nil
+    end
+
+    local result = menu.pointer_on_statusline()
+
+    hover.pointer_target = original_target
+    assert.is_false(result)
   end)
 
   it("'Save current layout' is only offered when order is non-empty", function()
@@ -535,6 +658,48 @@ describe("ui.statusline.render's saved-layout restore", function()
       state.read = original_read
       assert.same({ "undo_depth" }, render.current().order)
       assert.equals("function", type(render.current().modules.undo_depth))
+    end
+  )
+
+  it(
+    "does NOT reapply the saved order on a second enable() within the same session -- "
+      .. "regression: this used to make :UI variant (and menu add/remove) do nothing forever "
+      .. "once any layout had ever been saved",
+    function()
+      local original_read = state.read
+      ---@diagnostic disable-next-line: duplicate-set-field
+      state.read = function()
+        return { order = { "cwd" } }
+      end
+
+      -- First enable(): a real start, the save applies.
+      render.enable({ order = { "mode" }, modules = {} })
+      assert.same({ "cwd" }, render.current().order)
+
+      -- A second enable() with a DIFFERENT order (":UI variant lsp", say) --
+      -- must win, not be stomped back to the saved one.
+      render.enable({ order = { "lsp" }, modules = {} })
+      state.read = original_read
+
+      assert.same({ "lsp" }, render.current().order)
+    end
+  )
+
+  it(
+    "re-applies the saved order after a disable()/enable() cycle -- that IS a new start",
+    function()
+      local original_read = state.read
+      ---@diagnostic disable-next-line: duplicate-set-field
+      state.read = function()
+        return { order = { "cwd" } }
+      end
+
+      render.enable({ order = { "mode" }, modules = {} })
+      render.disable()
+      render.enable({ order = { "mode" }, modules = {} })
+
+      state.read = original_read
+      assert.same({ "cwd" }, render.current().order)
     end
   )
 end)

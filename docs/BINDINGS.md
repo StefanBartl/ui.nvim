@@ -258,7 +258,8 @@ needs `ui.setup({ keymaps = ... })`.
 | --- | --- | --- |
 | Hover (rest the pointer) | any module | After a moment, a small float shows that module's `ui.statusline.catalog` summary; the module's own text recolors to a single accent (amber/orange in most colorschemes) for as long as it stays hovered |
 | Right click | any module | Open that module's own menu if it has one (`git_clickable`: branch switch/copy/details), otherwise the generic "manage this module" menu (below) |
-| Double click | any module | Always the generic "manage this module" menu, even on a module with its own right click |
+| Double click | a plain module (no left-click action of its own) | The generic "manage this module" menu |
+| Double click | `git_clickable`/`variant` (left click opens a `vim.ui.select` picker) | Runs left click again, same as a plain second click -- **not** the manage menu: Neovim's click protocol calls the handler once per physical click, so the FIRST click of a double click already fires with `clicks == 1` before the second arrives with `clicks == 2`; wiring the menu to `dbl` here would open it on top of the picker that first click had just opened |
 
 Hover needs `'mousemoveevent'` (Neovim 0.10+; on an older Neovim it degrades
 to "no hover", never an error) and binds one real keymap, `<MouseMove>` in
