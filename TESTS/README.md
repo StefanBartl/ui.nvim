@@ -30,7 +30,7 @@ with the same two commands.
 
 ## Layout
 
-58 spec files, 758 `it()` cases as of 2026-09-21 (the summary line of
+59 spec files, 764 `it()` cases as of 2026-09-21 (the summary line of
 `scripts/test.sh` is the live count). Grouped by area rather than listed
 alphabetically, since the file names already say what each one covers:
 
@@ -54,6 +54,7 @@ alphabetically, since the file names already say what each one covers:
 | Drift guards | `kit_drift_spec.lua` — `lib.nvim` deliberately kept its own frozen copy of `ui.kit`/`ui.contextmenu` (eleven of `lib.nvim`'s own call sites use it, and `lib.nvim` cannot depend on `ui.nvim` without inverting the fleet's dependency direction); this asserts that frozen copy has not silently drifted from this repo's live version. Skips (rather than fails) when no `lib.nvim` checkout is found beside this repo (`$LIB_NVIM_DIR`, `.deps/lib.nvim`, or a `../lib.nvim` sibling) — runs for real both in CI and locally whenever one of those resolves. `scripts/mirror_kit.lua` ports a kit change into that copy with this spec's rename rules (see `docs/modules.md`, "The kit exists twice, on purpose") |
 | Source encoding | `source_encoding_spec.lua` — the repository's `lua/`, `TESTS/`, `docs/`, `doc/`, `scripts/` and `README.md` for double-encoded UTF-8: text read as Latin-1 or Windows-1252 and written back as UTF-8, which Lua, stylua and a reviewer all let through. It found the `<Space>` example label of `screenkey_spec.lua` and `docs/health.md` (the open-box glyph U+2423); a second case proves the patterns match built damage and leave clean text alone |
 | Regression coverage | `bugfix_regressions_spec.lua` — one `describe` per bug, named for the bug it guards against rather than just the function under test, see below |
+| lsp.nvim's internal client | `lsp_internal_client_spec.lua` — `ui.util.lsp.is_internal_client` and the two call sites that used to treat lsp.nvim's own in-process clients (`lsp.nvim-gitsigns`, attached to every gitsigns-tracked buffer regardless of language) as a real language server: the statusline's LSP label (`ui.statusline.utils.primitives.lsp`) and the file-icon-when-attached segment (`ui.statusline.modules.file_icons.devicons.file_icon_segment_lsp`) |
 
 ## Bugs found and fixed this round (2026-09-18)
 

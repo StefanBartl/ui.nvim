@@ -226,9 +226,18 @@ function M.file_icon_segment_lsp()
     return ""
   end
 
-  -- Check LSP clients
-  local clients = vim.lsp.get_clients({ bufnr = bufnr })
-  if not clients or vim.tbl_isempty(clients) then
+  -- Check LSP clients -- lsp.nvim's own in-process clients (see ui.util.lsp)
+  -- do not count as "a language server is here"; they would otherwise light
+  -- up this icon on buffers no server is attached to.
+  local is_internal = require("ui.util.lsp").is_internal_client
+  local has_server = false
+  for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
+    if not is_internal(client) then
+      has_server = true
+      break
+    end
+  end
+  if not has_server then
     return ""
   end
 
