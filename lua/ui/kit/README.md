@@ -175,6 +175,56 @@ truncation — `lib.nvim.fs.path_shorten(path, width)` (style `"fit"`, the
 default) is built for exactly this: it keeps the drive/root and the filename
 visible and collapses the middle.
 
+#### Working in the preview
+
+The preview is a real window, so it can be worked in and not only looked at.
+Whether it is read-only is the caller's choice (`preview_bo = { modifiable =
+false }`); with that, everything that reads works there — motions, `/`, visual
+mode, `y` — and nothing can change the buffer.
+
+| Where | Keys | Does |
+| --- | --- | --- |
+| list, preview | `<C-f>`, `<PageDown>` | scroll the preview one page down |
+| list, preview | `<C-p>`, `<C-b>`, `<PageUp>` | one page up |
+| list, preview | `<C-d>` / `<C-u>` | half a page down / up |
+| list, preview | `<Tab>`, `<C-w>w`, `<C-w><C-w>`, `<C-w>W` | hop between list and preview |
+| preview | `<CR>` | submit at the cursor line: `on_preview_submit(item, idx, { row, col })` |
+| preview | `q`, `<Esc>` | close the popup (the list has its own) |
+
+A page is Vim's own (the window height less two lines of overlap). `<C-p>`
+scrolls up on purpose although Vim means "one line up" by it: it pairs with
+`<C-f>`, and `<C-b>` stays for whoever's fingers know Vim's own pair. The window
+cycle stays inside the popup, because left alone `<C-w>w` walks on into the
+editor window underneath and leaves the popup stranded on top; for the same
+reason the popup closes when focus goes to any other window (a click into the
+editor, `<C-w>j`, a tab switch). The focused window's border is lit
+(`KitAccent`, the other one `KitBorder`) and each window carries a footer with
+the keys that work in it — on a themed float that has a border.
+
+```lua
+kit.shortlist({
+  items = marks,
+  render = render,
+  on_submit = function(item) open(item.path) end,
+  -- <CR> in the preview, after the popup closed; pos = the preview cursor
+  on_preview_submit = function(item, idx, pos) open(item.path, pos.row, pos.col) end,
+  preview_bo = { modifiable = false },
+})
+```
+
+`on_preview_submit` is optional: without it `<CR>` in the preview falls back to
+`on_submit(item, idx)`. All of it is on by default and switchable:
+
+| Option | Default | Does |
+| --- | --- | --- |
+| `preview_keys` | the table above | `false` binds none; a group set to a list of your own replaces that group's keys, set to `false` drops it. Groups: `scroll_down`, `scroll_up`, `half_down`, `half_up`, `focus`, `cycle`, `close`, `submit` |
+| `close_on_leave` | `true` | close the popup when focus goes to a window that is neither the list nor the preview |
+| `hints` | `true` | the lit border and the footers; `false` leaves both alone |
+
+The keys are buffer-local to the two popup windows, so they never touch your
+own mappings, and they are set with `record = false` — `lib.nvim`'s keymap
+records are keyed by buffer number, and a new popup means a new one.
+
 ### Compare (pick two, view side by side)
 
 `kit.compare(opts)` picks two items out of one picker, then shows both full
