@@ -101,8 +101,9 @@ since `all` was this module's own bespoke flag, not something
 left-hand side below is a shipped default, not fixed, and every action binds
 by default -- nothing here needs to be turned on: `ui.setup({ keymaps = {
 next = "<C-Right>", close = false } })` renames `next` and drops `close`
-entirely, leaving every other action (`prev`, `close_all`, `move_right`,
-`move_left`, `move_to_tab`, `toggle_theme`, `theme_picker`) at its default.
+entirely, leaving every other action (`prev`, `close_all`, `toggle_pin`,
+`reopen_closed`, `move_right`, `move_left`, `move_to_tab`, `toggle_theme`,
+`theme_picker`) at its default.
 `keymaps =
 false` (or
 `ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
@@ -115,7 +116,9 @@ switch, the same shape `my.nvim`'s own keymaps use.
 | `<Tab>` | `next` | `n` | Next buffer |
 | `<S-Tab>` | `prev` | `n` | Previous buffer |
 | `<leader>bc` | `close` | `n` | Close the current buffer (or `{count}` of them), keeping the window layout. An uncounted close (`1<leader>bc`, i.e. the plain keypress) briefly flashes the chip before closing; `{count}>1` closes immediately, unflashed |
-| `<leader>bq` | `close_all` | `n` | Close every listed buffer in the current tab -- all flash together first, then close as one batch |
+| `<leader>bq` | `close_all` | `n` | Close every listed buffer in the current tab -- all flash together first, then close as one batch. Pinned buffers are never among them |
+| `<leader>bp` | `toggle_pin` | `n` | Pin/unpin the current buffer's tab -- see [Pinning](#pinning) |
+| `<leader>bu` | `reopen_closed` | `n` | Reopen the most recently closed tab -- see [Reopening a closed tab](#reopening-a-closed-tab) |
 
 The flash on an uncounted close means a `:confirm`-style prompt for an
 unsaved buffer now appears ~25ms later than a direct close would. The delay
@@ -131,6 +134,49 @@ long enough to make a click on an "x" feel laggy.
 | `<leader>tl` | `move_left` | `n` | Move it one position left |
 | `<leader>tt` | `move_to_tab` | `n` | Move the current buffer into a new tab |
 
+### Pinning
+
+A pinned tab always sits ahead of every unpinned one in the tabline
+(`vim.t.bufs`'s own "pins first" invariant -- `move_buf_to`/`move_buf`/a drag
+all clamp their target into the buffer's own region, so a pin can never end
+up mixed in among unpinned tabs), stays on screen even when there are more
+open buffers than the bar can show, and is excluded from every bulk close
+(`<leader>bq`, and the tab menu's `Close others`/`Close to the left`/`Close
+to the right`/`Close saved`). A pinned chip shows a pin glyph in place of its
+close button/modified dot; clicking it unpins. Middle-click and a plain
+left-click on the "x" both refuse to close a pinned chip outright (a pin
+notification instead) -- unpin it first, or use the tab menu's own `Close`,
+which is a deliberate action through a menu rather than a stray click.
+
+Pin state is tab-local (`vim.t`-scoped) and not persisted across a restart.
+
+| Key | `opts.keymaps` name | Mode | Does |
+| --- | --- | --- | --- |
+| `<leader>bp` | `toggle_pin` | `n` | Pin/unpin the current buffer's tab |
+
+Also reachable from the tab menu's `Pin`/`Unpin` entry (below), or by
+clicking a pinned chip's own pin glyph to unpin it.
+
+### Reopening a closed tab
+
+A ring of the last 20 real files closed this session (not scratch buffers,
+terminals, or the quickfix list), newest first, deduplicated by path -- the
+tabline's counterpart to a browser's Ctrl+Shift+T. Recorded on `BufDelete`
+while the buffer still exists, so its name and last cursor position (the
+`"` mark) are captured before it is gone.
+
+| Key | `opts.keymaps` name | Mode | Does |
+| --- | --- | --- | --- |
+| `<leader>bu` | `reopen_closed` | `n` | Reopen the most recently closed tab |
+
+`:edit`s the file, restores the cursor, and places it back at the slot it
+closed from in the CURRENT tab (not necessarily the tab it originally
+closed from) -- or just switches to it if it is already open there. Unsaved
+changes in the closed buffer do not come back, only the file as it sits on
+disk; a file deleted since it closed reopens nothing and notifies instead of
+raising. The tab menu's `Reopen closed tab ▸` submenu (below) lists the
+whole ring, not just the newest entry.
+
 ### Tabline mouse
 
 Not keymaps -- the tabline's own click protocol reports which button hit which
@@ -139,15 +185,17 @@ chip, so nothing here is bound and nothing needs `ui.setup({ keymaps = ... })`.
 | Gesture | On | Does |
 | --- | --- | --- |
 | Left click | a chip | Switch to that buffer (flashes) |
-| Left press and drag | a chip | Carry it along the bar; it re-slots live under the pointer, the drop needs no extra step |
-| Right click | a chip, or its "x" | Open that tab's context menu (below) |
-| Middle click | a chip | Close it |
-| Left click | a chip's "x" | Close it |
+| Left press and drag | a chip | Carry it along the bar; it re-slots live under the pointer, the drop needs no extra step. Holding at either edge auto-scrolls the visible window (see "Dragging" below) |
+| Right click | a chip, or its "x"/pin glyph | Open that tab's context menu (below) |
+| Middle click | a chip | Close it -- refused on a pinned chip |
+| Left click | a chip's "x" | Close it -- refused on a pinned chip |
+| Left click | a pinned chip's pin glyph (its "x" slot) | Unpin it |
 
-Each of the last three has an opt-out on the tabline config --
-`context_menu`, `drag`, `middle_click_close` (see
+Each of the first three of "context_menu"/"drag"/"middle_click_close" has an
+opt-out on the tabline config (see
 [configuration.md](configuration.md#tabline-mouse-behaviour)); with one off,
-that gesture just switches to the chip, as any click used to.
+that gesture just switches to the chip, as any click used to. Pin protection
+has no opt-out.
 
 **The tab context menu** (`ui.tabline.menu`) holds only actions on that tab,
 drawn through `ui.contextmenu` -- so nvzone/menu when it is installed, the kit
@@ -157,15 +205,16 @@ modified one.
 
 | Group | Entries |
 | --- | --- |
-| *(the file name)* | `Save` (modified only), `Close` |
-| Close | `Close others`, `Close to the left`, `Close to the right`, `Close saved` (only when saved and unsaved tabs both exist) |
+| *(the file name)* | `Save` (modified only), `Pin`/`Unpin`, `Close` |
+| Close | `Close others`, `Close to the left`, `Close to the right`, `Close saved` (only when saved and unsaved tabs both exist) -- all three exclude pinned tabs from the set they close, and drop out entirely once nothing unpinned is left to close |
 | Move | `Move to position…` (asks for a number: `3` is an absolute slot, `+2`/`-1` are relative), `Move left`, `Move right`, `Move to start`, `Move to end` |
-| Buffer | `Copy path ▸` (absolute, relative, file name), `Open in split`, `Open in vertical split`, `Move to new tab page` |
+| Buffer | `Copy path ▸` (absolute, relative, file name), `Open in split`, `Open in vertical split`, `Move to new tab page`, `Reopen closed tab ▸` (one entry per closed-tab ring slot; absent while the ring is empty) |
 
 Every "close" entry asks once, up front, when any of the buffers it would
 close has unsaved changes -- the same single prompt `<leader>bq` shows.
 Closing a tab that is not the current one leaves the current window where it
-is.
+is. `Reopen closed tab` is not really about the clicked tab -- every chip's
+menu offers the same ring, since one has to hang the submenu off SOME chip.
 
 **A host with its own global `<RightMouse>` mapping** still reaches the chip
 menu, provided that mapping replays the native click first
@@ -183,13 +232,21 @@ vim.keymap.set({ "n", "v" }, "<RightMouse>", function()
 end)
 ```
 
-**Dragging is limited to the chips that fit.** When more buffers are open
-than the bar can show, the visible run follows the current buffer; a drag
-re-slots among the visible chips only. The mouse gesture claims `<LeftDrag>`
-and `<LeftRelease>` for exactly the length of one press-drag-release -- they
-are unmapped again on release (and after 5 s of silence, in case a release
-never arrives), and any mapping they shadowed is put back, so ordinary
-drag-select is untouched between drags.
+**Dragging auto-scrolls at either edge.** When more buffers are open than
+the bar can show, the visible run normally follows the current buffer; a
+drag re-slots among the visible chips only. Holding the pointer still
+against the left or right edge of the chip run (within a few columns, no
+further movement needed) instead nudges the window one chip further that
+way on a short timer, revealing chips further from the current buffer to
+drop onto -- released, or the drag ends, and the window goes back to
+following the current buffer. `ui.tabline.scroll` owns this; nothing here
+is configurable.
+
+The mouse gesture itself claims `<LeftDrag>` and `<LeftRelease>` for exactly
+the length of one press-drag-release -- they are unmapped again on release
+(and after 5 s of silence, in case a release never arrives), and any mapping
+they shadowed is put back, so ordinary drag-select is untouched between
+drags.
 
 ### Theme
 

@@ -7,6 +7,8 @@
 
 local notify = require("lib.nvim.notify").create("[ui.tabline.modules]")
 local utils = require("ui.tabline.utils")
+local state = require("ui.bindings.keymaps.tabufline.state")
+local scroll = require("ui.tabline.scroll")
 local api = vim.api
 
 local M = {}
@@ -150,10 +152,15 @@ local function apply_boundaries(chips, chip_bufs, cur, style, flush_right)
   style_fn(chips, chip_bufs, cur, flush_right)
 end
 
---- The buffer chip list. Drops chips from the front once the list would
+--- The buffer chip list. Pinned buffers render first and are never dropped;
+--- past them, unpinned chips drop from the front once the list would
 --- overflow the columns left by the other modules, keeping the current
 --- buffer visible -- ported from `nvchad.tabufline.modules.buffers`'s own
---- overflow handling.
+--- overflow handling, split into a pinned pass and an unpinned pass (see
+--- "Zu beachten" in the pins roadmap entry: pins must stay visible, which
+--- the original single sliding window could not promise since pinned
+--- buffers -- kept first in `vim.t.bufs` by `state.set_pinned`'s own
+--- invariant -- are exactly the ones a front-dropping window drops first).
 ---
 --- `cfg.style` picks the boundary look between chips -- "rounded" (default),
 --- "square", or "divider". See `apply_boundaries`'s own doc comment.
@@ -165,7 +172,10 @@ end
 --- narrower ones down to the min, and the whole bar fills itself instead of
 --- leaving an unused strip too narrow for one more fixed-width chip. Past
 --- the min, additional buffers overflow exactly as before -- the elastic
---- range only covers the middle, not an unbounded shrink.
+--- range only covers the middle, not an unbounded shrink. Every chip (pinned
+--- or not) uses the same `bufwidth`, computed over the full buffer count --
+--- pins are exempted from being DROPPED, not given a width budget of their
+--- own; a mixed pinned/unpinned bar still reads as one uniform row of chips.
 ---@param cfg Ui.Tabline.Config
 ---@return string
 function M.buffers(cfg)
@@ -200,9 +210,6 @@ function M.buffers(cfg)
     bufwidth = math.max(min_w, math.min(max_w, per_buf))
   end
 
-  local chips = {}
-  local chip_bufs = {} -- parallel to `chips`, kept in sync across the drop below
-  local seen_current = false
   local cur = api.nvim_get_current_buf()
   -- Whether the visible run ever bumped against the space budget -- true the
   -- moment one more chip wouldn't fit, whether that meant dropping one from
@@ -210,19 +217,66 @@ function M.buffers(cfg)
   -- on whether the last chip's right edge is actually touching anything.
   local flush_right = false
 
+  -- Pinned buffers first, always rendered -- see the doc comment above for
+  -- why this cannot share the unpinned loop's front-dropping window.
+  local pinned_bufs, other_bufs = {}, {}
   for i, bufnr in ipairs(bufs) do
-    if (#chips + 1) * (bufwidth + ICON_WIDTH_SLACK) > space then
-      flush_right = true
-      if seen_current then
+    if state.is_pinned(bufnr) then
+      pinned_bufs[#pinned_bufs + 1] = { bufnr = bufnr, index = i }
+    else
+      other_bufs[#other_bufs + 1] = { bufnr = bufnr, index = i }
+    end
+  end
+
+  local chips, chip_bufs = {}, {}
+  for _, entry in ipairs(pinned_bufs) do
+    chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+    chip_bufs[#chip_bufs + 1] = entry.bufnr
+  end
+  if #chips * (bufwidth + ICON_WIDTH_SLACK) >= space then
+    flush_right = true
+  end
+
+  local remaining = space - #chips * (bufwidth + ICON_WIDTH_SLACK)
+
+  -- The unpinned window: `scroll.offset()` (set while a tabline drag holds
+  -- the pointer at either edge -- see ui.tabline.scroll) overrides the
+  -- default "keep the current buffer visible" sliding logic with a fixed
+  -- starting point instead. The two cannot coexist: during a drag the
+  -- dragged chip IS the current buffer, so the sliding logic below would
+  -- keep snapping the window back to it every redraw, fighting the very
+  -- scroll a held edge asks for.
+  local offset = scroll.offset()
+  if offset then
+    local start = math.min(offset, math.max(0, #other_bufs - 1)) + 1
+    for i = start, #other_bufs do
+      local entry = other_bufs[i]
+      if (#chips - #pinned_bufs + 1) * (bufwidth + ICON_WIDTH_SLACK) > remaining then
+        flush_right = true
         break
       end
-      table.remove(chips, 1)
-      table.remove(chip_bufs, 1)
+      chips[#chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+      chip_bufs[#chip_bufs + 1] = entry.bufnr
     end
+  else
+    local seen_current = false
+    local unpinned_chips, unpinned_bufs = {}, {}
+    for _, entry in ipairs(other_bufs) do
+      if (#unpinned_chips + 1) * (bufwidth + ICON_WIDTH_SLACK) > remaining then
+        flush_right = true
+        if seen_current then
+          break
+        end
+        table.remove(unpinned_chips, 1)
+        table.remove(unpinned_bufs, 1)
+      end
 
-    seen_current = seen_current or (cur == bufnr)
-    chips[#chips + 1] = utils.style_buf(bufnr, i, bufwidth)
-    chip_bufs[#chip_bufs + 1] = bufnr
+      seen_current = seen_current or (cur == entry.bufnr)
+      unpinned_chips[#unpinned_chips + 1] = utils.style_buf(entry.bufnr, entry.index, bufwidth)
+      unpinned_bufs[#unpinned_bufs + 1] = entry.bufnr
+    end
+    vim.list_extend(chips, unpinned_chips)
+    vim.list_extend(chip_bufs, unpinned_bufs)
   end
 
   apply_boundaries(chips, chip_bufs, cur, cfg.style, flush_right)

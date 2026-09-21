@@ -48,6 +48,83 @@ local function buf_index(bufnr, bufs)
   return nil
 end
 
+--- Count of pinned buffers among `bufs` (default the current tab's
+--- `vim.t.bufs`) -- the size of the "pins first" block `move_buf_to`/
+--- `move_buf` clamp their target into, and the boundary slot `set_pinned`
+--- re-places a buffer to.
+---@param bufs? integer[]
+---@return integer
+local function pinned_count(bufs)
+  bufs = bufs or vim.t.bufs or {}
+  local pinned = vim.t.ui_pinned or {}
+  local n = 0
+  for _, b in ipairs(bufs) do
+    if vim.tbl_contains(pinned, b) then
+      n = n + 1
+    end
+  end
+  return n
+end
+
+--- Whether `bufnr` is pinned in the current tab. Pin state is tab-local
+--- (`vim.t.ui_pinned`, a plain LIST of bufnrs -- not a `{[bufnr]=true}` set:
+--- `vim.t`/`vim.g`/`vim.b` round-trip a Lua table through a VimL value, and
+--- a table keyed by arbitrary integers like a bufnr comes back as a List
+--- padded with `vim.NIL` up to the highest key, not a sparse Dict -- found
+--- live, `vim.NIL` is truthy in Lua, so a plain `pinned[bufnr]` truthy check
+--- read every LOWER bufnr as pinned too. A list plus `vim.tbl_contains` has
+--- no such hazard) and not persisted across a restart -- `ui.tabline.menu`'s
+--- "Pin"/"Unpin" entry and a pinned chip's own pin-glyph click are the only
+--- ways to change it.
+---@param bufnr integer
+---@return boolean
+function M.is_pinned(bufnr)
+  return vim.tbl_contains(vim.t.ui_pinned or {}, bufnr)
+end
+
+--- Pin or unpin `bufnr` in the current tab, then re-place it to keep the
+--- invariant `move_buf_to`/`move_buf` (below) both uphold: pinned buffers
+--- always sit before unpinned ones in `vim.t.bufs`. Pinning moves `bufnr` to
+--- the last pinned slot (the right edge of the pin block); unpinning moves
+--- it to the first unpinned slot (the left edge of the rest) -- either way
+--- it lands on the boundary between the two regions, not at an arbitrary
+--- spot inside one of them.
+---@param bufnr integer
+---@param pinned boolean
+---@return boolean changed # false when bufnr is unlisted or already in that state
+function M.set_pinned(bufnr, pinned)
+  local bufs = vim.t.bufs
+  if not bufs or not buf_index(bufnr, bufs) then
+    return false
+  end
+  if M.is_pinned(bufnr) == pinned then
+    return false
+  end
+
+  local set = vim.t.ui_pinned or {}
+  if pinned then
+    set[#set + 1] = bufnr
+  else
+    for i, b in ipairs(set) do
+      if b == bufnr then
+        table.remove(set, i)
+        break
+      end
+    end
+  end
+  vim.t.ui_pinned = set
+
+  M.move_buf_to(bufnr, pinned and pinned_count(bufs) or (pinned_count(bufs) + 1))
+  return true
+end
+
+--- Flip `bufnr`'s pin state. See `set_pinned`.
+---@param bufnr integer
+---@return boolean changed
+function M.toggle_pinned(bufnr)
+  return M.set_pinned(bufnr, not M.is_pinned(bufnr))
+end
+
 -- Guards `M.setup()` against registering its autocmds twice -- called from
 -- both `attach_buffers()` and `attach_tabs()` in `keymaps/init.lua`, and
 -- either could run first.
@@ -103,6 +180,14 @@ function M.setup()
   })
 
   autocmd.create("BufDelete", function(args)
+    -- Before the buffer is dropped from any tab's list below: the ring
+    -- needs its name and last cursor mark, which only exist while the
+    -- buffer itself still does (see ui.tabline.reopen's own doc comment).
+    -- Required lazily -- ui.tabline.reopen requires this module back (to
+    -- reopen at a remembered slot), so a top-level require here would be a
+    -- load-order cycle.
+    pcall(require("ui.tabline.reopen").record, args.buf)
+
     for _, tab in ipairs(api.nvim_list_tabpages()) do
       local bufs = vim.t[tab].bufs
       if bufs then
@@ -112,10 +197,21 @@ function M.setup()
           vim.t[tab].bufs = bufs
         end
       end
+
+      local pinned = vim.t[tab].ui_pinned
+      if pinned then
+        for i, b in ipairs(pinned) do
+          if b == args.buf then
+            table.remove(pinned, i)
+            vim.t[tab].ui_pinned = pinned
+            break
+          end
+        end
+      end
     end
   end, {
     group = group,
-    desc = "ui.tabufline: drop a deleted buffer from every tab's vim.t.bufs",
+    desc = "ui.tabufline: drop a deleted buffer from every tab's vim.t.bufs/pins, record it for reopen",
   })
 
   -- Quickfix buffers are never file buffers a tabline should list or
@@ -292,10 +388,16 @@ end
 --- (respecting its terminal/floating/fallback handling per buffer), current
 --- buffer included unless `include_cur_buf` is explicitly `false`. Ported
 --- from `nvchad.tabufline.closeAllBufs`.
+---
+--- Pinned buffers are excluded unconditionally, `include_cur_buf` or not --
+--- the roadmap's own recommendation: "Alle schließen" should not be a
+--- backdoor around a pin.
 ---@param include_cur_buf? boolean # default true
 ---@return nil
 function M.close_all_bufs(include_cur_buf)
-  local bufs = vim.t.bufs or {}
+  local bufs = vim.tbl_filter(function(b)
+    return not M.is_pinned(b)
+  end, vim.t.bufs or {})
 
   if include_cur_buf == false then
     local idx = buf_index(api.nvim_get_current_buf(), bufs)
@@ -382,6 +484,18 @@ function M.forget_buffer(bufnr, tabpage)
 
   table.remove(bufs, idx)
   vim.t[tabpage].bufs = bufs
+
+  local pinned = vim.t[tabpage].ui_pinned
+  if pinned then
+    for i, b in ipairs(pinned) do
+      if b == bufnr then
+        table.remove(pinned, i)
+        vim.t[tabpage].ui_pinned = pinned
+        break
+      end
+    end
+  end
+
   vim.cmd("redrawtabline")
 end
 
@@ -408,6 +522,19 @@ function M.move_buf_to(bufnr, pos)
   end
 
   pos = math.min(math.max(math.floor(pos), 1), #bufs)
+
+  -- "Pins first" invariant (see M.set_pinned's own doc comment): a pinned
+  -- buffer never moves past the last pinned slot, an unpinned one never
+  -- moves into the pinned block. Both the tab menu's "Move to position…"
+  -- and a tabline drag (ui.tabline.drag, via layout.slot_at) go through
+  -- here, so clamping once, in this one place, covers every mover.
+  local n = pinned_count(bufs)
+  if M.is_pinned(bufnr) then
+    pos = math.min(pos, n)
+  else
+    pos = math.max(pos, n + 1)
+  end
+
   if pos == idx then
     return false
   end
@@ -442,17 +569,31 @@ function M.move_buf(n)
   n = math.floor(n)
 
   local cur = api.nvim_get_current_buf()
+  local n_pinned = pinned_count(bufs)
   for i, bufnr in ipairs(bufs) do
     if bufnr == cur then
-      if (n < 0 and i == 1) or (n > 0 and i == #bufs) then
-        bufs[1], bufs[#bufs] = bufs[#bufs], bufs[1]
+      -- "Pins first" invariant, same as move_buf_to: a swap partner is
+      -- clamped into `bufnr`'s own region ([1, n_pinned] when pinned,
+      -- [n_pinned + 1, #bufs] otherwise) instead of the whole list.
+      local lo, hi
+      if M.is_pinned(cur) then
+        lo, hi = 1, n_pinned
       else
-        -- Clamp the destination into bounds (PRIN-25): `n` is documented as
-        -- "positive moves right, negative moves left" with no range limit,
-        -- but an unclamped `i + n` past either end reads bufs[i + n] as nil
-        -- and writes one, corrupting the sequence vim.t.bufs persists.
-        local dest = math.min(math.max(i + n, 1), #bufs)
-        bufs[i], bufs[dest] = bufs[dest], bufs[i]
+        lo, hi = n_pinned + 1, #bufs
+      end
+
+      if hi > lo then
+        if (n < 0 and i == lo) or (n > 0 and i == hi) then
+          bufs[lo], bufs[hi] = bufs[hi], bufs[lo]
+        else
+          -- Clamp the destination into bounds (PRIN-25): `n` is documented
+          -- as "positive moves right, negative moves left" with no range
+          -- limit, but an unclamped `i + n` past either end reads bufs[i +
+          -- n] as nil and writes one, corrupting the sequence vim.t.bufs
+          -- persists.
+          local dest = math.min(math.max(i + n, lo), hi)
+          bufs[i], bufs[dest] = bufs[dest], bufs[i]
+        end
       end
       break
     end
