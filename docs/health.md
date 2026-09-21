@@ -126,7 +126,8 @@ ownership pattern this mirrors.
 | --- | --- |
 | ✅ `ui.context is on (max_lines N, heading depth D, M scope patterns)` | The sticky code-context overlay is enabled, with its current row cap (`3`, or `3 (markdown 6)` when filetypes have their own), the deepest Markdown heading level it pins and the number of node-type patterns it treats as scopes |
 | ℹ️ `ui.context is off` | The shipped default. `:UI sticky on` for the session, `ui.setup({ context = true })` for good |
-| ℹ️ `:UI sticky depth`/`lines` are saved to PATH (set: depth D, lines … / nothing set)` | Only with `persist = true`: where the depth and row-cap overrides are stored, and which of them are set right now |
+| ℹ️ `:UI sticky depth`/`lines` are saved to PATH (set: depth D, lines … / nothing set)` | Only with `persist = true`: the resolved path (`~`, `$VAR` and relative paths expanded) where the depth and row-cap overrides are stored, and which of them are set right now |
+| ⚠️ `:UI sticky depth`/`lines` could not be saved to PATH (…) -- they last for this session only` | The same check when the last write or delete of the file failed: a configured path that holds something that is not a state file of this plugin (it is never overwritten or deleted), a directory, or a place that cannot be written. Pick another `state_file` or remove the file |
 | ✅ `Tree-sitter parser available for the current buffer (ft)` | The overlay can work in this buffer |
 | ℹ️ `No Tree-sitter parser for the current buffer` | The overlay needs a parser per filetype; a buffer without one simply shows no context. Not an error — `:checkhealth` itself runs in such a buffer |
 | ❌ `ui.context did not load` | The module errored on require; `:UI context` will fail the same way |

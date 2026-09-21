@@ -79,7 +79,7 @@ local AUGROUP = "UiContext"
 ---@field zindex? integer
 ---@field headings? boolean|Ui.Context.HeadingOpts
 ---@field persist? boolean  # keep what `:UI sticky depth`/`lines` set across restarts (default false)
----@field state_file? string  # where; default `stdpath("state")/ui.nvim/sticky.json`
+---@field state_file? string  # where; `~`/`$VAR` expanded, relative to the cwd at `setup`; default `stdpath("state")/ui.nvim/sticky.json`
 
 ---@class Ui.Context.HeadingOpts
 ---@field enable? boolean
@@ -106,7 +106,7 @@ local MAX_HEADING_LEVEL = 6
 ---@field zindex integer
 ---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
 ---@field persist boolean              # `:UI sticky depth`/`lines` are written to `state_file` and read back at the next `setup`
----@field state_file string|nil        # nil = `ui.context.state.default_path()`
+---@field state_file string|nil        # absolute, already resolved; nil = `ui.context.state.default_path()`
 local cfg = {
   persist = false,
   max_lines = DEFAULT_MAX_LINES,
@@ -213,6 +213,11 @@ local configured = { max_level = MAX_HEADING_LEVEL, max_lines = DEFAULT_MAX_LINE
 --- What commands changed on top of `configured`; this is what `persist` writes out.
 ---@type Ui.Context.Saved
 local overrides = {}
+
+--- Whether the last write to (or delete of) the state file failed, so a
+--- confirmation does not claim a save that did not happen.
+---@type boolean
+local save_failed = false
 
 --- Per window: the float and what it currently shows.
 ---@type table<integer, { win: integer, buf: integer, key: string }>
@@ -867,12 +872,13 @@ end
 -- ---------------------------------------------------------------- lifecycle
 
 ---@internal
----A `max_lines` value if it is a non-negative number, else nil.
+---A `max_lines` value if it is a non-negative number, else nil. `math.huge`
+---means "no limit", which is what 0 says and what a JSON file can hold.
 ---@param v any
 ---@return integer|nil
 local function as_line_count(v)
   if type(v) == "number" and v >= 0 then
-    return math.floor(v)
+    return v == math.huge and 0 or math.floor(v)
   end
   return nil
 end
@@ -897,21 +903,35 @@ local function persist_overrides()
   if not cfg.persist then
     return
   end
-  local path = cfg.state_file or state.default_path()
+  local path = M.state_path()
   local ok, err
   if next(overrides) == nil then
     ok, err = state.remove(path)
   else
     ok, err = state.write(path, overrides)
   end
+  save_failed = not ok
   if not ok then
     vim.notify("ui.context: could not save sticky settings: " .. tostring(err), vim.log.levels.WARN)
   end
 end
 
 ---@internal
----Apply the tunables in `opts` to `cfg`. A value of the wrong type is ignored,
----the previous one stays.
+---Redraw the overlays after `cfg` changed. A drawn overlay is cached by what it
+---shows, not by how it is styled: a changed option (headings, say) would
+---otherwise wait for the next scroll. Once per change, however many values it
+---touched -- each redraw closes every float and re-runs the Tree-sitter query.
+---@return nil
+local function redraw()
+  if enabled then
+    M.close_all()
+    M.refresh_all()
+  end
+end
+
+---@internal
+---Apply the tunables in `opts` to `cfg`, without redrawing. A value of the wrong
+---type is ignored, the previous one stays.
 ---@param opts Ui.Context.Opts
 ---@return boolean lines_set, boolean level_set # whether `max_lines` / `headings.max_level` were taken from `opts`
 local function apply(opts)
@@ -965,13 +985,6 @@ local function apply(opts)
     end
   end
   scope_cache = {}
-  if enabled then
-    build_refresher()
-    -- A drawn overlay is cached by what it shows, not by how it is styled: a
-    -- changed option (headings, say) would otherwise wait for the next scroll.
-    M.close_all()
-    M.refresh_all()
-  end
   return lines_set, level_set
 end
 
@@ -1036,16 +1049,21 @@ function M.setup(opts)
   if opts.persist ~= nil then
     cfg.persist = opts.persist == true
   end
-  if type(opts.state_file) == "string" then
-    cfg.state_file = opts.state_file
+  if type(opts.state_file) == "string" and opts.state_file ~= "" then
+    cfg.state_file = state.resolve(opts.state_file)
   end
   if cfg.persist and (opts.persist ~= nil or opts.state_file ~= nil) then
-    local saved = state.read(cfg.state_file or state.default_path())
+    save_failed = false
+    local saved = state.read(M.state_path())
     if saved then
       overrides = saved
     end
   end
   reapply_overrides()
+  if enabled then
+    build_refresher()
+    redraw()
+  end
 end
 
 ---Turn the overlay on: highlight groups, autocmds, a first refresh.
@@ -1124,6 +1142,7 @@ function M.set_max_level(level)
   if level_set then
     overrides.max_level = cfg.headings.max_level
     persist_overrides()
+    redraw()
   end
   return cfg.headings.max_level
 end
@@ -1144,6 +1163,7 @@ function M.set_max_lines(n, ft)
   overrides.lines = overrides.lines or {}
   overrides.lines[ft or "default"] = count
   persist_overrides()
+  redraw()
   return true
 end
 
@@ -1155,6 +1175,7 @@ function M.reset()
   overrides = {}
   apply({ max_lines = configured.max_lines, headings = { max_level = configured.max_level } })
   persist_overrides()
+  redraw()
   return had
 end
 
@@ -1181,6 +1202,21 @@ end
 ---@return boolean
 function M.is_persisting()
   return cfg.persist
+end
+
+---Whether what `depth` / `lines` set is safely in the state file: `persist` is
+---on and the last write did not fail (a path that holds somebody else's file, or
+---cannot be written).
+---@return boolean
+function M.is_saved()
+  return cfg.persist and not save_failed
+end
+
+---Where `depth` / `lines` changes are written when `persist` is on: an absolute
+---path, `state_file` resolved (`~`, `$VAR`) or the default one.
+---@return string
+function M.state_path()
+  return cfg.state_file or state.default_path()
 end
 
 ---`max_lines` as one readable string: `3`, or `3 (markdown 6, text 1)` when
