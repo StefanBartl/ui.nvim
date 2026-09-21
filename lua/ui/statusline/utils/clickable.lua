@@ -15,7 +15,13 @@
 local M = {}
 
 ---@alias Ui.Statusline.ClickButton "l"|"r"|"m"
----@alias Ui.Statusline.ClickHandlers table<Ui.Statusline.ClickButton, fun(): nil>
+--- `dbl` fires instead of `l` when the native click protocol reports two (or
+--- more) clicks -- Neovim's own `<2-LeftMouse>` double-click convention,
+--- reused here since a handler table has no other way to tell a fast second
+--- left click from an ordinary one. A handler table with no `dbl` entry
+--- falls back to `l`, so double-clicking a module that never opted into the
+--- distinction behaves exactly like clicking it once.
+---@alias Ui.Statusline.ClickHandlers table<Ui.Statusline.ClickButton|"dbl", fun(): nil>
 
 ---@type table<integer, Ui.Statusline.ClickHandlers>
 local registry = {}
@@ -25,7 +31,9 @@ local registered_global = false
 --- Define the `UiSlClick` global Vimscript function once. Neovim's
 --- `'statusline'` click protocol calls a global Vimscript function by name
 --- (`%<minwid>@Func@...%X`), not a Lua function directly -- `minwid` is how
---- the registry id this module hands out gets back in.
+--- the registry id this module hands out gets back in. `a:clicks` is the
+--- native click count (1 for a plain click, 2+ for a double click) -- passed
+--- through so `_dispatch` can prefer a `dbl` handler.
 ---@return nil
 local function ensure_global()
   if registered_global then
@@ -35,7 +43,7 @@ local function ensure_global()
 
   vim.cmd([[
     function! UiSlClick(id, clicks, button, mod)
-      call luaeval('require("ui.statusline.utils.clickable")._dispatch(_A[1], _A[2])', [a:id, a:button])
+      call luaeval('require("ui.statusline.utils.clickable")._dispatch(_A[1], _A[2], _A[3])', [a:id, a:button, a:clicks])
     endfunction
   ]])
 end
@@ -57,12 +65,22 @@ end
 --- Reached from the `UiSlClick` global above via `luaeval`. Public only so
 --- that call can find it and so tests can drive a click without going
 --- through `vim.cmd` -- not meant to be called from a segment itself.
+--- `clicks` is optional (existing two-arg call sites, in this plugin's own
+--- tests and anywhere else already written against the old signature, still
+--- work unchanged) and defaults to 1, i.e. an ordinary single click.
 ---@param id integer
 ---@param button Ui.Statusline.ClickButton
+---@param clicks integer|nil
 ---@return nil
-function M._dispatch(id, button)
+function M._dispatch(id, button, clicks)
   local handlers = registry[id]
-  local fn = handlers and handlers[button]
+  if not handlers then
+    return
+  end
+  local fn = handlers[button]
+  if button == "l" and (clicks or 1) >= 2 and handlers.dbl then
+    fn = handlers.dbl
+  end
   if not fn then
     return
   end

@@ -22,8 +22,55 @@
 local notify = require("lib.nvim.notify").create("[ui.statusline.render]")
 local primitives = require("ui.statusline.utils.primitives")
 local highlights = require("ui.statusline.highlights")
+local layout = require("ui.statusline.layout")
+local hover = require("ui.statusline.hover")
+local clickable = require("ui.statusline.utils.clickable")
 
 local M = {}
+
+-- One `clickable` registry id per key that has ever needed the generic
+-- right/double-click "manage this module" handler -- registered once, on
+-- first use, and reused on every later redraw. `clickable.wrap` itself
+-- cannot be called from inside `generate()` (its own doc comment: wrap at
+-- module-load time, not per redraw, or the registry grows without bound),
+-- which is exactly what calling it here on every single statusline redraw
+-- would do -- this cache is what makes reusing the same protocol safe.
+---@type table<string, integer>
+local generic_click_ids = {}
+
+---@param key string
+---@return integer
+local function generic_click_id(key)
+  local id = generic_click_ids[key]
+  if id then
+    return id
+  end
+  id = clickable.register({
+    r = function()
+      require("ui.statusline.menu").open(key)
+    end,
+    dbl = function()
+      require("ui.statusline.menu").open(key)
+    end,
+  })
+  generic_click_ids[key] = id
+  return id
+end
+
+-- `%#Group#` directives inside a rendered segment -- `%<id>@UiSlClick@` and
+-- `%X` are never matched (no literal "#" pair), so this leaves click regions
+-- (a module's own, or the generic one `generic_click_id` adds below) intact.
+local HL_DIRECTIVE = "%%#([%w_]+)#"
+
+---@param text string
+---@return string
+local function recolor_for_hover(text)
+  return (
+    text:gsub(HL_DIRECTIVE, function(group)
+      return "%#" .. highlights.hover_variant(group) .. "#"
+    end)
+  )
+end
 
 --- Base module sets available as an `order` key's fallback, by theme name.
 --- Only `default` exists -- see `ui.statusline.themes.default`'s own doc
@@ -206,6 +253,10 @@ function M.generate(cfg)
     return theme
   end
 
+  local hovered_key = hover.current_key()
+  ---@type table<string, string>
+  local rendered_by_key = {}
+
   local result = {}
   for _, key in ipairs(order) do
     if key == "%=" then
@@ -217,26 +268,47 @@ function M.generate(cfg)
         mod = theme_mod and theme_mod[key]
       end
 
+      ---@type string|nil
+      local rendered = nil
       if type(mod) == "function" then
-        local ok, rendered = pcall(mod)
+        local ok, out = pcall(mod)
         if ok then
-          result[#result + 1] = rendered
+          rendered = out
         else
           warn_once(
             "error:" .. key,
-            ("ui.statusline.render: module %q errored: %s"):format(key, tostring(rendered))
+            ("ui.statusline.render: module %q errored: %s"):format(key, tostring(out))
           )
         end
       elseif type(mod) == "string" then
-        result[#result + 1] = mod
+        rendered = mod
       else
         warn_once(
           "missing:" .. key,
           ("ui.statusline.render: no module for %q -- rendering it empty"):format(key)
         )
       end
+
+      if rendered and rendered ~= "" then
+        if key == hovered_key then
+          rendered = recolor_for_hover(rendered)
+        end
+        -- A module already wrapped in its own click protocol (git_clickable,
+        -- diagnostics_clickable, variant, ...) keeps whatever handlers it
+        -- registered for itself; only a plain segment gets the generic
+        -- "manage this module" one, so nothing here overrides a module's own
+        -- right/double click.
+        if not rendered:find("@UiSlClick@", 1, true) then
+          rendered = "%" .. generic_click_id(key) .. "@UiSlClick@" .. rendered .. "%X"
+        end
+        rendered_by_key[key] = rendered
+      end
+
+      result[#result + 1] = rendered or ""
     end
   end
+
+  layout.record(vim.g.statusline_winid or 0, order, rendered_by_key)
 
   return table.concat(result)
 end
@@ -259,6 +331,7 @@ function M.enable(cfg)
   highlights.ensure()
   vim.o.statusline = "%!v:lua.require('ui.statusline.render').render()"
   primitives.autocmds()
+  hover.enable()
 end
 
 --- The zero-argument entrypoint `'%!'` calls on every redraw.
@@ -279,6 +352,7 @@ end
 function M.disable()
   current = nil
   vim.o.statusline = ""
+  hover.disable()
 end
 
 --- The config `enable()` last stored, or nil. For tests and `:checkhealth`

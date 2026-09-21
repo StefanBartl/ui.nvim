@@ -103,4 +103,11 @@ end
 return clickable.wrap(primitives.git, {
   l = switch_branch,
   r = open_context_menu,
+  -- Right click already owns this module's own branch menu; double click is
+  -- the "manage the statusline itself" gesture every module gets (see
+  -- ui.statusline.render's generic wrap), reached here explicitly since a
+  -- module with its own click protocol never falls into that generic path.
+  dbl = function()
+    require("ui.statusline.menu").open("git_clickable")
+  end,
 })

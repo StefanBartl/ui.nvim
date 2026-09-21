@@ -6,6 +6,19 @@
 --- is the point: everything asserted here is what must render on its own,
 --- since nothing in this module reaches into a NvChad symbol.
 
+--- Every plain (non-`%=`) key `generate()` renders now comes back wrapped in
+--- the `%<id>@UiSlClick@...%X` click protocol -- the generic "manage this
+--- module" right/double click every segment gets unless it already carries
+--- a click region of its own (see `generate()`'s own doc comment on
+--- `generic_click_id`). Assertions below that only care about the visible
+--- TEXT strip that wrapper first, rather than hard-coding an id that shifts
+--- with how many `clickable.register()` calls ran earlier in this process.
+---@param s string
+---@return string
+local function strip_click(s)
+  return (s:gsub("%%%d+@UiSlClick@", ""):gsub("%%X", ""))
+end
+
 describe("ui.statusline.render.generate", function()
   local render = require("ui.statusline.render")
 
@@ -19,7 +32,7 @@ describe("ui.statusline.render.generate", function()
         b = "B", -- a string module is valid too, same as nvchad.stl.utils.generate()
       },
     })
-    assert.equals("AB", out)
+    assert.equals("AB", strip_click(out))
   end)
 
   it("passes '%=' through unresolved, as the statusline alignment break", function()
@@ -34,7 +47,7 @@ describe("ui.statusline.render.generate", function()
         end,
       },
     })
-    assert.equals("A%=B", out)
+    assert.equals("A%=B", strip_click(out))
   end)
 
   it("falls back to the named theme's module for a key its own modules lack", function()
@@ -86,7 +99,7 @@ describe("ui.statusline.render.generate", function()
           end,
         },
       })
-      assert.equals("OK", out)
+      assert.equals("OK", strip_click(out))
     end)
   end)
 
@@ -126,7 +139,7 @@ describe("ui.statusline.render.generate", function()
     })
 
     vim.notify = original_notify
-    assert.equals("A", out)
+    assert.equals("A", strip_click(out))
     assert.same({}, warned)
   end)
 end)
@@ -157,7 +170,7 @@ describe("ui.statusline.render enable/render/disable", function()
         end,
       },
     })
-    assert.equals("hello", render.render())
+    assert.equals("hello", strip_click(render.render()))
   end)
 
   it("render() is empty before any enable() call", function()
@@ -184,6 +197,83 @@ describe("ui.statusline.render enable/render/disable", function()
       render.enable({ order = {}, modules = {} })
       render.enable({ order = {}, modules = {} })
     end)
+  end)
+end)
+
+describe("ui.statusline.render's generic click wrap and hover recolor", function()
+  local render = require("ui.statusline.render")
+  local layout = require("ui.statusline.layout")
+  local hover = require("ui.statusline.hover")
+
+  it("wraps a plain module's output in a fresh click region", function()
+    local out = render.generate({
+      order = { "plain" },
+      modules = {
+        plain = function()
+          return "P"
+        end,
+      },
+    })
+    assert.is_true(out:match("^%%%d+@UiSlClick@P%%X$") ~= nil, out)
+  end)
+
+  it("leaves a module that already carries its own click region untouched", function()
+    local clickable = require("ui.statusline.utils.clickable")
+    local wrapped, id = clickable.wrap(function()
+      return "already"
+    end, {})
+
+    local out = render.generate({ order = { "x" }, modules = { x = wrapped } })
+
+    -- Exactly one click region, still carrying the ORIGINAL id -- not
+    -- nested inside a second one `generate()` would otherwise have added.
+    assert.equals(("%%%d@UiSlClick@already%%X"):format(id), out)
+  end)
+
+  it("records a layout that ui.statusline.layout.key_at() can hit-test afterwards", function()
+    local winid = vim.api.nvim_get_current_win()
+    local saved_winid = vim.g.statusline_winid
+    vim.g.statusline_winid = winid
+
+    render.generate({
+      order = { "solo" },
+      modules = {
+        solo = function()
+          return "SOLO"
+        end,
+      },
+    })
+
+    vim.g.statusline_winid = saved_winid
+    assert.equals("solo", layout.key_at(winid, 1, 10))
+  end)
+
+  it("recolors the currently hovered key's highlight groups, leaving others alone", function()
+    local original_current_key = hover.current_key
+    ---@diagnostic disable-next-line: duplicate-set-field
+    hover.current_key = function()
+      return "hovered"
+    end
+
+    local out = render.generate({
+      order = { "hovered", "plain" },
+      modules = {
+        hovered = function()
+          return "%#SomeGroup#H"
+        end,
+        plain = function()
+          return "%#SomeGroup#P"
+        end,
+      },
+    })
+
+    hover.current_key = original_current_key
+
+    -- "hovered"'s group is swapped to its `St_Hover__*` variant; "plain"'s
+    -- is not touched at all, proving the recolor is scoped to the one key
+    -- rather than every occurrence of the same group name.
+    assert.is_true(out:find("%#St_Hover__SomeGroup#H", 1, true) ~= nil, out)
+    assert.is_true(out:find("%#SomeGroup#P", 1, true) ~= nil, out)
   end)
 end)
 

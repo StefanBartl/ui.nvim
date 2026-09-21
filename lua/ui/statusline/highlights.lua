@@ -25,6 +25,15 @@ local M = {}
 local api = vim.api
 local palette = require("ui.theme.palette")
 
+--- One derived group per base group `ui.statusline.render` has recolored for
+--- the currently hovered module: `base`'s own attributes (background, bold,
+--- ...) untouched, `fg` swapped to a single hover accent -- "the text
+--- brightens", not "the module repaints itself in a new color scheme".
+--- Reset by `M.apply()`, since a stale entry would otherwise survive a
+--- `:colorscheme` switch with the previous theme's colors baked in.
+---@type table<string, string>
+local hover_variants = {}
+
 ---@param n integer|nil
 ---@return string|nil
 local function to_hex(n)
@@ -127,6 +136,42 @@ function M.apply()
 
   -- `plugin_progress`'s transient status line (used by the "default" preset).
   set(0, "St_LspProgress", { fg = fg, bg = "NONE" })
+
+  -- Every `St_Hover__*` variant (see `M.hover_variant` below) was derived
+  -- from groups this same colorscheme just changed -- stale otherwise, since
+  -- nothing else invalidates them.
+  hover_variants = {}
+end
+
+--- `DiagnosticWarn` is the hover accent's anchor (an amber/orange in most
+--- colorschemes, already what `St_lspWarning` above reads), same "close to
+--- universally defined" reasoning `ui.theme.palette` documents for its own
+--- anchors.
+---@return string hex
+local function hover_fg()
+  return read("DiagnosticWarn", "fg") or read("WarningMsg", "fg") or "#e0af68"
+end
+
+--- The hover variant of `base_group`, creating and caching it on first use.
+--- Safe to call with any group name, defined or not -- `nvim_get_hl` on an
+--- unknown group simply returns no attributes, so the variant degrades to
+--- "just the hover fg, no background", never an error.
+---@param base_group string
+---@return string
+function M.hover_variant(base_group)
+  local cached = hover_variants[base_group]
+  if cached then
+    return cached
+  end
+
+  local ok, hl = pcall(api.nvim_get_hl, 0, { name = base_group, link = false })
+  local attrs = (ok and type(hl) == "table") and vim.deepcopy(hl) or {}
+  attrs.fg = hover_fg()
+
+  local name = "St_Hover__" .. base_group
+  api.nvim_set_hl(0, name, attrs)
+  hover_variants[base_group] = name
+  return name
 end
 
 local ensured = false
