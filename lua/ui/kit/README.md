@@ -175,6 +175,12 @@ truncation — `lib.nvim.fs.path_shorten(path, width)` (style `"fit"`, the
 default) is built for exactly this: it keeps the drive/root and the filename
 visible and collapses the middle.
 
+If `render` raises (a file it cannot read into lines, say), the pane shows one
+line, `preview failed: <the error's first line>`, instead of keeping the previous
+item's text under the new selection. `surface:set_lines` restores the buffer's
+`modifiable` even when it is the one that raises, so a read-only preview stays
+read-only.
+
 #### Working in the preview
 
 The preview is a real window, so it can be worked in and not only looked at.
@@ -217,7 +223,7 @@ kit.shortlist({
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `preview_keys` | the table above | `false` binds none; a group set to a list of your own replaces that group's keys, set to `false` drops it. Groups: `scroll_down`, `scroll_up`, `half_down`, `half_up`, `focus`, `cycle`, `close`, `submit` |
+| `preview_keys` | the table above | `false` binds none; a group set to a list of your own replaces that group's keys (a bare string is a list of one), set to `false` drops it. Entries that are not non-empty strings are ignored, and a group left with none is off. Groups: `scroll_down`, `scroll_up`, `half_down`, `half_up`, `focus`, `cycle`, `close`, `submit` |
 | `close_on_leave` | `true` | close the popup when focus goes to a window that is neither the list nor the preview |
 | `hints` | `true` | the lit border and the footers; `false` leaves both alone |
 
