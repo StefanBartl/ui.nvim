@@ -231,6 +231,13 @@ The keys are buffer-local to the two popup windows, so they never touch your
 own mappings, and they are set with `record = false` — `lib.nvim`'s keymap
 records are keyed by buffer number, and a new popup means a new one.
 
+The same goes for the autocmd hooks of every popup (a surface's `WinClosed`, the
+resize and selection hooks of the shortlist, picker and compare): they are
+created under a group named after the window id, so `lib.nvim`'s autocmd records
+would keep one entry per popup for good. They pass `record = false` too, and
+`lib.nvim`'s own `close_on_focus_lost` helper does the same. Groups with a fixed
+name are cleared on every open and stay recorded.
+
 ### Compare (pick two, view side by side)
 
 `kit.compare(opts)` picks two items out of one picker, then shows both full
