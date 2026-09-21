@@ -12,6 +12,16 @@ local render = require("ui.tabline.render")
 local drag = require("ui.tabline.drag")
 local reopen = require("ui.tabline.reopen")
 
+--- A path as Neovim reports it against the one the test built: the resolved,
+--- forward-slash form. Neovim names a buffer by its real path (macOS resolves
+--- `/var` to `/private/var`) and with the platform's separators (Windows), while
+--- the spec joins `stdpath("run")` and a name with a `/`.
+---@param path string
+---@return string
+local function canonical(path)
+  return vim.fs.normalize(vim.uv.fs_realpath(path) or path)
+end
+
 --- A named, listed buffer, made current -- which is what feeds `vim.t.bufs`.
 ---@param name string
 ---@return integer
@@ -372,7 +382,7 @@ describe("ui.tabline.menu.items", function()
       assert.equals(1, #entry.items)
 
       entry.items[1].cmd()
-      assert.equals(path, vim.api.nvim_buf_get_name(0))
+      assert.equals(canonical(path), canonical(vim.api.nvim_buf_get_name(0)))
       assert.is_false(reopen.has_any())
 
       pcall(vim.api.nvim_buf_delete, 0, { force = true })
