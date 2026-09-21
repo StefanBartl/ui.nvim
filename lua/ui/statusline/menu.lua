@@ -125,10 +125,15 @@ function M.items(key)
       if not in_order(cfg, entry.key) then
         -- Truncated rather than the full sentence: this is a menu row, not
         -- `:UI modules`'s listing -- hovering the module once it's added is
-        -- what shows the whole summary (`ui.statusline.hover`).
+        -- what shows the whole summary (`ui.statusline.hover`). Measured and
+        -- cut with `strdisplaywidth`/`strcharpart`, not `#`/`:sub` -- several
+        -- summaries carry multi-byte glyphs (the traffic-light emoji, the
+        -- macro-counter middle dot), and a byte-index cut can land inside
+        -- one of them, same defect class `ui.statusline.modules.formatters`
+        -- `ellipsize_middle` was fixed for (see TESTS/README.md).
         local short = entry.summary
-        if #short > 42 then
-          short = short:sub(1, 41) .. "…"
+        if vim.fn.strdisplaywidth(short) > 42 then
+          short = vim.fn.strcharpart(short, 0, 41) .. "…"
         end
         add_items[#add_items + 1] = contextmenu.entry(
           true,
@@ -156,14 +161,30 @@ function M.items(key)
   return items
 end
 
---- Whether the last known mouse position was on the statusline -- for a
+--- Whether the last known mouse position was on a statusline module the
+--- native click replay could actually have opened a menu for -- for a
 --- host's own `<RightMouse>` dispatcher to step aside once it has replayed
 --- the native click (mirrors `ui.tabline.menu.pointer_on_tabline()`; see
 --- that function's own doc comment for why a dispatcher needs this check at
 --- all rather than just always opening its general menu too).
+---
+--- Deliberately more than "is the pointer geometrically on the statusline
+--- row": every rendered module carries a click region (`ui.statusline
+--- .render`'s generic wrap, or a module's own), but the row itself is
+--- wider than the modules on it -- the padding a `%=` expands into, or
+--- trailing space past the last one. A click landing there has no region to
+--- replay onto, so answering `true` for it purely from row geometry would
+--- silence the host's own general menu for a click that neither menu ends
+--- up opening. `ui.statusline.layout.key_at()` is what a real click region
+--- is keyed on, so it is the more precise "was there actually something
+--- here" check.
 ---@return boolean
 function M.pointer_on_statusline()
-  return require("ui.statusline.hover").pointer_target() ~= nil
+  local target = require("ui.statusline.hover").pointer_target()
+  if not target then
+    return false
+  end
+  return require("ui.statusline.layout").key_at(target.winid, target.col, target.maxwidth) ~= nil
 end
 
 --- Open the menu for `key`, built fresh from the live config so it always

@@ -380,20 +380,37 @@ describe("ui.statusline.modules.git_clickable", function()
   end)
 
   it(
-    "double click opens ui.statusline.menu for 'git_clickable' -- right click already owns the branch menu",
+    "double click falls back to the same branch switcher as a plain left click -- "
+      .. "no 'dbl' handler, deliberately: see the module's own doc comment on why "
+      .. "wiring one there would have raced ui.statusline.menu against this picker",
     function()
-      local menu = require("ui.statusline.menu")
-      local original_open = menu.open
-      local opened_with = nil
       ---@diagnostic disable-next-line: duplicate-set-field
-      menu.open = function(key)
-        opened_with = key
+      vim.fn.systemlist = function()
+        return { "main" }
+      end
+
+      local menu = require("ui.statusline.menu")
+      local original_menu_open = menu.open
+      local menu_opened = false
+      ---@diagnostic disable-next-line: duplicate-set-field
+      menu.open = function()
+        menu_opened = true
+      end
+
+      local original_select = vim.ui.select
+      local select_called = false
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.select = function()
+        select_called = true
       end
 
       clickable._dispatch(click_id, "l", 2)
-      menu.open = original_open
 
-      assert.equals("git_clickable", opened_with)
+      menu.open = original_menu_open
+      vim.ui.select = original_select
+
+      assert.is_true(select_called)
+      assert.is_false(menu_opened)
     end
   )
 
@@ -505,19 +522,48 @@ describe("ui.statusline.modules.variant", function()
     assert.equals("minimal", require("ui.config").get_variant())
   end)
 
-  it("right click and double click both open ui.statusline.menu for 'variant'", function()
+  it("right click opens ui.statusline.menu for 'variant'", function()
     local menu = require("ui.statusline.menu")
     local original_open = menu.open
-    local opened_with = {}
+    local opened_with = nil
     ---@diagnostic disable-next-line: duplicate-set-field
     menu.open = function(key)
-      opened_with[#opened_with + 1] = key
+      opened_with = key
     end
 
     clickable._dispatch(click_id, "r")
-    clickable._dispatch(click_id, "l", 2)
     menu.open = original_open
 
-    assert.same({ "variant", "variant" }, opened_with)
+    assert.equals("variant", opened_with)
   end)
+
+  it(
+    "double click falls back to the same quick-switch as a plain left click -- "
+      .. "no 'dbl' handler, deliberately: see the module's own doc comment on why "
+      .. "wiring one there would have raced ui.statusline.menu against this picker",
+    function()
+      local menu = require("ui.statusline.menu")
+      local original_menu_open = menu.open
+      local menu_opened = false
+      ---@diagnostic disable-next-line: duplicate-set-field
+      menu.open = function()
+        menu_opened = true
+      end
+
+      local original_select = vim.ui.select
+      local select_called = false
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.select = function()
+        select_called = true
+      end
+
+      clickable._dispatch(click_id, "l", 2)
+
+      menu.open = original_menu_open
+      vim.ui.select = original_select
+
+      assert.is_true(select_called)
+      assert.is_false(menu_opened)
+    end
+  )
 end)

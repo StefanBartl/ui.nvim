@@ -121,7 +121,14 @@ local function show_popup(text, screenrow, screencol)
     border = "rounded",
     focusable = false,
     noautocmd = true,
-    zindex = 300,
+    -- Below every `ui.kit` surface (`base`/`popup` 50, `menu` 60, `toast`
+    -- 70 -- see ui.kit.theme's own BASE.zindex) on purpose: a right-click
+    -- opens the "manage this module" menu at the exact spot this tooltip is
+    -- already showing (the pointer has not moved between hover and click),
+    -- and an ambient hint has no business rendering on top of something the
+    -- user just asked for. It stays open underneath, harmlessly invisible,
+    -- until the next real mouse move clears or replaces it.
+    zindex = 40,
   })
   if not ok then
     pcall(api.nvim_buf_delete, buf, { force = true })

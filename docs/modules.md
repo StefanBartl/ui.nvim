@@ -280,16 +280,22 @@ in `order`/`modules`:
   `DiagnosticWarn`), background and everything else about it left alone.
   Needs `'mousemoveevent'` (Neovim 0.10+); degrades to "no hover" silently on
   an older Neovim, same as `ui.kit.chooser`'s own `hover` option.
-- **Right/double click → manage modules.** Right-clicking (or double-clicking)
-  a module opens a context menu with "Remove `<key>`" and an "Add module"
-  fly-out listing every catalogued key not currently in `order`. Picking one
-  mutates the *live* `Ui.Statusline.Config` `render.enable()` was last given
-  and redraws — runtime-only, exactly like `:UI variant <name>`: nothing is
-  written back to your own config, so a restart reverts to whatever `order`
-  you actually wrote. A module that already claims right/double click for its
-  own purpose (`git_clickable`'s right click opens its branch menu, for
-  instance) keeps that; `git_clickable` still gets the management menu on
-  double click.
+- **Right/double click → manage modules.** Right-clicking (or double-clicking,
+  on a plain module) opens a context menu with "Remove `<key>`" and an "Add
+  module" fly-out listing every catalogued key not currently in `order`.
+  Picking one mutates the *live* `Ui.Statusline.Config` `render.enable()` was
+  last given and redraws — runtime-only, exactly like `:UI variant <name>`:
+  nothing is written back to your own config, so a restart reverts to
+  whatever `order` you actually wrote. A module that already claims left
+  click for its own purpose and opens a `vim.ui.select` picker with it
+  (`git_clickable`, `variant`) has **no** double-click override onto this
+  menu: Neovim's click protocol calls the handler once per physical click,
+  so the first click of a double click already fires as an ordinary left
+  click before the second one arrives — wiring `dbl` there would have opened
+  this menu on top of the picker that first click just opened. Right click
+  still reaches it either way (their own branch menu for `git_clickable`,
+  this one for `variant`); double click on either module just re-runs left
+  click, the same as a plain second click would.
 - **Saving the layout.** The same menu's "Layout" group has "Save current
   layout" and "Clear saved layout". Saving writes the live `order` to a small
   JSON file (`ui.statusline.state`, default

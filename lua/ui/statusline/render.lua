@@ -225,10 +225,30 @@ function M.ensure_module_loaded(cfg, entry)
   return true
 end
 
+-- Whether the saved layout has already been restored once this "session"
+-- (the stretch between an `enable()` and the `disable()` that ends it) --
+-- see `apply_saved_order`'s own doc comment for why this matters at all.
+---@type boolean
+local restored_saved_order = false
+
 --- Restore `order` from `ui.statusline.state`'s saved file onto `cfg`, if
---- one exists -- called from `M.enable()` on every call (startup and every
---- later `:UI variant`/menu switch alike), so a no-op when nothing was ever
---- saved (`state.read()` returns nil) costs one file stat and nothing else.
+--- one exists and this is the first `enable()` since the last `disable()`
+--- (i.e. an actual start, not a later `:UI variant`/menu-driven re-`enable()`
+--- within the same running session) -- a no-op otherwise, or when nothing
+--- was ever saved (`state.read()` returns nil), costing one file stat and
+--- nothing else.
+---
+--- BUG this guard fixes: applying the saved `order` on EVERY `enable()` call
+--- meant that once a layout had ever been saved, `:UI variant <name>` -- and
+--- the "Add module"/"Remove" menu, mutating `cfg.order` only for the very
+--- config `apply_saved_order` was about to stomp right back over -- stopped
+--- visibly doing anything: every one of those calls reaches `enable()`
+--- again, and the saved file would win every single time regardless of what
+--- was just switched to. "Saved layout wins on the next start, but not
+--- forever" is what `ui.statusline.menu`'s own "restored on every future
+--- start" notification promises -- restoring on every `enable()` instead
+--- broke that promise the moment a host (or `:UI variant`) called it twice.
+---
 --- A catalog key the saved list names that also needs a standalone module
 --- gets it required in via `M.ensure_module_loaded`; a key the saved list
 --- names that resolves to neither a catalog entry nor an existing
@@ -242,6 +262,11 @@ end
 ---@param cfg Ui.Statusline.Config
 ---@return nil
 local function apply_saved_order(cfg)
+  if restored_saved_order then
+    return
+  end
+  restored_saved_order = true
+
   local saved = require("ui.statusline.state").read()
   if not saved then
     return
@@ -410,7 +435,10 @@ local current = nil
 --- Turn `cfg` into `vim.o.statusline` and start tracking LSP progress into
 --- it. Safe to call more than once (a variant switch, a re-run in tests) --
 --- each call replaces `current` and `primitives.autocmds()` is idempotent on
---- its own.
+--- its own. A saved layout (`ui.statusline.state`, `apply_saved_order`) is
+--- restored only on the FIRST call after `disable()` (or ever), not on a
+--- later variant switch within the same session -- see that function's own
+--- doc comment for why.
 ---@param cfg Ui.Statusline.Config
 ---@return nil
 function M.enable(cfg)
@@ -442,6 +470,9 @@ function M.disable()
   current = nil
   vim.o.statusline = ""
   hover.disable()
+  -- The next `enable()` is a fresh start again (see `apply_saved_order`'s
+  -- own doc comment on why "only the first `enable()`" matters at all).
+  restored_saved_order = false
 end
 
 --- The config `enable()` last stored, or nil. For tests and `:checkhealth`

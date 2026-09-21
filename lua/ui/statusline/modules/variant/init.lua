@@ -31,17 +31,21 @@ local function open_quick_switch()
   end)
 end
 
+-- Right click, not `dbl`: Neovim's click protocol calls this function once
+-- per physical click (`clicks` names which one it was), not once per
+-- completed gesture -- the first click of a double click still fires with
+-- clicks == 1 before the second arrives with clicks == 2 (the "map both
+-- <LeftMouse> and <2-LeftMouse> and BOTH fire" gotcha, here in the
+-- statusline click protocol's own numbering). A `dbl` handler here would
+-- have opened `ui.statusline.menu` on top of the `vim.ui.select`
+-- quick-switch `open_quick_switch` (this module's own `l`) just opened for
+-- that same gesture's first click. Right click reaches the same menu
+-- without that collision, so double click is left to just run `l` again --
+-- redundant with a plain second click, never two floats fighting over one
+-- gesture.
 return clickable.wrap(render, {
   l = open_quick_switch,
-  -- Right/double click were never claimed for this module's own purposes,
-  -- so both fall to the generic "manage this module" menu every plain
-  -- segment gets automatically (ui.statusline.render's generic wrap) --
-  -- reached here explicitly since a module with its own click protocol
-  -- never falls into that generic path.
   r = function()
-    require("ui.statusline.menu").open("variant")
-  end,
-  dbl = function()
     require("ui.statusline.menu").open("variant")
   end,
 })
