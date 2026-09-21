@@ -14,7 +14,12 @@
 --- line, outermost first. That is a heuristic, not a per-language query
 --- file, and it is the trade this module makes: no query to keep per
 --- grammar, at the price of an occasional scope a query would have named
---- differently. `cfg.node_types` is the knob.
+--- differently. `cfg.node_types` is the knob, `cfg.exclude_node_types` its
+--- veto: a type is a scope when it matches the first and not the second, except
+--- that a `node_types` entry anchored at both ends (`^if_expression$`) names one
+--- exact type the excludes cannot veto -- how a single member of an excluded
+--- family (`_expression$`) is taken back. docs/configuration.md lists what the
+--- shipped patterns pin per language.
 ---
 --- How it is drawn: a scratch buffer holding the context lines verbatim,
 --- with the same parser started on it so keywords keep their colours, in a
@@ -77,20 +82,20 @@ local AUGROUP = "UiContext"
 ---@field max_level integer
 ---@field icons string[]|false
 
+local DEFAULT_MAX_LINES = 3
+local MAX_HEADING_LEVEL = 6
+
 ---@class Ui.Context.Config
 ---@field max_lines integer|table<string, integer> # rows the overlay may take; 0 = unlimited; a table maps filetype -> rows, `default` for the rest
 ---@field trim "outer"|"inner"         # which contexts to drop past `max_lines`: the outer (default) or the inner ones
 ---@field min_window_height integer    # a window shorter than this shows no context
 ---@field debounce_ms integer          # after a scroll/edit; 0 = refresh at once
 ---@field line_numbers boolean         # source line numbers in the gutter when 'number' is on
----@field node_types string[]          # Lua patterns; a node whose type matches one is a scope
----@field exclude_node_types string[]  # Lua patterns; a matching type is never a scope, checked first
+---@field node_types string[]          # Lua patterns; a node whose type matches one is a scope. Anchored both ends (`^name$`) = that exact type, which the excludes cannot veto
+---@field exclude_node_types string[]  # Lua patterns; a matching type is not a scope, checked before `node_types` (except for an exact `^name$` entry there)
 ---@field exclude_filetypes string[]
 ---@field zindex integer
 ---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
-local DEFAULT_MAX_LINES = 3
-local MAX_HEADING_LEVEL = 6
-
 local cfg = {
   max_lines = DEFAULT_MAX_LINES,
   trim = "outer",
@@ -104,15 +109,17 @@ local cfg = {
     "struct",
     "impl",
     "^module",
+    "^mod_item$", -- rust
     "namespace",
     "interface",
     "^enum",
     "trait",
     "^if_statement$",
-    "^if_expression$",
     "^elseif",
+    "^elif", -- python, bash
     "^else_clause$",
     "^for",
+    "_for_statement$", -- java: enhanced_for_statement; bash: c_style_for_statement
     "^while",
     "^repeat",
     "^do_statement$",
@@ -121,11 +128,34 @@ local cfg = {
     "^match",
     "^try",
     "catch",
+    "^finally",
     "^with_statement",
     "^section$", -- markdown: a heading's section starts on the heading line
+    -- Exact names: the excludes below would swallow every one of them
+    -- (`_expression$`, `^type`), and none of these is a bare expression.
+    "^if_expression$", -- rust, kotlin
+    "^for_expression$", -- rust
+    "^while_expression$", -- rust
+    "^loop_expression$", -- rust
+    "^match_expression$", -- rust
+    "^when_expression$", -- kotlin
+    "^function_expression$", -- javascript, typescript: `describe("x", function () {`
+    "^func_literal$", -- go: `t.Run("x", func(t *testing.T) {`
+    "^type_declaration$", -- go: `type T struct {`
+    "^expression_case$", -- go: `case 1:`
+    "^type_case$", -- go: `case int:` in a type switch
+    "^default_case$", -- go
+    "^communication_case$", -- go: `case <-ch:` in a select
+    "^except_clause$", -- python
+    "^except_group_clause$", -- python: `except*`
+    "^switch_expression$", -- java (a `switch` statement is one too), c#
+    "^do_while_statement$", -- kotlin
+    "^record_declaration$", -- java, c#
+    "^internal_module$", -- typescript: `namespace Foo {`
   },
   exclude_node_types = {
     "call",
+    "invocation", -- java: method_invocation (`method` in node_types would take it for a method)
     "argument",
     "parameter",
     "_type$",
@@ -218,9 +248,28 @@ end
 -- ---------------------------------------------------------------- scope detection
 
 ---@internal
+---A `node_types` entry that is anchored at both ends (`^if_expression$`) names
+---exactly one node type instead of a family of them.
+---@param pat string
+---@return boolean
+local function is_exact_pattern(pat)
+  return pat:sub(1, 1) == "^" and pat:sub(-1) == "$" and pat:sub(-2) ~= "%$"
+end
+
+---Whether a node of type `typ` counts as a scope: it matches `cfg.node_types`
+---and is not vetoed by `cfg.exclude_node_types`. An exactly named type
+---(`^if_expression$`) is not vetoed: the excludes are broad on purpose
+---(`_expression$` keeps `call_expression`, `try_expression`'s `?` and struct
+---literals out), and a name spelled out in full is the way to take one member
+---of such a family back.
 ---@param typ string
 ---@return boolean
-local function is_scope_type(typ)
+function M.is_scope_type(typ)
+  for _, pat in ipairs(cfg.node_types) do
+    if is_exact_pattern(pat) and typ:find(pat) then
+      return true
+    end
+  end
   for _, pat in ipairs(cfg.exclude_node_types) do
     if typ:find(pat) then
       return false
@@ -284,7 +333,7 @@ function M.contexts(buf, top_row)
   local seen_rows = {}
   while node do
     local srow = node:start()
-    if srow < top_row and is_scope_type(node:type()) and not seen_rows[srow] then
+    if srow < top_row and M.is_scope_type(node:type()) and not seen_rows[srow] then
       seen_rows[srow] = true
       table.insert(out, 1, { row = srow, type = node:type() })
     end
@@ -315,19 +364,36 @@ local function max_lines_for(buf)
 end
 
 ---@internal
----Heading level of the Markdown section that starts on `row`: an ATX `#`
----marker (up to three spaces of indent, then 1..6 `#` and a blank or the end
----of the line, as CommonMark has it), or a Setext underline on the next row
----(`===` is 1, `---` is 2). nil when neither is there.
+---The ATX heading on `line`: up to three spaces of indent, then 1..6 `#` and
+---a blank or the end of the line, as CommonMark has it. Both the level cap and
+---the drawing read a heading through this, so they cannot disagree on what one
+---is.
+---@param line string
+---@return integer|nil level
+---@return integer|nil indent  columns before the first `#`
+local function atx_heading(line)
+  local indent, marker = line:match("^( ? ? ?)(#+)[ \t]")
+  if not marker then
+    indent, marker = line:match("^( ? ? ?)(#+)$")
+  end
+  if marker and #marker <= MAX_HEADING_LEVEL then
+    return #marker, #indent
+  end
+  return nil, nil
+end
+
+---@internal
+---Heading level of the Markdown section that starts on `row`: an ATX heading
+---(`atx_heading`), or a Setext underline on the next row (`===` is 1, `---`
+---is 2). nil when neither is there.
 ---@param buf integer
 ---@param row integer  0-based
 ---@return integer|nil
 local function section_level(buf, row)
   local lines = vim.api.nvim_buf_get_lines(buf, row, row + 2, false)
-  local first = lines[1] or ""
-  local marker = first:match("^ ? ? ?(#+)[ \t]") or first:match("^ ? ? ?(#+)$")
-  if marker then
-    return #marker <= MAX_HEADING_LEVEL and #marker or nil
+  local level = atx_heading(lines[1] or "")
+  if level then
+    return level
   end
   local underline = lines[2] or ""
   if underline:match("^=+%s*$") then
@@ -454,15 +520,12 @@ end
 ---@param buf integer
 ---@param text string
 ---@return integer|nil level
+---@return integer|nil indent  columns before the first `#`
 local function heading_level(buf, text)
   if not cfg.headings.enable or vim.bo[buf].filetype ~= "markdown" then
-    return nil
+    return nil, nil
   end
-  local marker = text:match("^(#+)%s")
-  if marker and #marker <= 6 then
-    return #marker
-  end
-  return nil
+  return atx_heading(text)
 end
 
 ---@internal
@@ -472,8 +535,9 @@ end
 ---@param row integer   0-based row in the overlay buffer
 ---@param level integer
 ---@param from integer  byte column where the source text starts (after the gutter)
+---@param indent integer  columns between `from` and the first `#`
 ---@param line_len integer
-local function style_heading(cbuf, row, level, from, line_len)
+local function style_heading(cbuf, row, level, from, indent, line_len)
   local group = "UiContextH" .. level
   pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, from, {
     end_col = line_len,
@@ -490,7 +554,7 @@ local function style_heading(cbuf, row, level, from, line_len)
   if icons and icons[level] then
     -- Exactly `level` cells, the width of the marker it covers: the icon and
     -- padding, so the text keeps its source columns.
-    pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, from, {
+    pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, row, from + indent, {
       virt_text = { { icons[level] .. string.rep(" ", level - 1), group } },
       virt_text_pos = "overlay",
       priority = 310,
@@ -531,11 +595,11 @@ local function draw(win, buf, entries)
   local info = vim.fn.getwininfo(win)[1]
   local textoff = info and info.textoff or 0
 
-  local lines, gutters, levels = {}, {}, {}
+  local lines, gutters, levels, indents = {}, {}, {}, {}
   for i, e in ipairs(entries) do
     local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
     text = text:gsub("%s+$", "")
-    levels[i] = heading_level(buf, text)
+    levels[i], indents[i] = heading_level(buf, text)
     local g = gutter(win, e.row, textoff)
     gutters[i] = #g
     local full = g .. text
@@ -574,7 +638,7 @@ local function draw(win, buf, entries)
   end
   for i = 1, #lines do
     if levels[i] then
-      style_heading(cbuf, i - 1, levels[i], gutters[i], #lines[i])
+      style_heading(cbuf, i - 1, levels[i], gutters[i], indents[i], #lines[i])
     end
   end
   pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, #lines - 1, 0, {

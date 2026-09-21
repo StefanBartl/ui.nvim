@@ -180,4 +180,31 @@ describe("ui.health", function()
 
     assert.equals("minimal", cfg.get_variant())
   end)
+
+  describe("the Context section", function()
+    local context = require("ui.context")
+
+    after_each(function()
+      context.disable()
+      context.setup({ max_lines = 3, headings = { max_level = 6 } })
+    end)
+
+    it("says how to switch it on while it is off", function()
+      context.disable()
+      assert.is_true(has(capture(), "info", "ui.context is off"))
+    end)
+
+    it("reports a plain max_lines and the heading depth", function()
+      context.enable()
+      assert.is_true(has(capture(), "ok", "ui.context is on (max_lines 3, heading depth 6"))
+    end)
+
+    it("reports the per-filetype form of max_lines and a capped depth", function()
+      context.setup({ max_lines = { default = 3, markdown = 6 }, headings = { max_level = 4 } })
+      context.enable()
+      local calls = capture()
+      assert.is_true(has(calls, "ok", "max_lines 3 (markdown 6)"))
+      assert.is_true(has(calls, "ok", "heading depth 4"))
+    end)
+  end)
 end)

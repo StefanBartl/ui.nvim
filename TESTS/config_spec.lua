@@ -197,4 +197,53 @@ describe("ui.setup", function()
       assert.equals(2, #out) -- heading + one entry, no separator before the first group
     end)
   end)
+
+  describe("opts.sticky / opts.context", function()
+    local context = require("ui.context")
+
+    after_each(function()
+      -- Global state -- put the overlay back to its shipped, off state.
+      context.disable()
+      context.setup({ max_lines = 3, headings = { max_level = 6 } })
+    end)
+
+    it("stays off without either key, and under all = true", function()
+      require("ui").setup({ all = true })
+      assert.is_false(context.is_enabled())
+    end)
+
+    it("sticky = true switches it on", function()
+      require("ui").setup({ sticky = true })
+      assert.is_true(context.is_enabled())
+    end)
+
+    it("context = true is the older spelling of the same switch", function()
+      require("ui").setup({ context = true })
+      assert.is_true(context.is_enabled())
+    end)
+
+    it("sticky = false wins over context = true and leaves it off", function()
+      require("ui").setup({ sticky = false, context = true })
+      assert.is_false(context.is_enabled())
+    end)
+
+    it("sticky = true wins over context = false", function()
+      require("ui").setup({ sticky = true, context = false })
+      assert.is_true(context.is_enabled())
+    end)
+
+    it("a sticky table is applied and enables it", function()
+      require("ui").setup({
+        sticky = { max_lines = { default = 2, markdown = 6 }, headings = { max_level = 4 } },
+      })
+      assert.is_true(context.is_enabled())
+      assert.equals("2 (markdown 6)", context.describe_max_lines())
+      assert.equals(4, context.config().headings.max_level)
+    end)
+
+    it("a sticky table wins over a context table", function()
+      require("ui").setup({ sticky = { max_lines = 5 }, context = { max_lines = 1 } })
+      assert.equals(5, context.config().max_lines)
+    end)
+  end)
 end)
