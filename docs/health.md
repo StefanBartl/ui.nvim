@@ -142,7 +142,8 @@ section surfaces what the last call rejected. That covers the integer
 tunables (`width`, `height`, `margin`, `max_entries`, `fade_ms`) as well as
 `labels` (a table mapping key names to replacement text -- mapping spelling
 is fine, `<C-w>` is stored as the `<C-W>` that `keytrans()` reports -- e.g.
-`{ ["<Space>"] = "â£" }`; a non-string entry, or one containing a newline, is dropped) and
+`{ ["<Space>"] = "\xE2\x90\xA3" }` for U+2423, written as bytes so no editor or
+encoding pass can damage it; a non-string entry, or one containing a newline, is dropped) and
 `join_chars` (a boolean: run plain characters together into one chip per
 typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart).
 
