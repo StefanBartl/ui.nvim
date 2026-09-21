@@ -134,12 +134,15 @@ M.git = function()
 end
 
 --- Whether any LSP client is attached to the statusline's buffer, as a
---- ready-to-concatenate label.
+--- ready-to-concatenate label. lsp.nvim's own in-process clients (see
+--- `ui.util.lsp`) do not count -- they attach to buffers no language server
+--- is on, and would otherwise win the label by being first in the list.
 ---@return string
 M.lsp = function()
   if rawget(vim, "lsp") then
+    local is_internal = require("ui.util.lsp").is_internal_client
     for _, client in ipairs(vim.lsp.get_clients()) do
-      if client.attached_buffers[M.stbufnr()] then
+      if not is_internal(client) and client.attached_buffers[M.stbufnr()] then
         local label = " " .. ICON_LSP_CLIENT .. "  LSP "
         return (vim.o.columns > 100 and (label .. "~ " .. client.name .. " ")) or label
       end
