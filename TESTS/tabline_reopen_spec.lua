@@ -12,6 +12,16 @@ local state = require("ui.bindings.keymaps.tabufline.state")
 
 local scratch_dir = vim.fn.stdpath("run") .. "/ui-tabline-reopen-spec"
 
+--- A path as Neovim reports it against the one the test built: the resolved,
+--- forward-slash form. Neovim names a buffer by its real path (macOS resolves
+--- `/var` to `/private/var`) and with the platform's separators (Windows), while
+--- the spec joins `stdpath("run")` and a name with a `/`.
+---@param path string
+---@return string
+local function canonical(path)
+  return vim.fs.normalize(vim.uv.fs_realpath(path) or path)
+end
+
 ---@param name string
 ---@return string path
 local function write_file(name)
@@ -172,7 +182,7 @@ describe("ui.tabline.reopen", function()
       assert.is_true(ok)
       assert.is_false(reopen.has_any())
 
-      assert.equals(path, vim.api.nvim_buf_get_name(0))
+      assert.equals(canonical(path), canonical(vim.api.nvim_buf_get_name(0)))
       assert.same({ 2, 3 }, vim.api.nvim_win_get_cursor(0))
     end)
 
