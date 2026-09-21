@@ -220,7 +220,12 @@ rather than a hand-written global Vimscript function per action (that
 one-global-per-action shape is what `ui.tabline.utils`' `btn` does instead,
 which fits a small fixed set of tabline actions but does not scale to an open
 set of statusline segments). `handlers` is a table keyed by button:
-`{ l = fn, r = fn, m = fn }` for left/right/middle click, each `fun(): nil`.
+`{ l = fn, r = fn, m = fn, dbl = fn }` for left/right/middle/double-left
+click, each `fun(): nil`. `dbl` fires instead of `l` when the native click
+protocol reports two or more clicks (Neovim's own `<2-LeftMouse>`
+convention); a handler table with no `dbl` entry just runs `l` again, so
+double-clicking a module that never opted into the distinction behaves
+exactly like clicking it once.
 
 The three modules below are all built the same way — `clickable.wrap()` on
 top of an existing (or new) segment function, at module-load time, not
@@ -259,6 +264,47 @@ Building your own clickable module is `clickable.wrap()` around whatever
 segment function you already have (see the "Building your own module"
 section below for the building blocks) — nothing about `wrap()` requires the
 segment itself to be new.
+
+---
+
+## Hover tooltip and the "manage this module" menu
+
+Two things every rendered module gets automatically, with nothing to wire up
+in `order`/`modules`:
+
+- **Hover.** Rest the mouse on any module and a small float appears after a
+  moment, showing that module's `ui.statusline.catalog` `summary` (the same
+  English one-liner `:UI modules` prints). The module's own text also
+  recolors for as long as it stays hovered — its foreground swapped to a
+  single accent color (an amber/orange in most colorschemes, read from
+  `DiagnosticWarn`), background and everything else about it left alone.
+  Needs `'mousemoveevent'` (Neovim 0.10+); degrades to "no hover" silently on
+  an older Neovim, same as `ui.kit.chooser`'s own `hover` option.
+- **Right/double click → manage modules.** Right-clicking (or double-clicking)
+  a module opens a context menu with "Remove `<key>`" and an "Add module"
+  fly-out listing every catalogued key not currently in `order`. Picking one
+  mutates the *live* `Ui.Statusline.Config` `render.enable()` was last given
+  and redraws — runtime-only, exactly like `:UI variant <name>`: nothing is
+  written back to your own config, so a restart reverts to whatever `order`
+  you actually wrote. A module that already claims right/double click for its
+  own purpose (`git_clickable`'s right click opens its branch menu, for
+  instance) keeps that; `git_clickable` still gets the management menu on
+  double click.
+
+Both are implemented once, centrally, not per module: `ui.statusline.render
+.generate()` wraps any segment that has no click region of its own in the
+generic handler (`ui.statusline.menu`), and separately recolors whichever key
+`ui.statusline.hover.current_key()` names on that redraw. A host-written
+custom module gets the click-region wrap and the "Add/Remove" menu for free;
+it only misses the hover tooltip's *text* if it has no `ui.statusline.catalog`
+entry of its own (the recolor still applies).
+
+If you bind your own global `<RightMouse>` dispatcher (the pattern
+`ui.tabline.menu.pointer_on_tabline()` documents), have it call
+`ui.statusline.menu.pointer_on_statusline()` and step aside when true, the
+same way it already should for `pointer_on_tabline()` — otherwise a right
+click on the statusline opens both this menu and your own general one, on
+top of each other.
 
 ---
 

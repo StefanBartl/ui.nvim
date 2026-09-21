@@ -40,6 +40,17 @@ local function narrow_window(width)
     end
 end
 
+--- Every plain (non-`%=`) key now comes back wrapped in the generic
+--- `%<id>@UiSlClick@...%X` right/double-click protocol `ui.statusline.render
+--- .generate()` adds to any module that has no click region of its own (see
+--- that module's own doc comment). Assertions below care about which KEYS
+--- rendered, not the click wrapper, so it is stripped before comparing.
+---@param s string
+---@return string
+local function strip_click(s)
+  return (s:gsub("%%%d+@UiSlClick@", ""):gsub("%%X", ""))
+end
+
 ---@type table<string, fun(): string>
 local FAKE_MODULES = {
   mode = function()
@@ -60,7 +71,7 @@ describe("ui.statusline.render responsive mode", function()
     local out = render.generate({ order = { "mode", "git", "cursor" }, modules = FAKE_MODULES })
 
     restore()
-    assert.equals("MGC", out)
+    assert.equals("MGC", strip_click(out))
   end)
 
   it("drops non-essential keys in a window narrower than responsive_width", function()
@@ -74,7 +85,7 @@ describe("ui.statusline.render responsive mode", function()
     })
 
     restore()
-    assert.equals("MC", out)
+    assert.equals("MC", strip_click(out))
   end)
 
   it("keeps every key when the window is wide enough", function()
@@ -88,7 +99,7 @@ describe("ui.statusline.render responsive mode", function()
     })
 
     restore()
-    assert.equals("MGC", out)
+    assert.equals("MGC", strip_click(out))
   end)
 
   it("always keeps the '%=' alignment break even in compact mode", function()
@@ -102,7 +113,7 @@ describe("ui.statusline.render responsive mode", function()
     })
 
     restore()
-    assert.equals("M%=", out)
+    assert.equals("M%=", strip_click(out))
   end)
 
   it("keeps a key the catalog does not know about (a host's own custom module)", function()
@@ -121,7 +132,7 @@ describe("ui.statusline.render responsive mode", function()
     })
 
     restore()
-    assert.equals("MX", out)
+    assert.equals("MX", strip_click(out))
   end)
 
   it("respects a custom responsive_width threshold", function()
@@ -135,7 +146,7 @@ describe("ui.statusline.render responsive mode", function()
     })
 
     restore()
-    assert.equals("MG", out)
+    assert.equals("MG", strip_click(out))
   end)
 
   it(
@@ -161,7 +172,7 @@ describe("ui.statusline.render responsive mode", function()
       -- 50 < the degraded default (80) -> compact mode, same as an absent
       -- responsive_width would produce -- not "never go compact", and not
       -- a thrown error either.
-      assert.equals("M", out)
+      assert.equals("M", strip_click(out))
     end
   )
 end)

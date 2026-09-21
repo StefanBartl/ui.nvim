@@ -30,7 +30,7 @@ with the same two commands.
 
 ## Layout
 
-53 spec files, 650 `it()` cases as of 2026-09-21 (the summary line of
+54 spec files, 658 `it()` cases as of 2026-09-21 (the summary line of
 `scripts/test.sh` is the live count). Grouped by area rather than listed
 alphabetically, since the file names already say what each one covers:
 
@@ -39,7 +39,7 @@ alphabetically, since the file names already say what each one covers:
 | Config / variants / setup | `config_spec.lua`, `variants_spec.lua`, `keymaps_spec.lua` |
 | Theme / transparency | `theme_spec.lua`, `theme_picker_spec.lua` |
 | Health | `health_spec.lua` |
-| Statusline render pipeline | `statusline_render_spec.lua`, `statusline_responsive_spec.lua`, `statusline_highlights_spec.lua`, `statusline_catalog_spec.lua`, `statusline_clickable_spec.lua`, `primitives_separators_spec.lua`, `cursor_ctl_renderer_spec.lua` |
+| Statusline render pipeline | `statusline_render_spec.lua`, `statusline_responsive_spec.lua`, `statusline_highlights_spec.lua`, `statusline_catalog_spec.lua`, `statusline_clickable_spec.lua`, `statusline_hover_menu_spec.lua` (column hit-testing, the `<MouseMove>` tooltip, the right/double-click "manage this module" menu), `primitives_separators_spec.lua`, `cursor_ctl_renderer_spec.lua` |
 | Statusline segments | `casedesk_spec.lua`, `diagnostics_sparkline_spec.lua`, `filetree_cwd_mode_history_spec.lua`, `github_stats_badge_spec.lua`, `idle_clock_spec.lua`, `idle_spec.lua`, `lsp_symbols_treesitter_spec.lua`, `macro_counter_spec.lua`, `recommender_badge_spec.lua`, `runtime_analysis_ampel_spec.lua`, `sandbox_ambient_spec.lua`, `session_status_spec.lua`, `since_last_save_spec.lua`, `time_in_buffer_spec.lua`, `undo_depth_search_count_spec.lua` |
 | Tabline / tabufline | `tabline_render_spec.lua`, `tabline_styles_spec.lua`, `tabufline_forget_spec.lua`, `tabufline_state_spec.lua`, `tabline_menu_spec.lua` (the per-tab right-click menu, its gating, and the left/right/middle click dispatch), `tabline_layout_drag_spec.lua` (which chip is under a column, and the transient drag mappings) |
 | `ui.kit` (floating-window widget toolkit) | `ui_kit_spec.lua` — ~230 assertions ported near-verbatim from the standalone `ui.kit` repo's own suite (`PLAN-ui-kit-migration.md` step 3), covering theme, surface, note, toast, input, prompt, layout, the native chooser + `hover_select` shim, the interactive picker, button-confirm, viewer, form, and live_input through the single `ui.kit` facade |

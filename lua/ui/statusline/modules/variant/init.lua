@@ -33,4 +33,15 @@ end
 
 return clickable.wrap(render, {
   l = open_quick_switch,
+  -- Right/double click were never claimed for this module's own purposes,
+  -- so both fall to the generic "manage this module" menu every plain
+  -- segment gets automatically (ui.statusline.render's generic wrap) --
+  -- reached here explicitly since a module with its own click protocol
+  -- never falls into that generic path.
+  r = function()
+    require("ui.statusline.menu").open("variant")
+  end,
+  dbl = function()
+    require("ui.statusline.menu").open("variant")
+  end,
 })

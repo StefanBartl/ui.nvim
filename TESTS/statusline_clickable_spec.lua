@@ -83,6 +83,66 @@ describe("ui.statusline.utils.clickable", function()
       clickable._dispatch(id, "l")
     end)
   end)
+
+  it("_dispatch treats a missing clicks argument as a single click", function()
+    local called_with = nil
+    local id = clickable.register({
+      l = function()
+        called_with = "l"
+      end,
+      dbl = function()
+        called_with = "dbl"
+      end,
+    })
+
+    clickable._dispatch(id, "l")
+    assert.equals("l", called_with)
+  end)
+
+  it("_dispatch prefers 'dbl' over 'l' when clicks is 2 or more", function()
+    local called_with = nil
+    local id = clickable.register({
+      l = function()
+        called_with = "l"
+      end,
+      dbl = function()
+        called_with = "dbl"
+      end,
+    })
+
+    clickable._dispatch(id, "l", 2)
+    assert.equals("dbl", called_with)
+  end)
+
+  it("_dispatch falls back to 'l' on a double click when no 'dbl' handler exists", function()
+    local called_with = nil
+    local id = clickable.register({
+      l = function()
+        called_with = "l"
+      end,
+    })
+
+    clickable._dispatch(id, "l", 2)
+    assert.equals("l", called_with)
+  end)
+
+  it("_dispatch never treats 'dbl' as a fallback for a double right click", function()
+    -- `dbl` is specifically the double-LEFT-click convention (Neovim's own
+    -- `<2-LeftMouse>`) -- a double right click has no native equivalent this
+    -- protocol carries, so it must keep resolving against `r`, never `dbl`.
+    local called_with = nil
+    local id = clickable.register({
+      r = function()
+        called_with = "r"
+      end,
+      dbl = function()
+        called_with = "dbl"
+      end,
+    })
+
+    clickable._dispatch(id, "r", 2)
+    assert.equals("r", called_with)
+  end)
 end)
 
 describe("ui.statusline.modules.diagnostics_clickable", function()
@@ -143,6 +203,49 @@ describe("ui.statusline.modules.diagnostics_clickable", function()
     vim.diagnostic.goto_next = original
     assert.is_true(called)
   end)
+
+  it(
+    "right click and double click both open ui.statusline.menu for 'diagnostics_clickable'",
+    function()
+      -- Neither button is claimed for this module's own purposes (only `l`
+      -- is), so both fall to the generic "manage this module" menu -- wired
+      -- directly in the module rather than through render.lua's generic wrap,
+      -- since this module already carries its own click protocol.
+      local _ = vim.lsp
+
+      local buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_set_current_buf(buf)
+      vim.g.statusline_winid = vim.api.nvim_get_current_win()
+
+      local ns = vim.api.nvim_create_namespace("statusline_clickable_spec_rdbl")
+      vim.diagnostic.set(ns, buf, {
+        { lnum = 0, col = 0, message = "boom", severity = vim.diagnostic.severity.ERROR },
+      })
+
+      local out = diagnostics_clickable()
+      local id = tonumber(out:match("^%%(%d+)@UiSlClick@"))
+
+      vim.diagnostic.reset(ns, buf)
+      vim.g.statusline_winid = nil
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+
+      assert.is_not_nil(id, out)
+
+      local menu = require("ui.statusline.menu")
+      local original_open = menu.open
+      local opened_with = {}
+      ---@diagnostic disable-next-line: duplicate-set-field
+      menu.open = function(key)
+        opened_with[#opened_with + 1] = key
+      end
+
+      clickable._dispatch(id, "r")
+      clickable._dispatch(id, "l", 2)
+      menu.open = original_open
+
+      assert.same({ "diagnostics_clickable", "diagnostics_clickable" }, opened_with)
+    end
+  )
 end)
 
 describe("ui.statusline.modules.git_clickable", function()
@@ -276,6 +379,24 @@ describe("ui.statusline.modules.git_clickable", function()
     assert.is_false(rendered)
   end)
 
+  it(
+    "double click opens ui.statusline.menu for 'git_clickable' -- right click already owns the branch menu",
+    function()
+      local menu = require("ui.statusline.menu")
+      local original_open = menu.open
+      local opened_with = nil
+      ---@diagnostic disable-next-line: duplicate-set-field
+      menu.open = function(key)
+        opened_with = key
+      end
+
+      clickable._dispatch(click_id, "l", 2)
+      menu.open = original_open
+
+      assert.equals("git_clickable", opened_with)
+    end
+  )
+
   -- ERR-11: "git succeeded but the repo is genuinely empty" and "git itself
   -- failed" used to collapse into the same warning. `vim.v.shell_error` is
   -- read-only from Lua, so a real `git` call in a real temp directory (not
@@ -382,5 +503,21 @@ describe("ui.statusline.modules.variant", function()
     vim.ui.select = original_select
 
     assert.equals("minimal", require("ui.config").get_variant())
+  end)
+
+  it("right click and double click both open ui.statusline.menu for 'variant'", function()
+    local menu = require("ui.statusline.menu")
+    local original_open = menu.open
+    local opened_with = {}
+    ---@diagnostic disable-next-line: duplicate-set-field
+    menu.open = function(key)
+      opened_with[#opened_with + 1] = key
+    end
+
+    clickable._dispatch(click_id, "r")
+    clickable._dispatch(click_id, "l", 2)
+    menu.open = original_open
+
+    assert.same({ "variant", "variant" }, opened_with)
   end)
 end)
