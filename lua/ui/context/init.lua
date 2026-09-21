@@ -247,13 +247,63 @@ end
 
 -- ---------------------------------------------------------------- scope detection
 
+---@type table<string, boolean>
+local scope_cache = {}
+
 ---@internal
 ---A `node_types` entry that is anchored at both ends (`^if_expression$`) names
----exactly one node type instead of a family of them.
----@param pat string
+---exactly one node type instead of a family of them. A `$` behind an odd run of
+---`%` is a literal dollar sign, not the anchor.
+---@param pat any
 ---@return boolean
 local function is_exact_pattern(pat)
-  return pat:sub(1, 1) == "^" and pat:sub(-1) == "$" and pat:sub(-2) ~= "%$"
+  if type(pat) ~= "string" or pat:sub(1, 1) ~= "^" or pat:sub(-1) ~= "$" then
+    return false
+  end
+  local escapes = pat:sub(1, -2):match("%%*$")
+  return #escapes % 2 == 0
+end
+
+---@internal
+---Whether `typ` matches the Lua pattern `pat`. An entry that is not a valid
+---pattern -- a typo in a user's list -- counts as no match and is reported
+---once, rather than raising on every refresh (one per cursor move).
+---@param typ string
+---@param pat any
+---@return boolean
+local function matches(typ, pat)
+  local ok, hit = pcall(string.find, typ, pat)
+  if not ok then
+    vim.notify_once(
+      ("ui.context: ignoring node type pattern %s (%s)"):format(vim.inspect(pat), hit),
+      vim.log.levels.WARN
+    )
+    return false
+  end
+  return hit ~= nil
+end
+
+---@internal
+---The uncached answer of `is_scope_type`.
+---@param typ string
+---@return boolean
+local function classify(typ)
+  for _, pat in ipairs(cfg.node_types) do
+    if is_exact_pattern(pat) and matches(typ, pat) then
+      return true
+    end
+  end
+  for _, pat in ipairs(cfg.exclude_node_types) do
+    if matches(typ, pat) then
+      return false
+    end
+  end
+  for _, pat in ipairs(cfg.node_types) do
+    if matches(typ, pat) then
+      return true
+    end
+  end
+  return false
 end
 
 ---Whether a node of type `typ` counts as a scope: it matches `cfg.node_types`
@@ -262,25 +312,22 @@ end
 ---(`_expression$` keeps `call_expression`, `try_expression`'s `?` and struct
 ---literals out), and a name spelled out in full is the way to take one member
 ---of such a family back.
+---
+---The answer is remembered per type name -- a grammar has a few hundred at
+---most, and the ancestor walk asks for a dozen on every refresh -- until
+---`setup` changes either list.
 ---@param typ string
 ---@return boolean
 function M.is_scope_type(typ)
-  for _, pat in ipairs(cfg.node_types) do
-    if is_exact_pattern(pat) and typ:find(pat) then
-      return true
-    end
+  if type(typ) ~= "string" then
+    return false
   end
-  for _, pat in ipairs(cfg.exclude_node_types) do
-    if typ:find(pat) then
-      return false
-    end
+  local hit = scope_cache[typ]
+  if hit == nil then
+    hit = classify(typ)
+    scope_cache[typ] = hit
   end
-  for _, pat in ipairs(cfg.node_types) do
-    if typ:find(pat) then
-      return true
-    end
-  end
-  return false
+  return hit
 end
 
 ---@internal
@@ -866,6 +913,7 @@ function M.setup(opts)
       cfg[k] = vim.deepcopy(opts[k])
     end
   end
+  scope_cache = {}
   if enabled then
     build_refresher()
     -- A drawn overlay is cached by what it shows, not by how it is styled: a
