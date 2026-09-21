@@ -248,6 +248,53 @@ the length of one press-drag-release -- they are unmapped again on release
 they shadowed is put back, so ordinary drag-select is untouched between
 drags.
 
+### Statusline mouse
+
+Not keymaps either, with one exception (hover) -- everything but that rides
+the statusline's own click protocol, same as the tabline above. Nothing here
+needs `ui.setup({ keymaps = ... })`.
+
+| Gesture | On | Does |
+| --- | --- | --- |
+| Hover (rest the pointer) | any module | After a moment, a small float shows that module's `ui.statusline.catalog` summary; the module's own text recolors to a single accent (amber/orange in most colorschemes) for as long as it stays hovered |
+| Right click | any module | Open that module's own menu if it has one (`git_clickable`: branch switch/copy/details), otherwise the generic "manage this module" menu (below) |
+| Double click | any module | Always the generic "manage this module" menu, even on a module with its own right click |
+
+Hover needs `'mousemoveevent'` (Neovim 0.10+; on an older Neovim it degrades
+to "no hover", never an error) and binds one real keymap, `<MouseMove>` in
+`n`/`i`/`v`, registered by `ui.statusline.hover` itself as soon as a
+statusline is enabled -- there is nothing to configure and no entry in the
+table above because it is not one this config or a host would bind.
+
+**The "manage this module" menu** (`ui.statusline.menu`) holds two groups:
+
+| Group | Entries |
+| --- | --- |
+| *(the clicked module's key)* | `Remove <key>` (only when it is currently in `order`) |
+| — | `Add module ▸` -- every catalogued key not currently in `order`, each with a short summary |
+| Layout | `Save current layout` (writes the live `order` to disk, restored on every future start -- see [modules.md](modules.md#hover-tooltip-and-the-manage-this-module-menu)), `Clear saved layout` (only once something is actually saved) |
+
+Add/remove is runtime-only (reverts on restart) unless "Save current layout"
+was used; both mutate the live `Ui.Statusline.Config` `render.enable()` was
+last given and trigger a redraw.
+
+**A host with its own global `<RightMouse>` mapping** needs the same
+step-aside `ui.tabline.menu.pointer_on_tabline()` already gets, or a right
+click on the statusline opens both this menu and the host's own general one:
+
+```lua
+vim.keymap.set({ "n", "v" }, "<RightMouse>", function()
+  vim.cmd.exec('"normal! \\<RightMouse>"')
+  if require("ui.tabline.menu").pointer_on_tabline() then
+    return
+  end
+  if require("ui.statusline.menu").pointer_on_statusline() then
+    return -- the statusline's own menu is already on its way
+  end
+  -- ... the host's general menu ...
+end)
+```
+
 ### Theme
 
 | Key | `opts.keymaps` name | Mode | Does |

@@ -2,7 +2,7 @@
 
 | Area | What it covers |
 | --- | --- |
-| Statusline | Several complete layouts, an LSP-aware breadcrumb segment, cursor-progress indicators, file icons, formatter and diagnostic state, test-runner and plugin-progress segments |
+| Statusline | Several complete layouts, an LSP-aware breadcrumb segment, cursor-progress indicators, file icons, formatter and diagnostic state, test-runner and plugin-progress segments; hovering a module shows what it means and highlights it, right/double click opens a menu to add/remove modules and save the current layout so it survives a restart |
 | Tabline | Buffer and tab navigation, buffer reordering (keys, a "move to position" prompt, dragging a chip, auto-scrolling at the edges), a right-click menu of per-tab actions, pinning a tab, reopening a recently closed one, moving a buffer to another tab |
 | Theme | Palette assembly, a theme toggle, transparency, the `:UI` command that drives all of it |
 | Highlights | The groups the frame paints with, kept stable across theme switches |
