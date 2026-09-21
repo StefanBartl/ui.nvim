@@ -395,12 +395,20 @@ local function check_context()
   end
   if context.is_persisting() then
     local changed = context.describe_overrides()
-    health.info(
-      ("`:UI sticky depth`/`lines` are saved to %s (%s)"):format(
-        context.config().state_file or require("ui.context.state").default_path(),
-        changed and ("set: " .. changed) or "nothing set"
+    local detail = changed and ("set: " .. changed) or "nothing set"
+    if context.is_saved() then
+      health.info(
+        ("`:UI sticky depth`/`lines` are saved to %s (%s)"):format(context.state_path(), detail)
       )
-    )
+    else
+      health.warn(
+        ("`:UI sticky depth`/`lines` could not be saved to %s (%s) -- they last for this session only"):format(
+          context.state_path(),
+          detail
+        ),
+        { "Point `state_file` at a free path or at a ui.nvim state file, or delete what is there" }
+      )
+    end
   end
 
   local buf = vim.api.nvim_get_current_buf()

@@ -211,10 +211,27 @@ describe("ui.health", function()
       local file = vim.fn.tempname() .. "/sticky.json"
       assert.is_false(has(capture(), "info", "are saved to"))
       context.setup({ persist = true, state_file = file })
-      assert.is_true(has(capture(), "info", "are saved to " .. file))
+      -- The report names the resolved path: absolute, with `/` separators.
+      assert.is_true(has(capture(), "info", "are saved to " .. vim.fs.normalize(file)))
       assert.is_true(has(capture(), "info", "nothing set"))
       context.set_max_level(2)
       assert.is_true(has(capture(), "info", "set: depth 2"))
+      vim.fn.delete(vim.fs.dirname(file), "rf")
+    end)
+
+    it("warns when the saved depth and lines could not be written", function()
+      local file = vim.fn.tempname() .. "/notes.txt"
+      vim.fn.mkdir(vim.fs.dirname(file), "p")
+      vim.fn.writefile({ "not a state file" }, file)
+      context.setup({ persist = true, state_file = file })
+      local real_notify = vim.notify
+      vim.notify = function() end
+      context.set_max_level(2)
+      vim.notify = real_notify
+      local calls = capture()
+      assert.is_true(has(calls, "warn", "could not be saved to"))
+      assert.is_false(has(calls, "info", "are saved to"))
+      assert.same({ "not a state file" }, vim.fn.readfile(file))
       vim.fn.delete(vim.fs.dirname(file), "rf")
     end)
   end)

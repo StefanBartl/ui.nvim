@@ -73,11 +73,31 @@ so the configuration stays the source of the rest; `:UI sticky status` lists
 what is set that way, and `:UI sticky reset` drops it, returns to the
 configured values and deletes the file. A saved value wins over the
 configuration until reset -- if you edit the configured `max_lines` and see no
-effect, `:UI sticky status` shows the override that covers it. A missing or
-unreadable file, or an entry that is out of range (depth outside 1..6, a
-negative cap), is ignored rather than raising. A `setup` that restates
-`max_lines` or `headings.max_level` without `persist` replaces the command's
-value for that setting.
+effect, `:UI sticky status` shows the override that covers it. A `setup` that
+restates `max_lines` or `headings.max_level` without `persist` replaces the
+command's value for that setting.
+
+The file is treated as untrusted input and `state_file` as a path that may be
+wrong:
+
+- `state_file` may use `~` and `$VAR`; a relative path is anchored at the
+  directory Neovim is in when `setup` runs, so a later `:cd` does not move it.
+  `:checkhealth ui` shows the resolved path.
+- A configured `state_file` is only ever overwritten or deleted when it is empty
+  or already holds a state file of this plugin (a JSON object with just
+  `max_level` and `lines`). Pointed at anything else -- a config file, a
+  directory, other JSON, a hand-broken file -- it leaves the path alone, warns
+  once per attempt, and the value stays in effect for the session (the
+  confirmation and `:UI sticky status` say "saving failed", not "saved").
+  Delete the file, or pick another `state_file`. The default location is the
+  plugin's own directory, so a regular file there is replaced whatever it holds.
+- A missing, unreadable, malformed or larger-than-16-KiB file is ignored rather
+  than raising, as is an entry that is out of range (depth outside 1..6, a
+  negative or non-finite cap) or a `lines` table with more than 64 filetypes.
+- An infinite cap (`:UI sticky lines inf`, `math.huge`) is an unlimited one, the
+  same as `0`; JSON cannot hold `inf`, so it is stored as `0`.
+- Several Neovim instances share the one file, and the last change written
+  wins; an instance keeps applying what it read at its own start.
 
 Outside Markdown the context comes from Tree-sitter, so a filetype without a
 parser (plain text) pins nothing. Which nodes count as a scope is `node_types`

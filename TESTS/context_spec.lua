@@ -683,11 +683,19 @@ describe("ui.context", function()
         return vim.json.decode(table.concat(vim.fn.readfile(file), "\n"))
       end
 
+      -- What `vim.notify` got, so a warning can be asserted and not printed.
+      local notified, real_notify
+
       before_each(function()
         file = vim.fn.tempname() .. "/ui.nvim/sticky.json"
+        notified, real_notify = {}, vim.notify
+        vim.notify = function(msg, level)
+          notified[#notified + 1] = { msg = tostring(msg), level = level }
+        end
       end)
 
       after_each(function()
+        vim.notify = real_notify
         vim.fn.delete(vim.fs.dirname(file), "rf")
       end)
 
@@ -812,6 +820,172 @@ describe("ui.context", function()
         assert.equals(2, context.config().headings.max_level)
         assert.equals("3 (markdown 1)", context.describe_max_lines())
       end)
+
+      describe("hardening", function()
+        it("takes an infinite row cap as unlimited and keeps saving afterwards", function()
+          -- `inf` used to be stored as it was: `vim.json.encode` then refused it on
+          -- every later save, so not even a valid depth reached the file again.
+          context.setup({ persist = true, state_file = file })
+          assert.is_true(context.set_max_lines(math.huge, "markdown"))
+          assert.equals(0, context.config().max_lines.markdown)
+          context.set_max_level(3)
+          assert.same({ max_level = 3, lines = { markdown = 0 } }, read_saved())
+          assert.is_true(context.is_saved())
+          assert.is_false(context.set_max_lines(0 / 0), "nan is refused like any non-number")
+        end)
+
+        it("drops non-finite numbers from the file", function()
+          vim.fn.mkdir(vim.fs.dirname(file), "p")
+          vim.fn.writefile({ '{"max_level":1e999,"lines":{"markdown":1e999,"lua":4}}' }, file)
+          context.setup({ persist = true, state_file = file })
+          assert.equals(6, context.config().headings.max_level)
+          assert.equals("3 (lua 4)", context.describe_max_lines())
+        end)
+
+        it("resolves ~ and $VAR and anchors a relative path", function()
+          local resolve = require("ui.context.state").resolve
+          assert.equals(
+            vim.fs.normalize(vim.uv.os_homedir() .. "/x/sticky.json"),
+            resolve("~/x/sticky.json")
+          )
+          vim.env.UI_NVIM_SPEC_STATE = vim.fs.dirname(file)
+          local from_env = resolve("$UI_NVIM_SPEC_STATE/sticky.json")
+          vim.env.UI_NVIM_SPEC_STATE = nil
+          assert.equals(vim.fs.normalize(file), from_env)
+          assert.equals(
+            vim.fs.normalize(vim.fn.getcwd() .. "/rel/sticky.json"),
+            resolve("rel/sticky.json")
+          )
+        end)
+
+        it("writes to the expanded path, not to a directory named after the variable", function()
+          vim.env.UI_NVIM_SPEC_STATE = vim.fs.dirname(file)
+          context.setup({ persist = true, state_file = "$UI_NVIM_SPEC_STATE/sticky.json" })
+          vim.env.UI_NVIM_SPEC_STATE = nil
+          context.set_max_level(2)
+          assert.same({ max_level = 2 }, read_saved())
+          assert.equals(vim.fs.normalize(file), context.state_path())
+          assert.equals(0, vim.fn.isdirectory(vim.fn.getcwd() .. "/$UI_NVIM_SPEC_STATE"))
+        end)
+
+        it("leaves a file that is not a state file alone, and says so", function()
+          local theirs = { "-- somebody's init.lua", "vim.g.x = 1" }
+          vim.fn.mkdir(vim.fs.dirname(file), "p")
+          vim.fn.writefile(theirs, file)
+          context.setup({ persist = true, state_file = file })
+          context.set_max_level(3)
+          assert.same(theirs, vim.fn.readfile(file), "not overwritten")
+          assert.is_false(context.is_saved())
+          assert.equals(3, context.config().headings.max_level, "the session still gets the value")
+          assert.equals(vim.log.levels.WARN, notified[1].level)
+          assert.is_truthy(notified[1].msg:find("not a ui.nvim sticky state file", 1, true))
+          context.reset()
+          assert.same(theirs, vim.fn.readfile(file), "not deleted by reset either")
+        end)
+
+        it("does not touch a directory or a JSON file with other keys", function()
+          vim.fn.mkdir(file, "p")
+          context.setup({ persist = true, state_file = file })
+          assert.has_no.errors(function()
+            context.set_max_level(3)
+          end)
+          assert.is_false(context.is_saved())
+          assert.equals(1, vim.fn.isdirectory(file))
+          vim.fn.delete(file, "d")
+
+          local other = { name = "package", version = "1.0" }
+          write_saved(other)
+          context.set_max_level(2)
+          assert.same(other, read_saved())
+          assert.is_false(context.is_saved())
+        end)
+
+        it("replaces whatever sits at its own default location, corrupt or not", function()
+          -- The default location is the plugin's own directory: a file there is
+          -- ours, so a hand-broken one is replaced and reset can still clear it.
+          local state = require("ui.context.state")
+          local real_default = state.default_path
+          local path = vim.fs.normalize(file)
+          ---@diagnostic disable-next-line: duplicate-set-field
+          state.default_path = function()
+            return path
+          end
+          local ok, err = pcall(function()
+            vim.fn.mkdir(vim.fs.dirname(file), "p")
+            vim.fn.writefile({ "{ half a json" }, file)
+            assert.is_true(state.write(path, { max_level = 2 }))
+            assert.same({ max_level = 2 }, read_saved())
+            vim.fn.writefile({ "-- anything at all" }, file)
+            assert.is_true(state.remove(path))
+            assert.equals(0, vim.fn.filereadable(file))
+          end)
+          state.default_path = real_default
+          assert.is_true(ok, err)
+        end)
+
+        it("does replace an empty file and a state file of an earlier version", function()
+          vim.fn.mkdir(vim.fs.dirname(file), "p")
+          vim.fn.writefile({}, file)
+          context.setup({ persist = true, state_file = file })
+          context.set_max_level(3)
+          assert.same({ max_level = 3 }, read_saved())
+          assert.is_true(context.is_saved())
+          write_saved({ max_level = 2, lines = { markdown = 1 } })
+          context.set_max_level(4)
+          assert.same({ max_level = 4 }, read_saved())
+          assert.is_true(context.is_saved())
+          assert.equals(0, #notified, "nothing to warn about")
+        end)
+
+        it("ignores a file over the size limit", function()
+          vim.fn.mkdir(vim.fs.dirname(file), "p")
+          local padding = (" "):rep(20 * 1024)
+          vim.fn.writefile({ '{"max_level":2,' .. padding .. '"lines":{"lua":4}}' }, file)
+          context.setup({ persist = true, state_file = file })
+          assert.equals(6, context.config().headings.max_level)
+          assert.equals("3", context.describe_max_lines())
+        end)
+
+        it("ignores the row caps of a file with more filetypes than any real one", function()
+          local lines = {}
+          for i = 1, 65 do
+            lines["ft" .. i] = 2
+          end
+          write_saved({ max_level = 2, lines = lines })
+          context.setup({ persist = true, state_file = file })
+          assert.equals(2, context.config().headings.max_level, "the rest of the file counts")
+          assert.equals("3", context.describe_max_lines())
+        end)
+
+        it("redraws once per change, however many values it touches", function()
+          open_source()
+          context.enable()
+          write_saved({ max_level = 2, lines = { default = 2, markdown = 4, lua = 5, python = 6 } })
+          local calls = 0
+          local refresh_all = context.refresh_all
+          ---@diagnostic disable-next-line: duplicate-set-field
+          context.refresh_all = function(...)
+            calls = calls + 1
+            return refresh_all(...)
+          end
+          local ok, err = pcall(function()
+            context.setup({ persist = true, state_file = file })
+            assert.equals("2 (lua 5, markdown 4, python 6)", context.describe_max_lines())
+            assert.equals(1, calls, "setup applying five saved values")
+            calls = 0
+            context.set_max_lines(1, "markdown")
+            assert.equals(1, calls, "set_max_lines")
+            calls = 0
+            context.set_max_level(3)
+            assert.equals(1, calls, "set_max_level")
+            calls = 0
+            context.reset()
+            assert.equals(1, calls, "reset")
+          end)
+          context.refresh_all = refresh_all
+          assert.is_true(ok, err)
+        end)
+      end)
     end)
 
     describe(":UI sticky", function()
@@ -866,6 +1040,58 @@ describe("ui.context", function()
         assert.equals("3", context.describe_max_lines())
         assert.has_no.errors(function()
           vim.cmd("UI sticky reset")
+        end)
+      end)
+
+      it("takes `inf` as an unlimited row cap", function()
+        vim.cmd("UI sticky lines markdown inf")
+        assert.equals(0, context.config().max_lines.markdown)
+      end)
+
+      describe("what the confirmation says about keeping the value", function()
+        local file, seen, real_notify
+
+        ---@return string
+        local function said()
+          return table.concat(seen, "\n")
+        end
+
+        before_each(function()
+          file = vim.fn.tempname() .. "/ui.nvim/sticky.json"
+          seen, real_notify = {}, vim.notify
+          vim.notify = function(msg)
+            seen[#seen + 1] = tostring(msg)
+          end
+        end)
+
+        after_each(function()
+          vim.notify = real_notify
+          vim.fn.delete(vim.fs.dirname(file), "rf")
+        end)
+
+        it("says this session only without persist", function()
+          vim.cmd("UI sticky depth 3")
+          assert.is_truthy(said():find("this session only", 1, true))
+          assert.is_nil(said():find("saved for the next start", 1, true))
+        end)
+
+        it("says saved once the file has been written", function()
+          context.setup({ persist = true, state_file = file })
+          vim.cmd("UI sticky depth 3")
+          assert.is_truthy(said():find("saved for the next start", 1, true))
+          vim.cmd("UI sticky status")
+          assert.is_truthy(said():find("depth 3, saved", 1, true))
+        end)
+
+        it("does not claim a save that failed", function()
+          vim.fn.mkdir(vim.fs.dirname(file), "p")
+          vim.fn.writefile({ "not a state file" }, file)
+          context.setup({ persist = true, state_file = file })
+          vim.cmd("UI sticky depth 3")
+          assert.is_truthy(said():find("saving failed", 1, true))
+          assert.is_nil(said():find("saved for the next start", 1, true))
+          vim.cmd("UI sticky status")
+          assert.is_truthy(said():find("this session only, saving failed", 1, true))
         end)
       end)
 

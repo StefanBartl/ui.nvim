@@ -254,10 +254,23 @@ local function ui_sticky(args)
   local action = args[2]
   local cfg = context.config()
 
-  ---How a `depth`/`lines` change is kept, for the message that reports it.
+  ---How a `depth`/`lines` change is kept, for the message that reports it. `saved`
+  ---is what actually happened: with `persist` on and a write that failed, the
+  ---value is still session-only.
+  ---@return string
+  local function kept()
+    if context.is_saved() then
+      return "saved"
+    end
+    return context.is_persisting() and "this session only, saving failed" or "this session only"
+  end
+
   ---@return string
   local function keep_note()
-    return context.is_persisting() and " -- saved for the next start"
+    if context.is_saved() then
+      return " -- saved for the next start"
+    end
+    return context.is_persisting() and " -- this session only: saving failed (see the warning)"
       or " -- this session only (`persist = true` keeps it)"
   end
 
@@ -282,12 +295,7 @@ local function ui_sticky(args)
           context.is_enabled() and "on" or "off",
           cfg.headings.max_level,
           context.describe_max_lines(),
-          changed
-              and (" -- set by command: %s%s"):format(
-                changed,
-                context.is_persisting() and ", saved" or ", this session only"
-              )
-            or ""
+          changed and (" -- set by command: %s, %s"):format(changed, kept()) or ""
         )
       )
     )
