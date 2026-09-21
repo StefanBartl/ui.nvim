@@ -207,7 +207,8 @@ function M.open(opts)
     desc = "ui.kit.picker: query changed",
   })
 
-  local mo = { buffer = prompt.bufnr, nowait = true }
+  -- Throwaway buffer-local keys: not recorded (see ui.kit.chooser's `mo`).
+  local mo = { buffer = prompt.bufnr, nowait = true, record = false }
   map({ "i", "n" }, "<CR>", handle.submit, mo)
   map({ "i", "n" }, "<C-n>", function()
     handle.move(1)
