@@ -382,14 +382,15 @@ local function check_context()
   if context.is_enabled() then
     local cfg = context.config()
     health.ok(
-      ("ui.context is on (max_lines %s, %d scope patterns)"):format(
-        tostring(cfg.max_lines),
+      ("ui.context is on (max_lines %s, heading depth %d, %d scope patterns)"):format(
+        context.describe_max_lines(),
+        cfg.headings.max_level,
         #cfg.node_types
       )
     )
   else
     health.info(
-      "ui.context is off -- `:UI context on` or `ui.setup({ context = true })` to enable it"
+      "ui.context is off -- `:UI sticky on` or `ui.setup({ context = true })` to enable it"
     )
   end
 

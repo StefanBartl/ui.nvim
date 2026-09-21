@@ -43,7 +43,8 @@ local M = {}
 --- the buffer's first rows and a host asking for "the keymaps and the
 --- command" should not get that as a side effect. `true` enables it with
 --- the shipped tunables, a `Ui.Context.Opts` table enables it with those
---- overrides applied first.
+--- overrides applied first. `opts.sticky` is the same switch under the name
+--- the `:UI sticky` command uses; when both are given, `sticky` wins.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
@@ -66,11 +67,15 @@ function M.setup(opts)
     end
   end
 
-  if opts.context then
+  local sticky = opts.sticky
+  if sticky == nil then
+    sticky = opts.context
+  end
+  if sticky then
     local ok, err = pcall(function()
       local context = require("ui.context")
-      if type(opts.context) == "table" then
-        context.setup(opts.context)
+      if type(sticky) == "table" then
+        context.setup(sticky)
       end
       context.enable()
     end)
