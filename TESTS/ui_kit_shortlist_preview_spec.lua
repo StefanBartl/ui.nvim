@@ -156,7 +156,7 @@ describe("ui.kit.shortlist: the preview pane", function()
 
     it("the window-cycle keys stay inside the popup instead of walking on to the editor", function()
       open()
-      for _, key in ipairs({ "<C-w>w", "<C-w><C-w>", "<C-w>W" }) do
+      for _, key in ipairs({ "<C-w>w", "<C-w><C-w>", "<C-w>W", "<C-w>j", "<C-w>k" }) do
         assert.equals(h.results.winid, vim.api.nvim_get_current_win(), key .. ": start in the list")
         press(key)
         assert.equals(h.preview.winid, vim.api.nvim_get_current_win(), key .. ": list -> preview")
