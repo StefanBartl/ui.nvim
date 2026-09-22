@@ -193,19 +193,24 @@ mode, `y` — and nothing can change the buffer.
 | list, preview | `<C-f>`, `<PageDown>` | scroll the preview one page down |
 | list, preview | `<C-p>`, `<C-b>`, `<PageUp>` | one page up |
 | list, preview | `<C-d>` / `<C-u>` | half a page down / up |
-| list, preview | `<Tab>`, `<C-w>w`, `<C-w><C-w>`, `<C-w>W`, `<C-w>j`, `<C-w>k` | hop between list and preview |
+| list, preview | `<Tab>`, `<C-w>w`, `<C-w><C-w>`, `<C-w>W` | hop between list and preview |
+| preview | `<C-w>j` | down to the list (a no-op in the list -- nothing below it) |
+| list | `<C-w>k` | up to the preview (a no-op in the preview -- nothing above it) |
 | preview | `<CR>` | submit at the cursor line: `on_preview_submit(item, idx, { row, col })` |
 | preview | `q`, `<Esc>` | close the popup (the list has its own) |
 
 A page is Vim's own (the window height less two lines of overlap). `<C-p>`
 scrolls up on purpose although Vim means "one line up" by it: it pairs with
 `<C-f>`, and `<C-b>` stays for whoever's fingers know Vim's own pair. The window
-cycle (and `<C-w>j`/`<C-w>k`) stays inside the popup, because left alone they
-walk on into the editor window underneath (or do nothing, since the list and
-preview are two unrelated floats, not siblings in a split) and leave the popup
-stranded on top; for the same reason the popup closes when focus goes to any
-other window (a click into the editor, `<C-w>h`, a tab switch). The focused
-window's border is lit
+cycle stays inside the popup, because left alone `<C-w>w` walks on into the
+editor window underneath and leaves the popup stranded on top. `<C-w>j`/`<C-w>k`
+join it, but direction-aware rather than a blind toggle: the preview sits above
+the list, so `<C-w>j` only moves from the preview down to the list and `<C-w>k`
+only from the list up to the preview -- the edge case (`<C-w>j` in the list,
+`<C-w>k` in the preview) is a no-op, the way a real window-cycle does nothing at
+the edge of a layout, not a jump the wrong way. For the same "leaves the popup
+stranded" reason, the popup closes when focus goes to any other window (a click
+into the editor, `<C-w>h`, a tab switch). The focused window's border is lit
 (`KitAccent`, the other one `KitBorder`) and each window carries a footer with
 the keys that work in it — on a themed float that has a border.
 
