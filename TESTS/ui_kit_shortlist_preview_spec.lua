@@ -140,6 +140,12 @@ describe("ui.kit.shortlist: the preview pane", function()
   end)
 
   describe("focus", function()
+    it("opens with focus in the list, not the preview", function()
+      open()
+      assert.equals(h.results.winid, vim.api.nvim_get_current_win())
+      assert.is_not.equal(h.preview.winid, vim.api.nvim_get_current_win())
+    end)
+
     it("<Tab> hops between list and preview", function()
       open()
       press("<Tab>")

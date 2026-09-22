@@ -500,6 +500,13 @@ function M.open(opts)
     pcall(api.nvim_del_augroup_by_id, sync_group)
   end)
 
+  -- The popup always starts in the list -- the preview is something you go into
+  -- (`<Tab>`/`<C-w>w`), not something it opens into. `chooser.open()`'s own
+  -- `enter = true`, called after `preview_surf` above, already leaves focus here in
+  -- practice; making it explicit stops that ordering from being the only thing this
+  -- invariant rests on.
+  results_surf:focus()
+
   apply_hints()
   update_focus()
 
