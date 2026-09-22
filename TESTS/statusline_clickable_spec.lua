@@ -258,11 +258,34 @@ describe("ui.statusline.modules.git_clickable", function()
   -- second return value the way `clickable.wrap` itself is tested above; it
   -- is parsed out of the rendered `%<id>@UiSlClick@...%X` text instead.
   local git_clickable = require("ui.statusline.modules.git_clickable")
-  local saved_systemlist
+  local real_system
   local click_id
 
+  -- GS-15: this module now goes through `lib.nvim.git`, which spawns via
+  -- `vim.system` (not `vim.fn.systemlist`) -- fake that instead, routing by
+  -- `cmd[2]` (the git subcommand), the same way `lib.nvim.git`'s own argv
+  -- distinguishes a branch listing from a `current_branch`/`checkout` call.
+  ---@param routes table<string, {code: integer, stdout: string, stderr: string}>
+  local function mock_system(routes)
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.system = function(cmd, _opts, cb)
+      local res = routes[cmd[2]] or { code = 1, stdout = "", stderr = "" }
+      if cb then
+        vim.schedule(function()
+          cb(res)
+        end)
+        return { wait = function() end }
+      end
+      return {
+        wait = function()
+          return res
+        end,
+      }
+    end
+  end
+
   before_each(function()
-    saved_systemlist = vim.fn.systemlist
+    real_system = vim.system
 
     -- Fake gitsigns state so primitives.git() -- and therefore this
     -- module's wrapped render -- produces non-empty text. An empty render
@@ -279,41 +302,44 @@ describe("ui.statusline.modules.git_clickable", function()
   end)
 
   after_each(function()
-    vim.fn.systemlist = saved_systemlist
+    vim.system = real_system
+    package.loaded["gitsuite.features.branch"] = nil
     local buf = vim.api.nvim_get_current_buf()
     vim.b[buf].gitsigns_head = nil
     vim.b[buf].gitsigns_status_dict = nil
     vim.g.statusline_winid = nil
   end)
 
-  it("left click opens vim.ui.select over the branch list when git succeeds", function()
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.fn.systemlist = function(cmd)
-      if vim.tbl_contains(cmd, "--show-current") then
-        return { "main" }
+  it(
+    "left click opens vim.ui.select over the branch list when git succeeds "
+      .. "(gitsuite.nvim not loaded)",
+    function()
+      mock_system({
+        ["for-each-ref"] = { code = 0, stdout = "main\nfeature/x\n", stderr = "" },
+        ["symbolic-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+      })
+
+      local original_select = vim.ui.select
+      local seen_items, seen_opts
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.select = function(items, opts, _on_choice)
+        seen_items, seen_opts = items, opts
       end
-      return { "main", "feature/x" }
+
+      clickable._dispatch(click_id, "l")
+      vim.ui.select = original_select
+
+      assert.same({ "main", "feature/x" }, seen_items)
+      assert.is_true(seen_opts.prompt:find("main", 1, true) ~= nil)
     end
-
-    local original_select = vim.ui.select
-    local seen_items, seen_opts
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.ui.select = function(items, opts, _on_choice)
-      seen_items, seen_opts = items, opts
-    end
-
-    clickable._dispatch(click_id, "l")
-    vim.ui.select = original_select
-
-    assert.same({ "main", "feature/x" }, seen_items)
-    assert.is_true(seen_opts.prompt:find("main", 1, true) ~= nil)
-  end)
+  )
 
   it("left click warns instead of opening a picker when there are no branches", function()
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.fn.systemlist = function()
-      return {}
-    end
+    mock_system({
+      ["for-each-ref"] = { code = 0, stdout = "", stderr = "" },
+      ["symbolic-ref"] = { code = 1, stdout = "", stderr = "" },
+      ["rev-parse"] = { code = 0, stdout = "true\n", stderr = "" },
+    })
 
     local original_select = vim.ui.select
     local select_called = false
@@ -330,16 +356,41 @@ describe("ui.statusline.modules.git_clickable", function()
     assert.is_false(select_called)
   end)
 
+  it(
+    "left click delegates to gitsuite.features.branch.switch() when gitsuite.nvim is loaded",
+    function()
+      local switch_called = false
+      package.loaded["gitsuite.features.branch"] = {
+        switch = function()
+          switch_called = true
+        end,
+      }
+
+      local original_select = vim.ui.select
+      local select_called = false
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.select = function()
+        select_called = true
+      end
+
+      clickable._dispatch(click_id, "l")
+      vim.ui.select = original_select
+
+      assert.is_true(switch_called, "gitsuite.features.branch.switch() should have run")
+      assert.is_false(select_called, "the bare vim.ui.select fallback must not also run")
+    end
+  )
+
   -- `ui.contextmenu`, not `lib.nvim.contextmenu`. This module was the last
   -- caller of the pre-migration copy anywhere in the fleet, which mattered
   -- for more than tidiness: the lib copy has no `set_enabled`, so
   -- `ui.setup({ menu = false })` did not reach this menu. The last
   -- assertion is the regression guard for that.
   it("right click opens a ui.contextmenu", function()
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.fn.systemlist = function()
-      return { "main" }
-    end
+    mock_system({
+      ["for-each-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+      ["symbolic-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+    })
 
     local contextmenu = require("ui.contextmenu")
     local original_open = contextmenu.open
@@ -357,10 +408,10 @@ describe("ui.statusline.modules.git_clickable", function()
   end)
 
   it("right click honours ui.setup({ menu = false })", function()
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.fn.systemlist = function()
-      return { "main" }
-    end
+    mock_system({
+      ["for-each-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+      ["symbolic-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+    })
 
     local contextmenu = require("ui.contextmenu")
     local rendered = false
@@ -384,10 +435,10 @@ describe("ui.statusline.modules.git_clickable", function()
       .. "no 'dbl' handler, deliberately: see the module's own doc comment on why "
       .. "wiring one there would have raced ui.statusline.menu against this picker",
     function()
-      ---@diagnostic disable-next-line: duplicate-set-field
-      vim.fn.systemlist = function()
-        return { "main" }
-      end
+      mock_system({
+        ["for-each-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+        ["symbolic-ref"] = { code = 0, stdout = "main\n", stderr = "" },
+      })
 
       local menu = require("ui.statusline.menu")
       local original_menu_open = menu.open
@@ -415,9 +466,10 @@ describe("ui.statusline.modules.git_clickable", function()
   )
 
   -- ERR-11: "git succeeded but the repo is genuinely empty" and "git itself
-  -- failed" used to collapse into the same warning. `vim.v.shell_error` is
-  -- read-only from Lua, so a real `git` call in a real temp directory (not
-  -- a systemlist stub) is what actually distinguishes the two cases here.
+  -- failed" used to collapse into the same warning. This section never
+  -- installs `mock_system`, so it runs against a real `git` in a real temp
+  -- directory -- what actually distinguishes the two cases (`git.in_git_repo`
+  -- inside `select_and_checkout`, itself a second real process).
   describe("the two distinct 'no branches' cases (ERR-11)", function()
     ---@param dir string
     local function goto_dir(dir)
