@@ -156,7 +156,7 @@ describe("ui.kit.shortlist: the preview pane", function()
 
     it("the window-cycle keys stay inside the popup instead of walking on to the editor", function()
       open()
-      for _, key in ipairs({ "<C-w>w", "<C-w><C-w>", "<C-w>W", "<C-w>j", "<C-w>k" }) do
+      for _, key in ipairs({ "<C-w>w", "<C-w><C-w>", "<C-w>W" }) do
         assert.equals(h.results.winid, vim.api.nvim_get_current_win(), key .. ": start in the list")
         press(key)
         assert.equals(h.preview.winid, vim.api.nvim_get_current_win(), key .. ": list -> preview")
@@ -169,6 +169,42 @@ describe("ui.kit.shortlist: the preview pane", function()
       end
       assert.is_true(h.results:is_valid() and h.preview:is_valid(), "the popup is still open")
     end)
+
+    it(
+      "<C-w>j/<C-w>k hop too, but direction-aware -- a no-op at the edge, not a jump the wrong way",
+      function()
+        open()
+        assert.equals(h.results.winid, vim.api.nvim_get_current_win(), "starts in the list")
+
+        press("<C-w>j") -- "down": nothing below the list
+        assert.equals(
+          h.results.winid,
+          vim.api.nvim_get_current_win(),
+          "<C-w>j in the list is a no-op"
+        )
+
+        press("<C-w>k") -- "up": the preview is above the list
+        assert.equals(
+          h.preview.winid,
+          vim.api.nvim_get_current_win(),
+          "<C-w>k in the list -> preview"
+        )
+
+        press("<C-w>k") -- "up": nothing above the preview
+        assert.equals(
+          h.preview.winid,
+          vim.api.nvim_get_current_win(),
+          "<C-w>k in the preview is a no-op"
+        )
+
+        press("<C-w>j") -- "down": the list is below the preview
+        assert.equals(
+          h.results.winid,
+          vim.api.nvim_get_current_win(),
+          "<C-w>j in the preview -> list"
+        )
+      end
+    )
 
     it("the list's selection survives a trip into the preview", function()
       open()
