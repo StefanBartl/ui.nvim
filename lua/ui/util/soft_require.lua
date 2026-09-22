@@ -3,11 +3,11 @@
 ---
 --- None of nvim-web-devicons, nvzone/menu, casedesk.nvim, recommender.nvim,
 --- runtime-analysis.nvim, sandbox.nvim, sessions.nvim, github_stats.nvim,
---- filetree.nvim or lazy.nvim are hard dependencies of ui.nvim -- their
---- absence is the ordinary standalone case, not an error. Routing every
---- soft-dependency call site through here means there is exactly one place
---- that decides what "soft dependency present" means, and one place a health
---- check can ask.
+--- filetree.nvim, gitsuite.nvim or lazy.nvim are hard dependencies of
+--- ui.nvim -- their absence is the ordinary standalone case, not an error.
+--- Routing every soft-dependency call site through here means there is
+--- exactly one place that decides what "soft dependency present" means, and
+--- one place a health check can ask.
 ---
 --- The sibling `my.nvim` grew the same module out of its `rules.nvim` pass
 --- (`PRIN-07`); this is the matching half, and the cross-feature report's C4.
@@ -46,6 +46,11 @@ M.PROBED = {
   { mod = "sessions.statusline", optional_for = "the session-status segment" },
   { mod = "github_stats.analytics", optional_for = "the github-stats view badge" },
   { mod = "filetree", optional_for = "the filetree cwd-mode segment" },
+  {
+    mod = "gitsuite.features.branch",
+    optional_for = "the statusline git segment's branch switcher (pickers.nvim-aware picker "
+      .. "and the GitsuiteBranchSwitched event instead of a bare vim.ui.select)",
+  },
   {
     mod = "my.hl_config.breadcrumbs.ctx.providers.lsp_symbols",
     optional_for = "LSP symbols in the breadcrumb (Tree-sitter only without it)",

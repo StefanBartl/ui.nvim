@@ -101,6 +101,12 @@ case info and SLA badge, `casedesk`), `filetree` (the cwd-mode badge,
 `sandbox_ambient`) and `lazy` (the own/external plugin count,
 `plugin_summary`).
 
+An eleventh, `gitsuite.features.branch`, is different in kind: it never
+blanks a segment, it only degrades a *click action* -- `git_clickable`'s
+left click switches branches via gitsuite.nvim's own picker
+(pickers.nvim-aware, fires `GitsuiteBranchSwitched`) when present, and falls
+back to a bare `vim.ui.select` over the local branch list otherwise.
+
 An `ℹ️ not installed` line here is never a problem — it is the report saying
 which part of the statusline will be empty and why.
 

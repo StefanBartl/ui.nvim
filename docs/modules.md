@@ -248,7 +248,7 @@ return clickable.wrap(primitives.diagnostics, {
 | Key | Shows | Needs | Source |
 | --- | --- | --- | --- |
 | `diagnostics_clickable` | `diagnostics`, plus a left click jumps to the next one (`vim.diagnostic.goto_next()`) | — | `ui.statusline.modules.diagnostics_clickable` |
-| `git_clickable` | `git`, plus a left click opens a dependency-free branch switcher (`vim.ui.select` over `git branch`) and a right click a `lib.nvim.contextmenu` (switch / copy branch name / details) | gitsigns.nvim for the text; a `git` executable on `$PATH` for the clicks | `ui.statusline.modules.git_clickable` |
+| `git_clickable` | `git`, plus a left click switches branches (`gitsuite.features.branch.switch()` when gitsuite.nvim is loaded, a bare `vim.ui.select` over local branches otherwise) and a right click opens a `ui.contextmenu` (switch / copy branch name / details) | gitsigns.nvim for the text; a `git` executable on `$PATH` for the clicks; gitsuite.nvim optionally, for the picker | `ui.statusline.modules.git_clickable` |
 | `variant` | Active statusline variant name; a left click opens a quick-switch menu over `ui.config.variants.list()`, then runs `:UI variant <name>` | — | `ui.statusline.modules.variant` |
 
 Wiring is identical to any other standalone module — the key in `order`, a

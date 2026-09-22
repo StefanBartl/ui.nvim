@@ -1,58 +1,68 @@
 ---@module 'ui.statusline.modules.git_clickable'
 --- The catalog's plain `git` segment (`ui.statusline.utils.primitives.git`),
---- wrapped with two mouse actions: a left click opens a dependency-free
---- branch switcher, a right click opens a context menu with the same switch
---- plus two read-only actions. Neither needs gitsigns or any git plugin
---- beyond a `git` executable on `$PATH` -- gitsigns.nvim is what
---- `primitives.git()`'s own rendered text needs, not this module's clicks.
+--- wrapped with two mouse actions: a left click switches branches, a right
+--- click opens a context menu with the same switch plus two read-only
+--- actions. Neither needs gitsigns or any git plugin beyond a `git`
+--- executable on `$PATH` -- gitsigns.nvim is what `primitives.git()`'s own
+--- rendered text needs, not this module's clicks.
+---
+--- Branch listing/checkout go through `lib.nvim.git` (GS-15) instead of a
+--- raw `vim.fn.systemlist`: the original had no `-C`/`opts.dir` support, and
+--- `systemlist` folds a failed command's stderr into its output, so every
+--- failure notification here quoted git's own diagnosis. `lib.nvim.git`'s
+--- read helpers only ever capture stdout (nothing to quote on failure, by
+--- their own doc comments), but `checkout` is the one exception -- it uses
+--- `run_blocking`, which does capture stderr -- so a failed checkout still
+--- names git's real reason.
+---
+--- Left click delegates to `gitsuite.features.branch.switch()` when
+--- gitsuite.nvim is loaded (its own picker: pickers.nvim when available,
+--- `vim.ui.select` otherwise, plus the `GitsuiteBranchSwitched` event other
+--- plugins hook) -- soft, via `ui.util.soft_require`, never a hard
+--- dependency (K-5c: the two plugins would otherwise reference each other,
+--- ui.nvim -> gitsuite and gitsuite -> ui.contextmenu). Without gitsuite
+--- this module keeps its own bare `vim.ui.select` picker, unchanged.
 
+local git = require("lib.nvim.git")
+local soft = require("ui.util.soft_require")
 local primitives = require("ui.statusline.utils.primitives")
 local clickable = require("ui.statusline.utils.clickable")
 local notify = require("lib.nvim.notify").create("[ui.statusline.modules.git_clickable]")
 
 --- Every local branch, plus the current one if `git` reports one cleanly.
---- An empty list is not by itself an error -- a repository with no commits
---- yet is empty and fine. When `git` itself failed (not a repo, not on
---- `$PATH`, ...), `err` carries what it printed (`systemlist` captures it
---- the same way `checkout()` below already relies on) so the two "empty"
---- cases stay distinguishable instead of colliding on the same bare `{}`.
 ---@return string[] branches
 ---@return string|nil current
----@return string|nil err # non-nil only when the `git branch` call itself failed
 local function list_branches()
-  local branches = vim.fn.systemlist({ "git", "branch", "--format=%(refname:short)" })
-  if vim.v.shell_error ~= 0 then
-    return {}, nil, table.concat(branches, "\n")
-  end
-
-  local current_out = vim.fn.systemlist({ "git", "branch", "--show-current" })
-  local current = (vim.v.shell_error == 0 and current_out[1] ~= "") and current_out[1] or nil
-  return branches, current, nil
+  local branches = git.refs(nil, { branches = true, remotes = false, tags = false })
+  local current = git.current_branch()
+  return branches, current
 end
 
 ---@param name string
 ---@return nil
 local function checkout(name)
-  local out = vim.fn.systemlist({ "git", "checkout", name })
-  if vim.v.shell_error ~= 0 then
-    notify.error(("git checkout %s failed: %s"):format(name, table.concat(out, "\n")))
+  local ok, err = git.checkout(name)
+  if not ok then
+    notify.error(("git checkout %s failed: %s"):format(name, err))
     return
   end
   notify.info("Switched to branch " .. name)
 end
 
---- Left click: a plain `vim.ui.select` over every local branch. No preview,
---- no fly-out -- `checkout` is a real filesystem/index operation, not
---- something to fire speculatively per row the way the theme picker's
---- `:colorscheme` preview can.
+--- The bare fallback picker: a plain `vim.ui.select` over every local
+--- branch. No preview, no fly-out -- `checkout` is a real filesystem/index
+--- operation, not something to fire speculatively per row the way the theme
+--- picker's `:colorscheme` preview can.
+---
+--- Used only when gitsuite.nvim is not loaded -- see `switch_branch` below.
 ---@return nil
-local function switch_branch()
-  local branches, current, err = list_branches()
+local function select_and_checkout()
+  local branches, current = list_branches()
   if #branches == 0 then
-    if err then
-      notify.warn(("No git branches found (not a git repo, or git not on $PATH): %s"):format(err))
-    else
+    if git.in_git_repo() then
       notify.warn("No git branches found (repository has no commits yet)")
+    else
+      notify.warn("No git branches found (not a git repo, or git not on $PATH)")
     end
     return
   end
@@ -64,6 +74,18 @@ local function switch_branch()
       checkout(choice)
     end
   end)
+end
+
+--- Left click / context-menu "Switch branch": `gitsuite.features.branch.switch()`
+--- when gitsuite.nvim is loaded, `select_and_checkout` above otherwise.
+---@return nil
+local function switch_branch()
+  local gitsuite_branch = soft.try("gitsuite.features.branch")
+  if gitsuite_branch then
+    gitsuite_branch.switch()
+    return
+  end
+  select_and_checkout()
 end
 
 --- Right click: the same switch, plus copy-branch-name and a details popup
@@ -106,12 +128,12 @@ end
 -- before the second one arrives with clicks == 2 (the exact "warn if you
 -- map both <LeftMouse> and <2-LeftMouse>" gotcha, here in the statusline
 -- click protocol's own numbering rather than a keymap). A `dbl` here would
--- have opened `ui.statusline.menu` on top of the `vim.ui.select` branch
--- picker `switch_branch` (this module's own `l`) just opened for that same
--- gesture's first click. Right click already reaches a menu (this module's
--- own, below) without that collision, so double click is left to just run
--- `l` again -- redundant with a plain second click, but never two floats
--- fighting over the same gesture.
+-- have opened `ui.statusline.menu` on top of the branch switcher
+-- (this module's own `l`) just opened for that same gesture's first click.
+-- Right click already reaches a menu (this module's own, below) without
+-- that collision, so double click is left to just run `l` again --
+-- redundant with a plain second click, but never two floats fighting over
+-- the same gesture.
 return clickable.wrap(primitives.git, {
   l = switch_branch,
   r = open_context_menu,
