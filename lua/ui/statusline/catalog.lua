@@ -182,6 +182,14 @@ return {
     used_by = {},
   },
   {
+    key = "gitsuite_conflict",
+    summary = 'gitsuite.nvim\'s ambient merge-conflict indicator, e.g. "MERGE 2".',
+    requires = "gitsuite.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.gitsuite_conflict",
+    used_by = {},
+  },
+  {
     key = "since_last_save",
     summary = "Duration since the buffer became modified, escalating muted -> DiagnosticWarn -> DiagnosticError the longer it sits unsaved.",
     builtin = false,

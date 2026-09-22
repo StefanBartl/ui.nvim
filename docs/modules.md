@@ -86,6 +86,7 @@ modules = {
 | `recommender_badge` | Count of recommender.nvim alias suggestions open for the current buffer, e.g. `"3 alias suggestions open for this file"` | recommender.nvim | `ui.statusline.modules.recommender_badge` |
 | `session_status` | sessions.nvim's active session name, with a dirty marker (` *`) when the window/buffer layout changed since the last save or load | sessions.nvim | `ui.statusline.modules.session_status` |
 | `sandbox_ambient` | sandbox.nvim's ambient container summary, e.g. `"docker (2/5)"` | sandbox.nvim | `ui.statusline.modules.sandbox_ambient` |
+| `gitsuite_conflict` | gitsuite.nvim's ambient merge-conflict indicator, e.g. `"MERGE 2"` | gitsuite.nvim | `ui.statusline.modules.gitsuite_conflict` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
@@ -166,15 +167,16 @@ other possible payloads; `idle_clock` is only the first (its own
 suggested "Uhrzeit"), and a future one can reuse `ui.statusline.utils.idle`
 without its own `CursorHold` wiring.
 
-`session_status` and `sandbox_ambient` are thin requires, not
-reimplementations: both sessions.nvim and sandbox.nvim already ship a
-ready-made, statusline-plugin-agnostic component
-(`sessions.statusline.component()`, `sandbox.statusline.status()`) that is
-cached/rate-limited on their own side and documented safe to call on every
-redraw, so this module is exactly the `pcall(require, ...)` wrapper needed to
-drop either into an `order` list the same way as any other soft-dependency
-module here — no separate caching, debouncing or error handling happens on
-this side.
+`session_status`, `sandbox_ambient` and `gitsuite_conflict` are thin
+requires, not reimplementations: sessions.nvim, sandbox.nvim and
+gitsuite.nvim each already ship a ready-made, statusline-plugin-agnostic
+component (`sessions.statusline.component()`, `sandbox.statusline.status()`,
+`gitsuite.statusline.status()`) that is cached (rate-limited, for sandbox's;
+keyed by `nvim_buf_get_changedtick`, for gitsuite's) on their own side and
+documented safe to call on every redraw, so each of these modules is exactly
+the wrapper needed to drop it into an `order` list the same way as any other
+soft-dependency module here — no separate caching, debouncing or error
+handling happens on this side.
 
 `recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
 one its `analyzer` config option already selects — `regex` by default) with
@@ -402,10 +404,10 @@ the two you are getting, under "Optional integrations".
 
 ## Where a sibling's segment is built
 
-Seven sibling plugins feed segments here, and they split into two shapes.
+Eight sibling plugins feed segments here, and they split into two shapes.
 
-**The sibling ships the component; this plugin places it.** Six of the
-seven, each a ~24-line adapter here:
+**The sibling ships the component; this plugin places it.** Seven of the
+eight, each a ~20-24-line adapter here:
 
 | Segment | Provided by |
 | --- | --- |
@@ -415,6 +417,7 @@ seven, each a ~24-line adapter here:
 | `github_stats_badge` | `github_stats.statusline` |
 | `runtime_analysis_ampel` | `runtime-analysis.statusline` |
 | `casedesk` | `casedesk.statusline` |
+| `gitsuite_conflict` | `gitsuite.statusline` |
 
 Four of those six used to be built here instead — 494 lines reaching into
 `recommender.config`, `github_stats.analytics`, `casedesk.resolve/meta/sla`
