@@ -162,6 +162,32 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     s:set_lines({ "changed" })
     eq(vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false)[1], "changed", "set_lines updates content")
 
+    -- set_last_line/append_lines: the incremental streaming path, used by
+    -- ai.nvim's panel instead of a full set_lines() rewrite per chunk.
+    -- assert.same (not eq/H.eq, which is assert.equals -- reference
+    -- equality for tables) for the whole-buffer structural comparisons,
+    -- same convention TESTS/ui_kit_spec.lua's shortlist section already
+    -- uses below.
+    s:set_lines({ "a", "b" })
+    s:set_last_line("bb")
+    assert.same(
+      { "a", "bb" },
+      vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false),
+      "set_last_line replaces only the last line"
+    )
+    s:append_lines({ "c", "d" })
+    assert.same(
+      { "a", "bb", "c", "d" },
+      vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false),
+      "append_lines adds new lines after the current last line"
+    )
+    s:append_lines({})
+    assert.same(
+      { "a", "bb", "c", "d" },
+      vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false),
+      "append_lines with an empty list is a no-op"
+    )
+
     -- on_close fires exactly once
     local closes = 0
     s:on_close(function()
