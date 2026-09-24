@@ -809,19 +809,26 @@ end
 ---`vim.fn.strcharpart`'s length argument counts characters, so a run of
 ---double-width cells (CJK, most emoji) would let through fewer or more
 ---cells than `max_width` and desync the float's content from its
----configured `width`. One display-width query per character is fine here --
----these are single breadcrumb/heading lines, not buffer-sized text.
+---configured `width`. `vim.fn.strwidth`, not `strdisplaywidth`: the latter
+---measures a string as Neovim would lay it out on the *actual screen*
+---starting at column 0, which past `'columns'` folds in wrap-continuation
+---padding -- a 90-cell breadcrumb on an 80-column terminal came back wider
+---than the sum of its own characters, breaking exactly this truncation.
+---`strwidth` has no such column dependency, additive per character, which is
+---what a single unwrapped float row actually needs. One query per character
+---is fine here -- these are single breadcrumb/heading lines, not
+---buffer-sized text.
 ---@param s string
 ---@param max_width integer
 ---@return string
 local function trunc_to_width(s, max_width)
-  if vim.fn.strdisplaywidth(s) <= max_width then
+  if vim.fn.strwidth(s) <= max_width then
     return s
   end
   local out, w = {}, 0
   for i = 0, vim.fn.strchars(s) - 1 do
     local ch = vim.fn.strcharpart(s, i, 1)
-    local cw = vim.fn.strdisplaywidth(ch)
+    local cw = vim.fn.strwidth(ch)
     if w + cw > max_width then
       break
     end
@@ -902,7 +909,22 @@ end
 ---@return integer fwin
 local function place_float(f, cbuf, wconfig)
   if f and vim.api.nvim_win_is_valid(f.win) then
-    pcall(vim.api.nvim_win_set_config, f.win, wconfig)
+    -- `noautocmd` is `nvim_open_win()`-only: `nvim_win_set_config()` rejects
+    -- it outright ("'noautocmd' cannot be used with existing windows"), and
+    -- a bare `pcall` around that error left every reconfigure of an
+    -- existing float silently failing -- the window stuck at its first-ever
+    -- row/col/width for as long as it kept getting reused, with only the
+    -- buffer's *text* still updating underneath it (a wider chip line, or a
+    -- taller mimic box, than the frame it was never resized to fit).
+    local reconfig = vim.tbl_extend("force", {}, wconfig)
+    reconfig.noautocmd = nil
+    local ok, err = pcall(vim.api.nvim_win_set_config, f.win, reconfig)
+    if not ok then
+      vim.notify_once(
+        "ui.context: could not resize the overlay (" .. tostring(err) .. ")",
+        vim.log.levels.WARN
+      )
+    end
     return f.win
   end
   local fwin = vim.api.nvim_open_win(cbuf, false, wconfig)
@@ -965,7 +987,7 @@ local function draw_mimic(win, buf, entries)
   end
   local natural_width = 0
   for _, l in ipairs(raw) do
-    natural_width = math.max(natural_width, vim.fn.strdisplaywidth(l))
+    natural_width = math.max(natural_width, vim.fn.strwidth(l))
   end
   local col, width = resolve_col_width(win, natural_width)
 
@@ -1114,7 +1136,7 @@ local function draw_chips(win, buf, entries)
   local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
   local squared_left = anchor.h == "full" or anchor.h == "left"
   local text, marks = chip_line(buf, entries, squared_left)
-  local natural_width = vim.fn.strdisplaywidth(text)
+  local natural_width = vim.fn.strwidth(text)
   local col, width = resolve_col_width(win, natural_width)
   local byte_len = #text
   if natural_width > width then
