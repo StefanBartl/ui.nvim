@@ -46,11 +46,12 @@ tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
 headings = { enable = true, max_level = 6, icons = {...} },
-persist = false, state_file = nil, style = "mimic", position = { anchor = "top" } }`)
+persist = false, state_file = nil, style = "mimic",
+chips = { layout = "row", shape = "rounded" }, position = { anchor = "top" } }`)
 to override them; `:UI sticky` (`:UI context` is the older spelling) toggles
 it for the session either way.
 
-**Where it sits (`position`) and how it looks (`style`).**
+**Where it sits (`position`) and how it looks (`style`/`chips`).**
 
 ```lua
 context = {
@@ -58,6 +59,11 @@ context = {
                                    -- | "top-center" | "bottom-left" | "bottom-right" | "bottom-center"
                                    -- plus optional row/col for an exact override
   style = "mimic",                -- "mimic" (default) | "chips"
+  chips = {                       -- only read when style = "chips"
+    layout = "row",               -- "row" (default): every entry joined into one breadcrumb line
+                                   -- "stack": one chip per line
+    shape = "rounded",            -- "rounded" (default): lsp.nvim's cap-body-cap look | "rect": a flat block, no caps
+  },
 }
 ```
 
@@ -72,17 +78,28 @@ given: an anchor-only call also drops a `row`/`col` an earlier call set.
 
 `style = "mimic"` is the look described above: the gutter reproduced,
 Tree-sitter colours, full-width per-heading bands -- it reads as real buffer
-rows. `style = "chips"` draws the same pinned entries as one row of rounded,
-coloured chips instead -- lsp.nvim's winbar breadcrumb, redrawn into a real
-buffer line -- sized to its own content. It is the style a compact
-(non-`"top"`/`"bottom"`) anchor is meant to be paired with; a `"mimic"` box
-narrower than the window still works, it just carries less of the "looks
-like the buffer" illusion once it is not flush with the window's own gutter.
+rows. `style = "chips"` draws the same pinned entries as coloured chips
+instead -- lsp.nvim's winbar breadcrumb, redrawn into a real buffer line. It
+is the style a compact (non-`"top"`/`"bottom"`) anchor is meant to be paired
+with; a `"mimic"` box narrower than the window still works, it just carries
+less of the "looks like the buffer" illusion once it is not flush with the
+window's own gutter.
+
+`chips.layout` is `"row"` (default, joins every entry into one line, same as
+before this option existed) or `"stack"` (one chip per line, like `"mimic"`'s
+one-row-per-entry -- a long entry's own truncation then never eats into a
+shorter entry sharing the same line the way `"row"`'s single shared line
+would). `chips.shape` is `"rounded"` (default) or `"rect"` (a flat coloured
+block, no caps). Both apply to either anchor style; `"stack"` with a compact
+anchor sizes the box to its widest chip, same as `"row"` sizes to its one
+line's width.
+
 A heading's chip colour comes from its own `@markup.heading.N.markdown`
-group (`UiContextChipH1`..`6`, plus a `...Cap` variant for the rounded caps);
-every non-heading (code) scope shares one generic `UiContextChipScope` /
-`UiContextChipScopeCap` pair -- override any of them with `:hi` the same way
-as the `UiContextH*` groups the `"mimic"` style uses.
+group (`UiContextChipH1`..`6`, plus a `...Cap` variant for the rounded caps,
+unused by `shape = "rect"`); every non-heading (code) scope shares one
+generic `UiContextChipScope` / `UiContextChipScopeCap` pair -- override any
+of them with `:hi` the same way as the `UiContextH*` groups the `"mimic"`
+style uses.
 
 How deep the context reaches is two separate limits:
 
