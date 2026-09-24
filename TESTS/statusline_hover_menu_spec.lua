@@ -201,6 +201,81 @@ describe("ui.statusline.hover", function()
       assert.is_nil(target.maxwidth)
     end
   )
+
+  it(
+    "pointer_target() resolves a global statusline hit even when getmousepos() reports a "
+      .. "real winid and a real (nonzero) line -- regression: with cmdheight=0, a real user's "
+      .. "getmousepos() never reported winid==0/line==0 for the statusline row, so the old "
+      .. "winid==0 requirement never matched and hover/the click menu never fired at all",
+    function()
+      local original_laststatus = vim.o.laststatus
+      vim.o.laststatus = 3
+
+      local current_win = vim.api.nvim_get_current_win()
+      local target_row = vim.o.lines - vim.o.cmdheight
+
+      local original = vim.fn.getmousepos
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.fn.getmousepos = function()
+        return {
+          winid = current_win, -- a real window, NOT 0
+          line = 42, -- a real (end-of-buffer-clamped) line, NOT 0
+          wincol = 5,
+          winrow = 5,
+          screenrow = target_row,
+          screencol = 30,
+        }
+      end
+
+      local target = hover.pointer_target()
+
+      vim.fn.getmousepos = original
+      vim.o.laststatus = original_laststatus
+      assert.is_not_nil(target)
+      assert.equals(30, target.col)
+      assert.equals(vim.o.columns, target.maxwidth)
+    end
+  )
+
+  it(
+    "pointer_target() does not treat a floating window overlapping the statusline row as a hit",
+    function()
+      local original_laststatus = vim.o.laststatus
+      vim.o.laststatus = 3
+      local target_row = vim.o.lines - vim.o.cmdheight
+
+      local buf = vim.api.nvim_create_buf(false, true)
+      local float_win = vim.api.nvim_open_win(buf, false, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 10,
+        height = 1,
+        style = "minimal",
+      })
+
+      local original = vim.fn.getmousepos
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.fn.getmousepos = function()
+        return {
+          winid = float_win,
+          line = 1,
+          wincol = 2,
+          winrow = 1,
+          screenrow = target_row,
+          screencol = 5,
+        }
+      end
+
+      local target = hover.pointer_target()
+
+      vim.fn.getmousepos = original
+      vim.o.laststatus = original_laststatus
+      pcall(vim.api.nvim_win_close, float_win, true)
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+      assert.is_nil(target)
+    end
+  )
 end)
 
 describe("ui.statusline.menu", function()

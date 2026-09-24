@@ -197,25 +197,50 @@ local function pointer_target()
     return nil
   end
 
-  -- A global statusline: `getmousepos()` reports `winid == 0` for BOTH the
-  -- statusline row and the command line below it (also confirmed
-  -- empirically), so the row itself is what tells them apart. `render.lua`
-  -- bucketed its `layout.record()` call under `vim.g.statusline_winid` --
-  -- for a global statusline that is documented as, and confirmed empirically
-  -- to equal, the current window AT EVALUATION TIME, but Neovim resets the
-  -- variable back to unset once the evaluation finishes, so reading it again
-  -- here (well after that redraw) would not reproduce the same bucket.
-  -- `nvim_get_current_win()` does: it names the same window `record()` saw,
-  -- on the same "focus has not silently changed since the last redraw"
-  -- assumption record()'s own doc comment already makes.
-  if pos.winid == 0 and vim.o.laststatus == 3 and pos.screenrow == global_statusline_row() then
-    return {
-      winid = api.nvim_get_current_win(),
-      col = pos.screencol,
-      maxwidth = vim.o.columns,
-      screenrow = pos.screenrow,
-      screencol = pos.screencol,
-    }
+  -- A global statusline (`laststatus == 3`) always draws on exactly one row,
+  -- `global_statusline_row()`, and under `laststatus == 3` no window's own
+  -- content can ever reach that row -- the row alone is therefore sufficient,
+  -- with no need to also check `pos.winid`/`pos.line` the way the per-window
+  -- branch above does.
+  --
+  -- That used to read `pos.winid == 0 and ...`, on the assumption (written
+  -- down as "confirmed empirically against a real headless Neovim") that
+  -- `getmousepos()` reports `winid == 0` for both the global statusline row
+  -- and the command line below it. Real-world regression: with `cmdheight =
+  -- 0` (one real user's actual setup -- a single window, no splits), that
+  -- never happened -- `getmousepos()` kept reporting the one real window's
+  -- `winid` and a real (end-of-buffer-clamped) `line`, for every row
+  -- including the very last one, so the old check never once matched and
+  -- hover/the click menu never fired. Rather than chase exactly which
+  -- combination of options reproduces the old assumption, the row match
+  -- here no longer looks at `winid`/`line` at all, except to rule out a
+  -- FLOATING window that happens to overlap this row (a transient
+  -- notification popup, say) -- that genuinely is not the statusline.
+  --
+  -- `render.lua` bucketed its `layout.record()` call under
+  -- `vim.g.statusline_winid` -- for a global statusline that is documented
+  -- as, and confirmed empirically to equal, the current window AT
+  -- EVALUATION TIME, but Neovim resets the variable back to unset once the
+  -- evaluation finishes, so reading it again here (well after that redraw)
+  -- would not reproduce the same bucket. `nvim_get_current_win()` does: it
+  -- names the same window `record()` saw, on the same "focus has not
+  -- silently changed since the last redraw" assumption `record()`'s own doc
+  -- comment already makes.
+  if vim.o.laststatus == 3 and pos.screenrow == global_statusline_row() then
+    local is_float = false
+    if pos.winid ~= 0 then
+      local cfg_ok, cfg = pcall(api.nvim_win_get_config, pos.winid)
+      is_float = cfg_ok and cfg.relative ~= ""
+    end
+    if not is_float then
+      return {
+        winid = api.nvim_get_current_win(),
+        col = pos.screencol,
+        maxwidth = vim.o.columns,
+        screenrow = pos.screenrow,
+        screencol = pos.screencol,
+      }
+    end
   end
 
   return nil
