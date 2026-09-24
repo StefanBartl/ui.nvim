@@ -1842,7 +1842,11 @@ describe("ui.context", function()
       context.refresh(win)
       local wcfg = vim.api.nvim_win_get_config((context.float(win)))
       local lines = overlay_lines(win)
-      assert.equals(vim.fn.strdisplaywidth(lines[1]), wcfg.width)
+      -- strwidth, not strdisplaywidth: the latter folds in wrap-related
+      -- padding once a string's width nears/exceeds 'columns', which a
+      -- single unwrapped float row never actually needs -- see
+      -- trunc_to_width's own doc comment.
+      assert.equals(vim.fn.strwidth(lines[1]), wcfg.width)
       assert.is_true(wcfg.width < vim.api.nvim_win_get_width(win))
     end)
 
@@ -1901,12 +1905,65 @@ describe("ui.context", function()
         local wcfg = vim.api.nvim_win_get_config(fwin)
         local lines = overlay_lines(win)
         assert.is_true(
-          vim.fn.strdisplaywidth(lines[1]) <= wcfg.width,
-          ("rendered display width must not exceed the box width %d: %s"):format(
-            wcfg.width,
-            lines[1]
-          )
+          vim.fn.strwidth(lines[1]) <= wcfg.width,
+          ("rendered width must not exceed the box width %d: %s"):format(wcfg.width, lines[1])
         )
+      end
+    )
+
+    it(
+      "resizes an existing float for new content, instead of staying stuck at the first draw's size",
+      function()
+        local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        -- `nvim_win_set_config` rejects `noautocmd` on a window that
+        -- already exists; a bare `pcall` around that used to swallow the
+        -- error and leave every reused float stuck at its very first
+        -- row/col/width. Draw a small box, then force a much wider one in
+        -- the SAME window, and check the box itself actually grew.
+        vim.cmd("new")
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+          "# Roadmap",
+          "",
+          "## Tasks",
+          "",
+          "### A rather long nested heading that pushes the chip line well past the first box",
+          "",
+          "text",
+        })
+        vim.bo[buf].filetype = "markdown"
+        vim.bo[buf].buftype = ""
+        vim.api.nvim_win_set_height(win, 8)
+
+        context.setup({ style = "chips", position = { anchor = "top-right" } })
+        context.enable()
+
+        -- First draw: only "Roadmap" pinned.
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 2, lnum = 3, col = 0 })
+        end)
+        context.refresh(win)
+        local small = vim.api.nvim_win_get_config((context.float(win)))
+
+        -- Same window, scrolled further: three nested headings now pinned,
+        -- a much wider chip line.
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 6, lnum = 7, col = 0 })
+        end)
+        context.refresh(win)
+        local big = vim.api.nvim_win_get_config((context.float(win)))
+
+        assert.is_true(
+          big.width > small.width,
+          ("float must resize for wider content: was %d, still %d"):format(small.width, big.width)
+        )
+        local lines = overlay_lines(win)
+        assert.is_true(vim.fn.strwidth(lines[1]) <= big.width)
       end
     )
   end)
