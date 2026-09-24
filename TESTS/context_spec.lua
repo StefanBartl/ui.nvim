@@ -83,6 +83,8 @@ describe("ui.context", function()
       headings = { enable = true, max_level = 6, icons = DEFAULT_ICONS },
       node_types = DEFAULT_NODE_TYPES,
       exclude_node_types = DEFAULT_EXCLUDES,
+      style = "mimic",
+      position = { anchor = "top" },
     })
     vim.cmd("silent! %bwipeout!")
   end)
@@ -1634,5 +1636,278 @@ describe("ui.context", function()
     assert.equals(3, vim.api.nvim_win_get_cursor(win)[1])
     scroll_to(win, 1)
     assert.is_false(context.go_to_context())
+  end)
+
+  describe("position", function()
+    it("defaults to a full-width box pinned at the window's top-left", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(0, wcfg.row)
+      assert.equals(0, wcfg.col)
+      assert.equals(vim.api.nvim_win_get_width(win), wcfg.width)
+    end)
+
+    it("anchor = 'bottom' keeps full width but pins the box to the window's bottom", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ position = { anchor = "bottom" } })
+      context.enable()
+      -- Cursor kept off the window's bottom rows: a bottom-anchored overlay
+      -- covering it would close it again, same as a top-anchored one would
+      -- for a cursor on the window's first rows.
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = 7, lnum = 8, col = 0 })
+      end)
+      local shown = context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(vim.api.nvim_win_get_height(win) - shown, wcfg.row)
+      assert.equals(0, wcfg.col)
+      assert.equals(vim.api.nvim_win_get_width(win), wcfg.width)
+    end)
+
+    it("a corner anchor shrinks the box to its content and anchors it there", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ position = { anchor = "top-right" } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(0, wcfg.row)
+      assert.is_true(
+        wcfg.width < vim.api.nvim_win_get_width(win),
+        "box should shrink to its content"
+      )
+      assert.equals(vim.api.nvim_win_get_width(win) - wcfg.width, wcfg.col)
+    end)
+
+    it("position.row/col override the anchor outright", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ position = { anchor = "top-right", row = 2, col = 3 } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(2, wcfg.row)
+      assert.equals(3, wcfg.col)
+    end)
+
+    it("a plain anchor-only setup() drops a row/col an earlier call set", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ position = { anchor = "top-right", row = 2, col = 3 } })
+      context.setup({ position = { anchor = "top-right" } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(0, wcfg.row)
+      assert.equals(vim.api.nvim_win_get_width(win) - wcfg.width, wcfg.col)
+    end)
+
+    it("an explicit col shrinks a full-width anchor's width to fit inside the window", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      -- anchor = "top" is full-width by default; col = 5 must not just shift
+      -- that full width right, which would spill 5 columns past the
+      -- window's own right edge.
+      context.setup({ position = { anchor = "top", col = 5 } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(5, wcfg.col)
+      assert.equals(vim.api.nvim_win_get_width(win) - 5, wcfg.width)
+      assert.is_true(wcfg.col + wcfg.width <= vim.api.nvim_win_get_width(win))
+    end)
+
+    it(
+      "a compact anchor only hides for a cursor inside its own box, not elsewhere on the row",
+      function()
+        if not has_lua_parser then
+          pending("no Lua parser available")
+          return
+        end
+        -- SOURCE's own lines are all short; row 3 needs to be long enough to
+        -- put the cursor at a screen column inside a right-anchored box.
+        vim.cmd("new")
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_get_current_buf()
+        -- The blocks are closed (end/end/end): an unterminated for/if/function
+        -- parses as one ERROR node from row 0, which matches no scope type at
+        -- all -- contexts() would then find nothing to pin, for a reason
+        -- unrelated to what this test checks.
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+          "local function outer(a, b)",
+          "  if a > b then",
+          "    for i = 1, 10 do",
+          '      local pad = "' .. string.rep("x", 80) .. '"',
+          "      print(pad)",
+          "    end",
+          "  end",
+          "  return a",
+          "end",
+        })
+        vim.bo[buf].filetype = "lua"
+        vim.bo[buf].buftype = ""
+        vim.api.nvim_win_set_height(win, 8)
+        vim.wo[win].number = true
+
+        context.setup({ position = { anchor = "top-right" } })
+        context.enable()
+        -- Cursor kept off row 0 for the first draw, same reasoning as the
+        -- "bottom" anchor test above: drawing itself must not be suppressed
+        -- by the very check this test exercises.
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 4, lnum = 8, col = 0 })
+        end)
+        local shown = context.refresh(win)
+        assert.is_true(shown > 0)
+        local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+
+        -- Row 0, far-left column: outside the right-anchored box entirely.
+        vim.api.nvim_win_set_cursor(win, { 4, 0 })
+        assert.is_true(
+          context.refresh(win) > 0,
+          "a far-left cursor on the overlay's row must not hide a right-anchored box"
+        )
+
+        -- Row 0, a column inside the box: this must still hide it.
+        local textoff = vim.fn.getwininfo(win)[1].textoff
+        vim.api.nvim_win_set_cursor(win, { 4, wcfg.col + 1 - textoff })
+        assert.equals(
+          0,
+          context.refresh(win),
+          "a cursor inside a right-anchored box's own columns must hide it"
+        )
+      end
+    )
+  end)
+
+  describe("style = 'chips'", function()
+    it("draws every entry as one row of rounded chips, joined by the separator", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ style = "chips" })
+      context.enable()
+      scroll_to(win, 7)
+      local shown = context.refresh(win)
+      assert.equals(3, shown)
+      local lines = overlay_lines(win)
+      assert.equals(1, #lines, "chips draw one row regardless of the entry count")
+      assert.truthy(lines[1]:find("outer", 1, true))
+      assert.truthy(lines[1]:find("for", 1, true))
+      assert.truthy(
+        lines[1]:find(vim.fn.nr2char(0x203A), 1, true),
+        "separator glyph between chips: " .. lines[1]
+      )
+      assert.truthy(lines[1]:find(vim.fn.nr2char(0xE0B4), 1, true), "chip right cap: " .. lines[1])
+    end)
+
+    it("sizes a compact anchor's box to the chip line's own width", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ style = "chips", position = { anchor = "top-right" } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      local lines = overlay_lines(win)
+      assert.equals(vim.fn.strdisplaywidth(lines[1]), wcfg.width)
+      assert.is_true(wcfg.width < vim.api.nvim_win_get_width(win))
+    end)
+
+    it("a full-width anchor still draws one chip row, just inside a full-width box", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ style = "chips" })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(vim.api.nvim_win_get_width(win), wcfg.width)
+      assert.equals(1, wcfg.height)
+    end)
+
+    it(
+      "truncates by display width, not character count, so wide glyphs never overflow the box",
+      function()
+        local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        -- Emoji are two display cells wide but one character: a naive
+        -- strcharpart(text, 0, width) truncation (width in display cells)
+        -- would keep too many of them and overflow the box.
+        vim.cmd("new")
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+          "# " .. string.rep("🚀", 20),
+          "",
+          "text",
+        })
+        vim.bo[buf].filetype = "markdown"
+        vim.bo[buf].buftype = ""
+        vim.api.nvim_win_set_height(win, 6)
+
+        -- A narrow explicit box: whatever survives truncation, its own
+        -- display width must never exceed what was asked for.
+        context.setup({
+          style = "chips",
+          position = { anchor = "top-right", col = vim.api.nvim_win_get_width(win) - 6 },
+        })
+        context.enable()
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 2, lnum = 3, col = 0 })
+        end)
+        local shown = context.refresh(win)
+        assert.equals(1, shown)
+        local fwin = context.float(win)
+        assert.is_not_nil(fwin)
+        local wcfg = vim.api.nvim_win_get_config(fwin)
+        local lines = overlay_lines(win)
+        assert.is_true(
+          vim.fn.strdisplaywidth(lines[1]) <= wcfg.width,
+          ("rendered display width must not exceed the box width %d: %s"):format(
+            wcfg.width,
+            lines[1]
+          )
+        )
+      end
+    )
   end)
 end)

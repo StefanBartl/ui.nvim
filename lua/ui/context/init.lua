@@ -59,6 +59,22 @@
 ---
 --- Off by default; `ui.setup({ context = true })` or `:UI sticky on` (`:UI
 --- context` is the older spelling of the same command).
+---
+--- `cfg.position` (`Ui.Context.Position`) says where the overlay sits.
+--- `anchor = "top"` (the default) and `"bottom"` keep the look above --
+--- full window width, at the top or the bottom. The six corner/centre
+--- values (`"top-right"`, `"bottom-center"`, ...) switch to a compact box
+--- sized to its own content instead of the window; `position.row`/`col`
+--- override the anchor's row/column outright, for exact placement.
+---
+--- `cfg.style` picks how that content is drawn. `"mimic"` (the default) is
+--- everything above: gutter reproduced, Tree-sitter colours, per-heading
+--- bands. `"chips"` collapses the same entries into one row of rounded,
+--- coloured chips -- lsp.nvim's winbar breadcrumb, redrawn into a real
+--- buffer line instead of a `'winbar'` string -- which is the style a
+--- compact anchor is meant to be paired with (a `"mimic"` box narrower than
+--- the window still works, it just carries less of the "looks like the
+--- buffer" illusion once it is not flush with the window's own gutter).
 
 local state = require("ui.context.state")
 
@@ -80,6 +96,18 @@ local AUGROUP = "UiContext"
 ---@field headings? boolean|Ui.Context.HeadingOpts
 ---@field persist? boolean  # keep what `:UI sticky depth`/`lines` set across restarts (default false)
 ---@field state_file? string  # where; `~`/`$VAR` expanded, relative to the cwd at `setup`; default `stdpath("state")/ui.nvim/sticky.json`
+---@field position? Ui.Context.Position
+---@field style? "mimic"|"chips"  # `"mimic"` (default): full window width, reproduces the gutter, reads as real buffer rows. `"chips"` : one row of rounded, coloured chips (like lsp.nvim's winbar breadcrumb), sized to its content -- meant for a `position.anchor` off the default `"top"`.
+
+---@class Ui.Context.Position
+---@field anchor? "top"|"bottom"|"top-left"|"top-right"|"top-center"|"bottom-left"|"bottom-right"|"bottom-center"
+--- Default `"top"`. `"top"`/`"bottom"` span the full window width, at the top
+--- (as before) or the bottom. Any of the six corner/centre values switch the
+--- overlay to a compact box sized to its own content, anchored there.
+---@field row? integer  # explicit row (0-based, within the window); overrides the anchor's vertical placement
+---@field col? integer  # explicit col (0-based, within the window); overrides the anchor's horizontal placement
+--- `setup({ position = {...} })` replaces the whole table, not just the keys
+--- given: an anchor-only call also drops a `row`/`col` an earlier call set.
 
 ---@class Ui.Context.HeadingOpts
 ---@field enable? boolean
@@ -107,6 +135,8 @@ local MAX_HEADING_LEVEL = 6
 ---@field headings Ui.Context.Headings # how a Markdown heading context line is drawn
 ---@field persist boolean              # `:UI sticky depth`/`lines` are written to `state_file` and read back at the next `setup`
 ---@field state_file string|nil        # absolute, already resolved; nil = `ui.context.state.default_path()`
+---@field style "mimic"|"chips"        # how the pinned entries are drawn
+---@field position Ui.Context.Position # where the overlay sits
 local cfg = {
   persist = false,
   max_lines = DEFAULT_MAX_LINES,
@@ -200,6 +230,23 @@ local cfg = {
       return out
     end)(),
   },
+  style = "mimic",
+  position = { anchor = "top" },
+}
+
+--- Which edge(s) an anchor pins to. `h = "full"` means the overlay spans the
+--- whole window width (the `"top"`/`"bottom"` values); any other `h` switches
+--- `draw()` into the compact, content-sized box.
+---@type table<string, { v: "top"|"bottom", h: "full"|"left"|"right"|"center" }>
+local ANCHORS = {
+  ["top"] = { v = "top", h = "full" },
+  ["bottom"] = { v = "bottom", h = "full" },
+  ["top-left"] = { v = "top", h = "left" },
+  ["top-right"] = { v = "top", h = "right" },
+  ["top-center"] = { v = "top", h = "center" },
+  ["bottom-left"] = { v = "bottom", h = "left" },
+  ["bottom-right"] = { v = "bottom", h = "right" },
+  ["bottom-center"] = { v = "bottom", h = "center" },
 }
 
 ---@type boolean
@@ -228,6 +275,50 @@ local refresher = nil
 
 -- ---------------------------------------------------------------- highlights
 
+-- How far a chip's background is pulled from the window background towards
+-- its role colour. 0 is invisible, 1 is the role colour itself. Same value
+-- and formula as lsp.nvim's winbar chips, so the two read as one family.
+---@type number
+local CHIP_TINT = 0.2
+
+---@internal
+---@param name string
+---@return { fg?: integer, bg?: integer, bold?: boolean, italic?: boolean }
+local function resolve(name)
+  local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
+  return ok and hl or {}
+end
+
+---@internal
+---@param fg integer
+---@param bg integer
+---@param amount number
+---@return integer
+local function mix(fg, bg, amount)
+  local out = 0
+  for _, unit in ipairs({ 65536, 256, 1 }) do
+    local f = math.floor(fg / unit) % 256
+    local b = math.floor(bg / unit) % 256
+    out = out * 256 + math.floor(b + (f - b) * amount + 0.5)
+  end
+  return out
+end
+
+---@internal
+---The background a chip is tinted against: the overlay's own (`UiContext`,
+---which by default links to `NormalFloat`), falling back the same way the
+---overlay's own colours do.
+---@return integer
+local function window_bg()
+  for _, name in ipairs({ "UiContext", "NormalFloat", "Normal" }) do
+    local bg = resolve(name).bg
+    if bg then
+      return bg
+    end
+  end
+  return vim.o.background == "light" and 0xeff1f5 or 0x1f2335
+end
+
 ---@internal
 --- The three groups, as defaults a colorscheme or the host may override.
 --- `hl.persist` re-applies them after every theme change; without lib.nvim
@@ -238,7 +329,16 @@ local function groups_spec()
     UiContext = { link = "NormalFloat", default = true },
     UiContextLineNr = { link = "LineNr", default = true },
     UiContextBottom = { underline = true, sp = "#555555", default = true },
+    -- `style = "chips"`: the separator between chips, and the generic role
+    -- for a non-heading (code) scope -- every node type gets the same one, a
+    -- deliberately simple v1 rather than a per-kind palette.
+    UiContextChipSep = { link = "Operator", default = true },
   }
+  local bg = window_bg()
+  local scope_fg = resolve("Title").fg or resolve("Function").fg or resolve("Normal").fg or 0xc0caf5
+  spec.UiContextChipScope =
+    { fg = scope_fg, bg = mix(scope_fg, bg, CHIP_TINT), bold = true, default = true }
+  spec.UiContextChipScopeCap = { fg = mix(scope_fg, bg, CHIP_TINT), bg = bg, default = true }
   -- One text group and one row band per heading level. The text group links
   -- to the colorscheme's own heading group, so the palette carries over; the
   -- band is that group's background alone, drawn across the whole row (a
@@ -249,6 +349,16 @@ local function groups_spec()
     local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = src, link = false })
     if ok and hl and hl.bg then
       spec["UiContextH" .. level .. "Row"] = { bg = hl.bg, default = true }
+    end
+    -- `style = "chips"` counterpart: same text colour, tinted into a chip
+    -- background instead of a full-row band, so a heading's colour carries
+    -- over into either drawing style.
+    local heading_fg = ok and hl and hl.fg
+    if heading_fg then
+      spec["UiContextChipH" .. level] =
+        { fg = heading_fg, bg = mix(heading_fg, bg, CHIP_TINT), default = true }
+      spec["UiContextChipH" .. level .. "Cap"] =
+        { fg = mix(heading_fg, bg, CHIP_TINT), bg = bg, default = true }
     end
   end
   return spec
@@ -695,17 +805,130 @@ local function style_heading(cbuf, row, level, from, indent, line_len)
 end
 
 ---@internal
----Draw (or redraw) the overlay of `win` for `entries`.
+---`s` clipped to at most `max_width` *display cells* (not characters):
+---`vim.fn.strcharpart`'s length argument counts characters, so a run of
+---double-width cells (CJK, most emoji) would let through fewer or more
+---cells than `max_width` and desync the float's content from its
+---configured `width`. One display-width query per character is fine here --
+---these are single breadcrumb/heading lines, not buffer-sized text.
+---@param s string
+---@param max_width integer
+---@return string
+local function trunc_to_width(s, max_width)
+  if vim.fn.strdisplaywidth(s) <= max_width then
+    return s
+  end
+  local out, w = {}, 0
+  for i = 0, vim.fn.strchars(s) - 1 do
+    local ch = vim.fn.strcharpart(s, i, 1)
+    local cw = vim.fn.strdisplaywidth(ch)
+    if w + cw > max_width then
+      break
+    end
+    out[#out + 1] = ch
+    w = w + cw
+  end
+  return table.concat(out)
+end
+
+---@internal
+---0-based row where the overlay's top-left corner sits, given how many rows
+---it is about to draw. `cfg.position.row` overrides the anchor's vertical
+---part when set.
+---@param win integer
+---@param num_lines integer
+---@return integer
+local function resolve_row(win, num_lines)
+  if type(cfg.position.row) == "number" then
+    return math.max(math.floor(cfg.position.row), 0)
+  end
+  local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
+  if anchor.v == "bottom" then
+    return math.max(vim.api.nvim_win_get_height(win) - num_lines, 0)
+  end
+  return 0
+end
+
+---@internal
+---0-based column and width for the overlay. `natural_width` is the
+---content's own display width (already window-capped by the caller for a
+---`"full"` anchor, since those ignore it); `cfg.position.col` overrides the
+---anchor's horizontal part when set.
+---@param win integer
+---@param natural_width integer
+---@return integer col, integer width
+local function resolve_col_width(win, natural_width)
+  local win_width = vim.api.nvim_win_get_width(win)
+  local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
+  local width = anchor.h ~= "full" and math.min(natural_width, win_width) or win_width
+  local col
+  if type(cfg.position.col) == "number" then
+    col = math.min(math.max(math.floor(cfg.position.col), 0), win_width - 1)
+    -- An explicit col is a placement inside the window, not a promise to
+    -- keep a "full" anchor's width: without this, `{ anchor = "top", col =
+    -- 5 }` kept width = win_width and spilled `col` columns past the
+    -- window's right edge instead of shrinking to fit there.
+    width = math.max(math.min(width, win_width - col), 1)
+  elseif anchor.h == "right" then
+    col = math.max(win_width - width, 0)
+  elseif anchor.h == "center" then
+    col = math.max(math.floor((win_width - width) / 2), 0)
+  else
+    col = 0
+  end
+  return col, width
+end
+
+---@internal
+---Reuse `f`'s scratch buffer if it is still valid, else create one.
+---@param f { buf: integer }|nil
+---@return integer cbuf
+local function scratch_buf(f)
+  if f and vim.api.nvim_buf_is_valid(f.buf) then
+    return f.buf
+  end
+  local cbuf = vim.api.nvim_create_buf(false, true)
+  vim.bo[cbuf].buftype = "nofile"
+  vim.bo[cbuf].bufhidden = "wipe"
+  vim.bo[cbuf].swapfile = false
+  return cbuf
+end
+
+---@internal
+---Open `win`'s overlay float at `wconfig`, or move an existing one there.
+---@param f { win: integer }|nil
+---@param cbuf integer
+---@param wconfig table
+---@return integer fwin
+local function place_float(f, cbuf, wconfig)
+  if f and vim.api.nvim_win_is_valid(f.win) then
+    pcall(vim.api.nvim_win_set_config, f.win, wconfig)
+    return f.win
+  end
+  local fwin = vim.api.nvim_open_win(cbuf, false, wconfig)
+  vim.wo[fwin].winhighlight = "Normal:UiContext,NormalFloat:UiContext,NormalNC:UiContext"
+  vim.wo[fwin].wrap = false
+  vim.wo[fwin].number = false
+  vim.wo[fwin].relativenumber = false
+  vim.wo[fwin].signcolumn = "no"
+  vim.wo[fwin].foldenable = false
+  return fwin
+end
+
+---@internal
+---Draw (or redraw) the full-width overlay of `win` for `entries`: the
+---`style = "mimic"` look, source text and gutter reproduced verbatim.
 ---@param win integer
 ---@param buf integer
 ---@param entries Ui.Context.Entry[]
-local function draw(win, buf, entries)
+local function draw_mimic(win, buf, entries)
   -- The row list alone is not enough: editing the enclosing declaration in
   -- place (e.g. renaming a function) does not change which row it starts
   -- on, so a key built only from row numbers would keep the old text
   -- cached. The buffer's changedtick makes any edit anywhere in it
   -- invalidate the cache -- broader than strictly necessary, but draw()
-  -- is cheap and refresh() upstream is already debounced.
+  -- is cheap and refresh() upstream is already debounced. Height is in the
+  -- key too: a `"bottom"` anchor's row depends on it, not just on width.
   local key = buf
     .. "@"
     .. vim.api.nvim_buf_get_changedtick(buf)
@@ -718,35 +941,40 @@ local function draw(win, buf, entries)
     )
     .. "|"
     .. vim.api.nvim_win_get_width(win)
+    .. "x"
+    .. vim.api.nvim_win_get_height(win)
   local f = floats[win]
   if f and f.key == key and vim.api.nvim_win_is_valid(f.win) then
     return
   end
 
-  local width = vim.api.nvim_win_get_width(win)
   local info = vim.fn.getwininfo(win)[1]
   local textoff = info and info.textoff or 0
 
-  local lines, gutters, levels, indents = {}, {}, {}, {}
+  -- Built at natural length first (not yet clipped to any window/box
+  -- width): a compact anchor needs to know how wide the content actually
+  -- is before it can size the box around it.
+  local raw, gutters, levels, indents = {}, {}, {}, {}
   for i, e in ipairs(entries) do
     local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
     text = text:gsub("%s+$", "")
     levels[i], indents[i] = heading_level(buf, text)
     local g = gutter(win, e.row, textoff)
     gutters[i] = #g
-    local full = g .. text
-    lines[i] = vim.fn.strcharpart(full, 0, width)
+    raw[i] = g .. text
+  end
+  local natural_width = 0
+  for _, l in ipairs(raw) do
+    natural_width = math.max(natural_width, vim.fn.strdisplaywidth(l))
+  end
+  local col, width = resolve_col_width(win, natural_width)
+
+  local lines = {}
+  for i, full in ipairs(raw) do
+    lines[i] = trunc_to_width(full, width)
   end
 
-  local cbuf
-  if f and vim.api.nvim_buf_is_valid(f.buf) then
-    cbuf = f.buf
-  else
-    cbuf = vim.api.nvim_create_buf(false, true)
-    vim.bo[cbuf].buftype = "nofile"
-    vim.bo[cbuf].bufhidden = "wipe"
-    vim.bo[cbuf].swapfile = false
-  end
+  local cbuf = scratch_buf(f)
   vim.bo[cbuf].modifiable = true
   vim.api.nvim_buf_set_lines(cbuf, 0, -1, false, lines)
   vim.bo[cbuf].modifiable = false
@@ -781,8 +1009,8 @@ local function draw(win, buf, entries)
   local wconfig = {
     relative = "win",
     win = win,
-    row = 0,
-    col = 0,
+    row = resolve_row(win, #lines),
+    col = col,
     width = width,
     height = #lines,
     style = "minimal",
@@ -790,20 +1018,155 @@ local function draw(win, buf, entries)
     zindex = cfg.zindex,
     noautocmd = true,
   }
-  local fwin
-  if f and vim.api.nvim_win_is_valid(f.win) then
-    fwin = f.win
-    pcall(vim.api.nvim_win_set_config, fwin, wconfig)
-  else
-    fwin = vim.api.nvim_open_win(cbuf, false, wconfig)
-    vim.wo[fwin].winhighlight = "Normal:UiContext,NormalFloat:UiContext,NormalNC:UiContext"
-    vim.wo[fwin].wrap = false
-    vim.wo[fwin].number = false
-    vim.wo[fwin].relativenumber = false
-    vim.wo[fwin].signcolumn = "no"
-    vim.wo[fwin].foldenable = false
-  end
+  local fwin = place_float(f, cbuf, wconfig)
   floats[win] = { win = fwin, buf = cbuf, key = key }
+end
+
+-- Explicit codepoints, not literal glyphs -- same reason as the heading
+-- icons above: a private-use-area glyph written into a source file is one
+-- editor/encoding pass away from silently becoming nothing. Same two
+-- codepoints as lsp.nvim's winbar chips, so the two read as one family when
+-- both are on screen.
+local CHIP_LEFT_CAP = vim.fn.nr2char(0xE0B6)
+local CHIP_RIGHT_CAP = vim.fn.nr2char(0xE0B4)
+local CHIP_SEP = " " .. vim.fn.nr2char(0x203A) .. " "
+
+---@internal
+---Chip label for one context entry: a Markdown heading without its `#`
+---marker and indent, or the trimmed source line otherwise.
+---@param buf integer
+---@param e Ui.Context.Entry
+---@return string text, integer|nil level
+local function chip_entry(buf, e)
+  local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
+  text = text:gsub("^%s+", ""):gsub("%s+$", "")
+  local level = heading_level(buf, text)
+  if level then
+    text = text:gsub("^#+%s*", "")
+  end
+  return text, level
+end
+
+---@internal
+---One line of rounded chips for `entries`: lsp.nvim's winbar look, adapted
+---to a real buffer line (byte-range highlight marks instead of `%#Group#`
+---statusline tags).
+---@param buf integer
+---@param entries Ui.Context.Entry[]
+---@param squared_left boolean  -- the leftmost chip is squared off, not rounded: it sits at the box's own left edge
+---@return string text
+---@return { [1]: integer, [2]: integer, [3]: string }[] marks  -- byte ranges, 0-based, end exclusive
+local function chip_line(buf, entries, squared_left)
+  local parts, marks = {}, {}
+  local pos = 0
+  local function push(s, hl)
+    parts[#parts + 1] = s
+    if hl then
+      marks[#marks + 1] = { pos, pos + #s, hl }
+    end
+    pos = pos + #s
+  end
+
+  for i, e in ipairs(entries) do
+    if i > 1 then
+      push(CHIP_SEP, "UiContextChipSep")
+    end
+    local text, level = chip_entry(buf, e)
+    local body = level and ("UiContextChipH" .. level) or "UiContextChipScope"
+    local cap = level and ("UiContextChipH" .. level .. "Cap") or "UiContextChipScopeCap"
+    if i == 1 and squared_left then
+      push(" ", body)
+    else
+      push(CHIP_LEFT_CAP, cap)
+    end
+    push(" " .. text .. " ", body)
+    push(CHIP_RIGHT_CAP, cap)
+  end
+  return table.concat(parts), marks
+end
+
+---@internal
+---Draw (or redraw) a single `style = "chips"` row for `win`: one breadcrumb
+---line, sized to its own content rather than the window.
+---@param win integer
+---@param buf integer
+---@param entries Ui.Context.Entry[]
+local function draw_chips(win, buf, entries)
+  local key = buf
+    .. "@"
+    .. vim.api.nvim_buf_get_changedtick(buf)
+    .. "|chips|"
+    .. table.concat(
+      vim.tbl_map(function(e)
+        return tostring(e.row)
+      end, entries),
+      ","
+    )
+    .. "|"
+    .. vim.api.nvim_win_get_width(win)
+    .. "x"
+    .. vim.api.nvim_win_get_height(win)
+  local f = floats[win]
+  if f and f.key == key and vim.api.nvim_win_is_valid(f.win) then
+    return
+  end
+
+  local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
+  local squared_left = anchor.h == "full" or anchor.h == "left"
+  local text, marks = chip_line(buf, entries, squared_left)
+  local natural_width = vim.fn.strdisplaywidth(text)
+  local col, width = resolve_col_width(win, natural_width)
+  local byte_len = #text
+  if natural_width > width then
+    text = trunc_to_width(text, width)
+    byte_len = #text
+  end
+
+  local cbuf = scratch_buf(f)
+  vim.bo[cbuf].modifiable = true
+  vim.api.nvim_buf_set_lines(cbuf, 0, -1, false, { text })
+  vim.bo[cbuf].modifiable = false
+
+  vim.api.nvim_buf_clear_namespace(cbuf, NS, 0, -1)
+  for _, m in ipairs(marks) do
+    local start_col, end_col, hl = m[1], m[2], m[3]
+    if start_col < byte_len then
+      pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, 0, start_col, {
+        end_col = math.min(end_col, byte_len),
+        hl_group = hl,
+        priority = 300,
+      })
+    end
+  end
+
+  local wconfig = {
+    relative = "win",
+    win = win,
+    row = resolve_row(win, 1),
+    col = col,
+    width = math.max(width, 1),
+    height = 1,
+    style = "minimal",
+    focusable = false,
+    zindex = cfg.zindex,
+    noautocmd = true,
+  }
+  local fwin = place_float(f, cbuf, wconfig)
+  floats[win] = { win = fwin, buf = cbuf, key = key }
+end
+
+---@internal
+---Draw (or redraw) the overlay of `win` for `entries`: dispatches on
+---`cfg.style`.
+---@param win integer
+---@param buf integer
+---@param entries Ui.Context.Entry[]
+local function draw(win, buf, entries)
+  if cfg.style == "chips" then
+    draw_chips(win, buf, entries)
+  else
+    draw_mimic(win, buf, entries)
+  end
 end
 
 ---Recompute and redraw the context of one window (default: the current).
@@ -829,13 +1192,40 @@ function M.refresh(win)
   end
   entries = trimmed(buf, entries)
 
-  -- Never over the cursor line: in the window that has focus, the rows the
-  -- overlay would cover must not be where the cursor is.
+  -- Never over the cursor: in the window that has focus, the cell(s) the
+  -- overlay would cover must not be where the cursor is. `style = "chips"`
+  -- always draws one row regardless of `#entries`; a non-"top" anchor may
+  -- not start at row 0, so the covered row is resolved the same way the
+  -- draw itself will place it.
   if win == vim.api.nvim_get_current_win() then
+    local shown_rows = cfg.style == "chips" and 1 or #entries
+    local overlay_row = resolve_row(win, shown_rows)
     local screen_row = vim.api.nvim_win_call(win, function()
       return vim.fn.winline()
-    end)
-    if screen_row <= #entries then
+    end) - 1
+    local row_hit = screen_row >= overlay_row and screen_row < overlay_row + shown_rows
+
+    -- A "full" anchor spans every column, so the row alone decides it, same
+    -- as before there was a column to speak of. A compact anchor only
+    -- covers its own box, so a cursor elsewhere on that row must not close
+    -- it -- checked against the live float's own geometry (authoritative,
+    -- and already there whenever a previous draw might need covering; with
+    -- none yet, this stays row-only for one frame, until the first draw
+    -- gives it something to check against).
+    local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
+    local col_hit = true
+    if row_hit and anchor.h ~= "full" then
+      local f = floats[win]
+      if f and vim.api.nvim_win_is_valid(f.win) then
+        local wcfg = vim.api.nvim_win_get_config(f.win)
+        local screen_col = vim.api.nvim_win_call(win, function()
+          return vim.fn.wincol()
+        end) - 1
+        col_hit = screen_col >= wcfg.col and screen_col < wcfg.col + wcfg.width
+      end
+    end
+
+    if row_hit and col_hit then
       close_float(win)
       return 0
     end
@@ -1041,6 +1431,21 @@ local function apply(opts)
     if type(opts[k]) == "table" then
       cfg[k] = vim.deepcopy(opts[k])
     end
+  end
+  if opts.style == "mimic" or opts.style == "chips" then
+    cfg.style = opts.style
+  end
+  if type(opts.position) == "table" then
+    -- Replaces the whole table rather than merging into it: "where it goes"
+    -- is one decision, not three independent ones, and a merge would leave
+    -- a stale `row`/`col` from an earlier `setup()` call in effect after an
+    -- anchor-only one.
+    local p = opts.position
+    cfg.position = {
+      anchor = (p.anchor ~= nil and ANCHORS[p.anchor] ~= nil) and p.anchor or "top",
+      row = type(p.row) == "number" and math.floor(p.row) or nil,
+      col = type(p.col) == "number" and math.floor(p.col) or nil,
+    }
   end
   scope_cache = {}
   return lines_set, level_set
