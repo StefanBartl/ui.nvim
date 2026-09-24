@@ -259,6 +259,27 @@ describe("ui.statusline.menu", function()
     assert.is_true(vim.tbl_contains(labels, "Remove mode"))
   end)
 
+  it("items() heading names the clicked module plus a short (~3 word) description", function()
+    local items = menu.items("mode")
+    -- The heading is the first item in the first group, ahead of "Remove mode".
+    -- catalog summary: "Current Vim mode, as a filled colour chip."
+    assert.equals("mode — Current Vim mode…", items[1].name)
+  end)
+
+  it("items() heading falls back to the bare key for an uncatalogued module", function()
+    -- A host's own custom module has no catalog entry to pull a description
+    -- from. The heading only survives `contextmenu.group`'s own "drop an
+    -- empty group" rule when "Remove" is actually offered, so the key needs
+    -- to be in the live order for this case to exercise the heading at all
+    -- (see the "does not offer 'Remove'" test above for the alternative).
+    local cfg = render.current()
+    cfg.order[#cfg.order + 1] = "some_hosts_own_custom_module"
+
+    local items = menu.items("some_hosts_own_custom_module")
+
+    assert.equals("some_hosts_own_custom_module", items[1].name)
+  end)
+
   it("items() does not offer 'Remove' for a key not in order", function()
     local items = menu.items(extra_key)
     local labels = {}

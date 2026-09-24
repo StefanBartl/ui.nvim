@@ -37,6 +37,60 @@ local function in_order(cfg, key)
   return vim.tbl_contains(cfg.order or {}, key)
 end
 
+--- Cut `text` to at most `max_width` display cells, on a character boundary
+--- (not a byte one -- several catalog summaries carry multi-byte glyphs, and
+--- a byte-index cut can land inside one of them; see the "Add module" row
+--- below, and `ui.statusline.modules.formatters.ellipsize_middle` for the
+--- same defect class fixed there).
+---@param text string
+---@param max_width integer
+---@return string
+local function truncate(text, max_width)
+  if vim.fn.strdisplaywidth(text) > max_width then
+    return vim.fn.strcharpart(text, 0, max_width - 1) .. "…"
+  end
+  return text
+end
+
+--- The first `n` words of `text`, stripped of trailing punctuation and
+--- ellipsized if anything was cut -- used for the heading's "what is this"
+--- hint, where a handful of words reads better than a character-count
+--- truncation landing mid-word (`truncate` above, used for the "Add module"
+--- row, cuts wherever the width runs out; a catalog summary is one long
+--- sentence, so that lands inside a word as often as not).
+---@param text string
+---@param n integer
+---@return string
+local function short_words(text, n)
+  local words = {}
+  for word in text:gmatch("%S+") do
+    words[#words + 1] = word
+    if #words > n then
+      break
+    end
+  end
+  if #words <= n then
+    return (text:gsub("[%.,]+$", ""))
+  end
+  words[n] = words[n]:gsub("[%.,]+$", "")
+  return table.concat(words, " ", 1, n) .. "…"
+end
+
+--- The catalog entry for `key`, or nil for a host's own custom module (not
+--- catalogued) -- mirrors `ui.statusline.hover`'s own lookup, kept separate
+--- rather than shared since it is a handful of lines and the two modules
+--- have no other coupling.
+---@param key string
+---@return Ui.Statusline.CatalogEntry|nil
+local function catalog_entry_for(key)
+  for _, entry in ipairs(catalog) do
+    if entry.key == key then
+      return entry
+    end
+  end
+  return nil
+end
+
 ---@param entry Ui.Statusline.CatalogEntry
 ---@return nil
 local function add_module(entry)
@@ -111,9 +165,16 @@ function M.items(key)
   local cfg = active_cfg()
   local items = {}
 
+  -- The heading names the module itself, so a short "what is this" rides
+  -- along with it -- worth having for a module the user does not recognize
+  -- at a glance, without repeating the full `hover` sentence right below
+  -- where they just read it.
+  local clicked = catalog_entry_for(key)
+  local heading_text = clicked and (key .. " — " .. short_words(clicked.summary, 3)) or key
+
   contextmenu.group(
     items,
-    contextmenu.heading(key),
+    contextmenu.heading(heading_text),
     contextmenu.entry(cfg ~= nil and in_order(cfg, key), "Remove " .. key, function()
       remove_module(key)
     end)
@@ -131,10 +192,7 @@ function M.items(key)
         -- macro-counter middle dot), and a byte-index cut can land inside
         -- one of them, same defect class `ui.statusline.modules.formatters`
         -- `ellipsize_middle` was fixed for (see TESTS/README.md).
-        local short = entry.summary
-        if vim.fn.strdisplaywidth(short) > 42 then
-          short = vim.fn.strcharpart(short, 0, 41) .. "…"
-        end
+        local short = truncate(entry.summary, 42)
         add_items[#add_items + 1] = contextmenu.entry(
           true,
           entry.key .. " — " .. short,

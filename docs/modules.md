@@ -283,8 +283,10 @@ in `order`/`modules`:
   Needs `'mousemoveevent'` (Neovim 0.10+); degrades to "no hover" silently on
   an older Neovim, same as `ui.kit.chooser`'s own `hover` option.
 - **Right/double click → manage modules.** Right-clicking (or double-clicking,
-  on a plain module) opens a context menu with "Remove `<key>`" and an "Add
-  module" fly-out listing every catalogued key not currently in `order`.
+  on a plain module) opens a context menu whose heading names the clicked
+  module plus a short (catalog-summary-derived) description of what it does,
+  then "Remove `<key>`" and an "Add module" fly-out listing every catalogued
+  key not currently in `order`, each with its own short description.
   Picking one mutates the *live* `Ui.Statusline.Config` `render.enable()` was
   last given and redraws — runtime-only, exactly like `:UI variant <name>`:
   nothing is written back to your own config, so a restart reverts to
