@@ -46,9 +46,43 @@ tunables or a table (`{ max_lines = 3, trim = "outer", min_window_height = 6,
 debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
 headings = { enable = true, max_level = 6, icons = {...} },
-persist = false, state_file = nil }`) to override them;
-`:UI sticky` (`:UI context` is the older spelling) toggles it for the session
-either way.
+persist = false, state_file = nil, style = "mimic", position = { anchor = "top" } }`)
+to override them; `:UI sticky` (`:UI context` is the older spelling) toggles
+it for the session either way.
+
+**Where it sits (`position`) and how it looks (`style`).**
+
+```lua
+context = {
+  position = { anchor = "top" },  -- "top" (default) | "bottom" | "top-left" | "top-right"
+                                   -- | "top-center" | "bottom-left" | "bottom-right" | "bottom-center"
+                                   -- plus optional row/col for an exact override
+  style = "mimic",                -- "mimic" (default) | "chips"
+}
+```
+
+`position.anchor = "top"` or `"bottom"` keep the overlay spanning the full
+window width, at the top (as before) or the bottom. Any of the six
+corner/centre values (`"top-right"`, `"bottom-center"`, ...) switch it to a
+compact box sized to its own content instead, anchored there --
+`position.row` / `position.col` (0-based, within the window) then override
+the anchor's row/column outright, for an exact placement.
+`setup({ position = {...} })` replaces the whole table, not just the keys
+given: an anchor-only call also drops a `row`/`col` an earlier call set.
+
+`style = "mimic"` is the look described above: the gutter reproduced,
+Tree-sitter colours, full-width per-heading bands -- it reads as real buffer
+rows. `style = "chips"` draws the same pinned entries as one row of rounded,
+coloured chips instead -- lsp.nvim's winbar breadcrumb, redrawn into a real
+buffer line -- sized to its own content. It is the style a compact
+(non-`"top"`/`"bottom"`) anchor is meant to be paired with; a `"mimic"` box
+narrower than the window still works, it just carries less of the "looks
+like the buffer" illusion once it is not flush with the window's own gutter.
+A heading's chip colour comes from its own `@markup.heading.N.markdown`
+group (`UiContextChipH1`..`6`, plus a `...Cap` variant for the rounded caps);
+every non-heading (code) scope shares one generic `UiContextChipScope` /
+`UiContextChipScopeCap` pair -- override any of them with `:hi` the same way
+as the `UiContextH*` groups the `"mimic"` style uses.
 
 How deep the context reaches is two separate limits:
 
