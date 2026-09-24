@@ -84,6 +84,7 @@ describe("ui.context", function()
       node_types = DEFAULT_NODE_TYPES,
       exclude_node_types = DEFAULT_EXCLUDES,
       style = "mimic",
+      chips = { layout = "row", shape = "rounded" },
       position = { anchor = "top" },
     })
     vim.cmd("silent! %bwipeout!")
@@ -1966,5 +1967,102 @@ describe("ui.context", function()
         assert.is_true(vim.fn.strwidth(lines[1]) <= big.width)
       end
     )
+  end)
+
+  describe("chips layout/shape", function()
+    it("layout = 'stack' draws one chip per line, each fitting its own content", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({
+        style = "chips",
+        chips = { layout = "stack" },
+        position = { anchor = "top-right" },
+      })
+      context.enable()
+      scroll_to(win, 7)
+      local shown = context.refresh(win)
+      assert.equals(3, shown)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      assert.equals(3, wcfg.height)
+      local lines = overlay_lines(win)
+      assert.equals(3, #lines)
+      assert.truthy(lines[1]:find("outer", 1, true))
+      assert.truthy(lines[3]:find("for", 1, true))
+      for _, l in ipairs(lines) do
+        assert.is_true(vim.fn.strwidth(l) <= wcfg.width)
+      end
+    end)
+
+    it("layout = 'stack' truncates only the entry that needs it, others stay intact", function()
+      local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      vim.cmd("new")
+      local win = vim.api.nvim_get_current_win()
+      local buf = vim.api.nvim_get_current_buf()
+      local long_word = string.rep("x", 100)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "# Roadmap",
+        "",
+        "## " .. long_word,
+        "",
+        "text one",
+        "text two",
+        "text three",
+        "text four",
+      })
+      vim.bo[buf].filetype = "markdown"
+      vim.bo[buf].buftype = ""
+      vim.api.nvim_win_set_height(win, 8)
+
+      -- anchor stays "top" (the default, full window width): the box itself
+      -- does not shrink to content here, only individual lines truncate.
+      -- Cursor kept off the overlay's own rows (2 entries -> rows 0-1), same
+      -- reasoning as the other "never cover the cursor" tests.
+      context.setup({ style = "chips", chips = { layout = "stack" } })
+      context.enable()
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = 4, lnum = 8, col = 0 })
+      end)
+      local shown = context.refresh(win)
+      assert.equals(2, shown)
+      local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+      local lines = overlay_lines(win)
+      assert.equals(2, #lines)
+      assert.truthy(lines[1]:find("Roadmap", 1, true), "the short entry stays intact: " .. lines[1])
+      assert.falsy(
+        lines[2]:find(long_word, 1, true),
+        "the long entry must be truncated: " .. lines[2]
+      )
+      for _, l in ipairs(lines) do
+        assert.is_true(vim.fn.strwidth(l) <= wcfg.width)
+      end
+    end)
+
+    it("shape = 'rect' draws no cap glyphs", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ style = "chips", chips = { shape = "rect" } })
+      context.enable()
+      scroll_to(win, 7)
+      context.refresh(win)
+      local lines = overlay_lines(win)
+      assert.equals(1, #lines)
+      assert.truthy(lines[1]:find("outer", 1, true))
+      assert.is_nil(lines[1]:find(vim.fn.nr2char(0xE0B6), 1, true), "no left cap in rect shape")
+      assert.is_nil(lines[1]:find(vim.fn.nr2char(0xE0B4), 1, true), "no right cap in rect shape")
+      assert.truthy(
+        lines[1]:find(vim.fn.nr2char(0x203A), 1, true),
+        "separator is unaffected by shape: " .. lines[1]
+      )
+    end)
   end)
 end)

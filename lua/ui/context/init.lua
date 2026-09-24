@@ -69,12 +69,19 @@
 ---
 --- `cfg.style` picks how that content is drawn. `"mimic"` (the default) is
 --- everything above: gutter reproduced, Tree-sitter colours, per-heading
---- bands. `"chips"` collapses the same entries into one row of rounded,
---- coloured chips -- lsp.nvim's winbar breadcrumb, redrawn into a real
---- buffer line instead of a `'winbar'` string -- which is the style a
---- compact anchor is meant to be paired with (a `"mimic"` box narrower than
---- the window still works, it just carries less of the "looks like the
---- buffer" illusion once it is not flush with the window's own gutter).
+--- bands. `"chips"` draws the same entries as coloured chips instead --
+--- lsp.nvim's winbar breadcrumb, redrawn into a real buffer line instead of
+--- a `'winbar'` string -- which is the style a compact anchor is meant to be
+--- paired with (a `"mimic"` box narrower than the window still works, it
+--- just carries less of the "looks like the buffer" illusion once it is not
+--- flush with the window's own gutter).
+---
+--- `cfg.chips` (only read when `style = "chips"`) has two independent axes.
+--- `layout`: `"row"` (default) joins every entry into one breadcrumb line;
+--- `"stack"` draws one chip per line instead, like `"mimic"`'s one row per
+--- entry, so a long entry's own truncation never eats into a shorter one
+--- sharing the same line. `shape`: `"rounded"` (default) is the cap-body-cap
+--- look; `"rect"` drops the caps for a flat coloured block.
 
 local state = require("ui.context.state")
 
@@ -97,7 +104,12 @@ local AUGROUP = "UiContext"
 ---@field persist? boolean  # keep what `:UI sticky depth`/`lines` set across restarts (default false)
 ---@field state_file? string  # where; `~`/`$VAR` expanded, relative to the cwd at `setup`; default `stdpath("state")/ui.nvim/sticky.json`
 ---@field position? Ui.Context.Position
----@field style? "mimic"|"chips"  # `"mimic"` (default): full window width, reproduces the gutter, reads as real buffer rows. `"chips"` : one row of rounded, coloured chips (like lsp.nvim's winbar breadcrumb), sized to its content -- meant for a `position.anchor` off the default `"top"`.
+---@field style? "mimic"|"chips"  # `"mimic"` (default): full window width, reproduces the gutter, reads as real buffer rows. `"chips"` : rounded or rectangular coloured chips (like lsp.nvim's winbar breadcrumb), sized to their content -- meant for a `position.anchor` off the default `"top"`.
+---@field chips? Ui.Context.ChipsOpts  # only read when `style = "chips"`
+
+---@class Ui.Context.ChipsOpts
+---@field layout? "row"|"stack"  # `"row"` (default): every entry joined into one breadcrumb line. `"stack"`: one chip per line, like `"mimic"`'s one-line-per-entry, but chip-styled -- never truncates one entry's own text just because another entry made the combined line too long.
+---@field shape? "rounded"|"rect"  # `"rounded"` (default): a left/right cap, lsp.nvim's winbar look. `"rect"`: a flat coloured block, no caps.
 
 ---@class Ui.Context.Position
 ---@field anchor? "top"|"bottom"|"top-left"|"top-right"|"top-center"|"bottom-left"|"bottom-right"|"bottom-center"
@@ -136,6 +148,7 @@ local MAX_HEADING_LEVEL = 6
 ---@field persist boolean              # `:UI sticky depth`/`lines` are written to `state_file` and read back at the next `setup`
 ---@field state_file string|nil        # absolute, already resolved; nil = `ui.context.state.default_path()`
 ---@field style "mimic"|"chips"        # how the pinned entries are drawn
+---@field chips { layout: "row"|"stack", shape: "rounded"|"rect" } # only read when style = "chips"
 ---@field position Ui.Context.Position # where the overlay sits
 local cfg = {
   persist = false,
@@ -231,6 +244,7 @@ local cfg = {
     end)(),
   },
   style = "mimic",
+  chips = { layout = "row", shape = "rounded" },
   position = { anchor = "top" },
 }
 
@@ -1070,15 +1084,17 @@ local function chip_entry(buf, e)
 end
 
 ---@internal
----One line of rounded chips for `entries`: lsp.nvim's winbar look, adapted
----to a real buffer line (byte-range highlight marks instead of `%#Group#`
----statusline tags).
+---One chip for a single entry: `shape = "rounded"` gets lsp.nvim's
+---cap-body-cap look, `"rect"` is just the body, no caps -- adapted to a real
+---buffer line (byte-range highlight marks instead of `%#Group#` statusline
+---tags).
 ---@param buf integer
----@param entries Ui.Context.Entry[]
----@param squared_left boolean  -- the leftmost chip is squared off, not rounded: it sits at the box's own left edge
+---@param e Ui.Context.Entry
+---@param squared_left boolean  -- rounded only: the cap is squared off instead of rounded, for a chip that sits at the box's own left edge
+---@param shape "rounded"|"rect"
 ---@return string text
----@return { [1]: integer, [2]: integer, [3]: string }[] marks  -- byte ranges, 0-based, end exclusive
-local function chip_line(buf, entries, squared_left)
+---@return { [1]: integer, [2]: integer, [3]: string }[] marks  -- byte ranges, 0-based, end exclusive, relative to this chip alone
+local function chip_segment(buf, e, squared_left, shape)
   local parts, marks = {}, {}
   local pos = 0
   local function push(s, hl)
@@ -1089,14 +1105,14 @@ local function chip_line(buf, entries, squared_left)
     pos = pos + #s
   end
 
-  for i, e in ipairs(entries) do
-    if i > 1 then
-      push(CHIP_SEP, "UiContextChipSep")
-    end
-    local text, level = chip_entry(buf, e)
-    local body = level and ("UiContextChipH" .. level) or "UiContextChipScope"
+  local text, level = chip_entry(buf, e)
+  local body = level and ("UiContextChipH" .. level) or "UiContextChipScope"
+
+  if shape == "rect" then
+    push(" " .. text .. " ", body)
+  else
     local cap = level and ("UiContextChipH" .. level .. "Cap") or "UiContextChipScopeCap"
-    if i == 1 and squared_left then
+    if squared_left then
       push(" ", body)
     else
       push(CHIP_LEFT_CAP, cap)
@@ -1108,8 +1124,37 @@ local function chip_line(buf, entries, squared_left)
 end
 
 ---@internal
----Draw (or redraw) a single `style = "chips"` row for `win`: one breadcrumb
----line, sized to its own content rather than the window.
+---One breadcrumb line: every entry's chip, joined by the separator.
+---@param buf integer
+---@param entries Ui.Context.Entry[]
+---@param squared_left boolean  -- passed to the first entry's chip_segment only
+---@param shape "rounded"|"rect"
+---@return string text
+---@return { [1]: integer, [2]: integer, [3]: string }[] marks
+local function chip_row(buf, entries, squared_left, shape)
+  local parts, marks = {}, {}
+  local pos = 0
+  for i, e in ipairs(entries) do
+    if i > 1 then
+      marks[#marks + 1] = { pos, pos + #CHIP_SEP, "UiContextChipSep" }
+      parts[#parts + 1] = CHIP_SEP
+      pos = pos + #CHIP_SEP
+    end
+    local seg, seg_marks = chip_segment(buf, e, i == 1 and squared_left, shape)
+    for _, m in ipairs(seg_marks) do
+      marks[#marks + 1] = { pos + m[1], pos + m[2], m[3] }
+    end
+    parts[#parts + 1] = seg
+    pos = pos + #seg
+  end
+  return table.concat(parts), marks
+end
+
+---@internal
+---Draw (or redraw) the `style = "chips"` overlay of `win`:
+---`chips.layout = "row"` (default) is one breadcrumb line; `"stack"` is one
+---chip per line, each sized/truncated on its own so a long entry can never
+---force a shorter one to share its overflow.
 ---@param win integer
 ---@param buf integer
 ---@param entries Ui.Context.Entry[]
@@ -1118,6 +1163,10 @@ local function draw_chips(win, buf, entries)
     .. "@"
     .. vim.api.nvim_buf_get_changedtick(buf)
     .. "|chips|"
+    .. cfg.chips.layout
+    .. "|"
+    .. cfg.chips.shape
+    .. "|"
     .. table.concat(
       vim.tbl_map(function(e)
         return tostring(e.row)
@@ -1135,39 +1184,60 @@ local function draw_chips(win, buf, entries)
 
   local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
   local squared_left = anchor.h == "full" or anchor.h == "left"
-  local text, marks = chip_line(buf, entries, squared_left)
-  local natural_width = vim.fn.strwidth(text)
+  local shape = cfg.chips.shape
+
+  -- One row per entry ("stack"), or every entry joined into the one row
+  -- "row" has always drawn -- either way, `raw_lines`/`raw_marks` end up
+  -- the same shape draw_mimic already works with (one entry per Lua table
+  -- slot), so everything from here on is layout-agnostic.
+  local raw_lines, raw_marks = {}, {}
+  if cfg.chips.layout == "stack" then
+    for i, e in ipairs(entries) do
+      raw_lines[i], raw_marks[i] = chip_segment(buf, e, squared_left, shape)
+    end
+  else
+    raw_lines[1], raw_marks[1] = chip_row(buf, entries, squared_left, shape)
+  end
+
+  local natural_width = 0
+  for _, l in ipairs(raw_lines) do
+    natural_width = math.max(natural_width, vim.fn.strwidth(l))
+  end
   local col, width = resolve_col_width(win, natural_width)
-  local byte_len = #text
-  if natural_width > width then
-    text = trunc_to_width(text, width)
-    byte_len = #text
+
+  local lines, byte_lens = {}, {}
+  for i, l in ipairs(raw_lines) do
+    lines[i] = vim.fn.strwidth(l) > width and trunc_to_width(l, width) or l
+    byte_lens[i] = #lines[i]
   end
 
   local cbuf = scratch_buf(f)
   vim.bo[cbuf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbuf, 0, -1, false, { text })
+  vim.api.nvim_buf_set_lines(cbuf, 0, -1, false, lines)
   vim.bo[cbuf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbuf, NS, 0, -1)
-  for _, m in ipairs(marks) do
-    local start_col, end_col, hl = m[1], m[2], m[3]
-    if start_col < byte_len then
-      pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, 0, start_col, {
-        end_col = math.min(end_col, byte_len),
-        hl_group = hl,
-        priority = 300,
-      })
+  for i, marks in ipairs(raw_marks) do
+    local byte_len = byte_lens[i]
+    for _, m in ipairs(marks) do
+      local start_col, end_col, hl = m[1], m[2], m[3]
+      if start_col < byte_len then
+        pcall(vim.api.nvim_buf_set_extmark, cbuf, NS, i - 1, start_col, {
+          end_col = math.min(end_col, byte_len),
+          hl_group = hl,
+          priority = 300,
+        })
+      end
     end
   end
 
   local wconfig = {
     relative = "win",
     win = win,
-    row = resolve_row(win, 1),
+    row = resolve_row(win, #lines),
     col = col,
     width = math.max(width, 1),
-    height = 1,
+    height = #lines,
     style = "minimal",
     focusable = false,
     zindex = cfg.zindex,
@@ -1216,11 +1286,12 @@ function M.refresh(win)
 
   -- Never over the cursor: in the window that has focus, the cell(s) the
   -- overlay would cover must not be where the cursor is. `style = "chips"`
-  -- always draws one row regardless of `#entries`; a non-"top" anchor may
-  -- not start at row 0, so the covered row is resolved the same way the
-  -- draw itself will place it.
+  -- with the default `layout = "row"` always draws one row regardless of
+  -- `#entries`; `"stack"` draws one row per entry, same as `"mimic"`. A
+  -- non-"top" anchor may not start at row 0, so the covered row is resolved
+  -- the same way the draw itself will place it.
   if win == vim.api.nvim_get_current_win() then
-    local shown_rows = cfg.style == "chips" and 1 or #entries
+    local shown_rows = (cfg.style == "chips" and cfg.chips.layout == "row") and 1 or #entries
     local overlay_row = resolve_row(win, shown_rows)
     local screen_row = vim.api.nvim_win_call(win, function()
       return vim.fn.winline()
@@ -1456,6 +1527,15 @@ local function apply(opts)
   end
   if opts.style == "mimic" or opts.style == "chips" then
     cfg.style = opts.style
+  end
+  if type(opts.chips) == "table" then
+    local c = opts.chips
+    if c.layout == "row" or c.layout == "stack" then
+      cfg.chips.layout = c.layout
+    end
+    if c.shape == "rounded" or c.shape == "rect" then
+      cfg.chips.shape = c.shape
+    end
   end
   if type(opts.position) == "table" then
     -- Replaces the whole table rather than merging into it: "where it goes"
