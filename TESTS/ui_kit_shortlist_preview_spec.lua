@@ -247,6 +247,35 @@ describe("ui.kit.shortlist: the preview pane", function()
       end
     end)
 
+    it("a close key of your own closes from the list as well, not just from the preview", function()
+      open({ preview_keys = { close = { "q", "<Esc>", "<C-e>" } } })
+      local function bound(buf, lhs)
+        for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+          if vim.keycode(m.lhs) == vim.keycode(lhs) then
+            return true
+          end
+        end
+        return false
+      end
+      assert.is_true(bound(h.results.bufnr, "<C-e>"), "bound on the list")
+      assert.is_true(bound(h.preview.bufnr, "<C-e>"), "and on the preview")
+      press("<C-e>")
+      assert.is_false(h.results:is_valid(), "closed from the list")
+      assert.is_false(h.preview:is_valid())
+
+      open({ preview_keys = { close = { "q", "<Esc>", "<C-e>" } } })
+      press("<Tab>")
+      press("<C-e>")
+      assert.is_false(h.results:is_valid(), "closed from the preview")
+      assert.is_false(h.preview:is_valid())
+    end)
+
+    it("a close key of your own does not touch q/<Esc>, which stay the chooser's", function()
+      open({ preview_keys = { close = { "<C-e>" } } })
+      press("q")
+      assert.is_false(h.results:is_valid(), "q still closes the list")
+    end)
+
     it("q in the list still closes it, as before", function()
       open()
       press("q")

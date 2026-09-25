@@ -230,7 +230,7 @@ kit.shortlist({
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `preview_keys` | the table above | `false` binds none; a group set to a list of your own replaces that group's keys (a bare string is a list of one), set to `false` drops it. Entries that are not non-empty strings are ignored, and a group left with none is off. Groups: `scroll_down`, `scroll_up`, `half_down`, `half_up`, `focus`, `cycle`, `close`, `submit` |
+| `preview_keys` | the table above | `false` binds none; a group set to a list of your own replaces that group's keys (a bare string is a list of one), set to `false` drops it. Entries that are not non-empty strings are ignored, and a group left with none is off. Groups: `scroll_down`, `scroll_up`, `half_down`, `half_up`, `focus`, `cycle`, `close`, `submit`. `close` binds on the preview **and** on the list, so `close = { "q", "<Esc>", "<C-e>" }` makes `<C-e>` a toggle for a popup that a `<C-e>` mapping opens |
 | `close_on_leave` | `true` | close the popup when focus goes to a window that is neither the list nor the preview |
 | `hints` | `true` | the lit border and the footers; `false` leaves both alone |
 
