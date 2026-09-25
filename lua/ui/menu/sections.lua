@@ -35,17 +35,32 @@ local function inspect_here()
   end)
 end
 
+--- `:%y+`, reporting instead of raising when there is no clipboard provider.
+local function copy_all()
+  local ok, err = pcall(function()
+    vim.cmd("%y+")
+  end)
+  if ok then
+    notify.info("Copied entire buffer to clipboard")
+  else
+    notify.error("Could not copy: " .. tostring(err))
+  end
+end
+
 ---@param sel Ui.Menu.Selection|nil
 local function copy_marked(sel)
   if selection.usable(sel) then
     ---@cast sel Ui.Menu.Selection
     local lines, regtype = selection.text(sel)
-    vim.fn.setreg("+", lines, regtype)
     vim.fn.setreg('"', lines, regtype)
-    notify.info("Copied selection to clipboard")
+    local ok, err = pcall(vim.fn.setreg, "+", lines, regtype)
+    if ok then
+      notify.info("Copied selection to clipboard")
+    else
+      notify.error("Could not copy: " .. tostring(err))
+    end
   else
-    vim.cmd("%y+")
-    notify.info("Copied entire buffer to clipboard")
+    copy_all()
   end
 end
 
@@ -71,13 +86,30 @@ local function save_buffer()
 end
 
 local function save_all()
-  local ok, err = pcall(function()
-    vim.cmd("silent! wall")
-  end)
-  if ok then
-    notify.info("Saved all modified buffers")
+  -- `silent! wall` would swallow every failure and still report success:
+  -- write buffer by buffer instead, and say how many did not go through.
+  local saved, failed = 0, 0
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if
+      vim.api.nvim_buf_is_loaded(b)
+      and vim.bo[b].modified
+      and vim.bo[b].buftype == ""
+      and vim.api.nvim_buf_get_name(b) ~= ""
+    then
+      local ok = pcall(vim.api.nvim_buf_call, b, function()
+        vim.cmd("write")
+      end)
+      if ok then
+        saved = saved + 1
+      else
+        failed = failed + 1
+      end
+    end
+  end
+  if failed > 0 then
+    notify.error(("Saved %d, could not save %d buffer(s)"):format(saved, failed))
   else
-    notify.error("Could not save all: " .. tostring(err))
+    notify.info(saved == 0 and "Nothing to save" or ("Saved %d buffer(s)"):format(saved))
   end
 end
 
@@ -137,7 +169,15 @@ local function open_terminal()
   if vim.fn.isdirectory(dir) == 0 then
     dir = cwd
   end
-  vim.cmd("enew")
+  -- `enew` fails on a modified buffer that cannot be hidden; that is a report,
+  -- not a traceback out of a menu callback.
+  local ok_new, err_new = pcall(function()
+    vim.cmd("enew")
+  end)
+  if not ok_new then
+    notify.error("could not open a new buffer: " .. tostring(err_new))
+    return
+  end
   local ok, job = pcall(vim.fn.jobstart, vim.o.shell, { term = true, cwd = dir })
   if not ok or type(job) ~= "number" or job <= 0 then
     -- `bwipeout`, not `bdelete`: the latter leaves the empty buffer listed.
@@ -197,9 +237,7 @@ function M.build(cfg)
   contextmenu.group(
     out,
     contextmenu.heading("Clipboard"),
-    e("copy_all", "Copy All (Buffer)", function()
-      vim.cmd("%y+")
-    end, "clipboard"),
+    e("copy_all", "Copy All (Buffer)", copy_all, "clipboard"),
     e("copy_marked", "Copy Marked/Selected", function()
       copy_marked(sel)
     end, "clipboard"),

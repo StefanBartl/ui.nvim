@@ -75,6 +75,20 @@ function M.on_right_click()
     return
   end
 
+  -- Not text either: a window's winbar reports `line == 0`. Its own click
+  -- handler (a breadcrumb, say) answers the native right click, as it always
+  -- did; a left click would run the handler's *navigate* action instead.
+  local ok_pos, pos = pcall(vim.fn.getmousepos)
+  local on_winbar = ok_pos and type(pos) == "table" and pos.winid ~= 0 and pos.line == 0
+  if on_winbar then
+    replay_right_click()
+    local ok_wb, wbuf = pcall(vim.api.nvim_win_get_buf, pos.winid)
+    if ok_wb then
+      M.open({ buf = wbuf, mouse = true })
+    end
+    return
+  end
+
   -- In the buffer: a right click INSIDE a live Visual selection leaves it
   -- alone. Anywhere else the selection ends and the cursor moves to the
   -- pointer -- with a left click, not a replayed right one: `'mousemodel'`
@@ -103,6 +117,22 @@ function M.on_right_click()
   M.open({ buf = buf, mouse = true })
 end
 
+--- Start the idle-time preload of the contributors' modules (once per setup).
+---@param cfg Ui.Menu.Opts
+local function start_prewarm(cfg)
+  if not cfg.prewarm then
+    return
+  end
+  local function go()
+    contributors.prewarm(contributors.prewarm_modules(config.get()))
+  end
+  if vim.v.vim_did_enter == 1 then
+    go()
+  else
+    vim.api.nvim_create_autocmd("VimEnter", { once = true, callback = go })
+  end
+end
+
 ---@return nil
 local function unbind()
   for _, b in ipairs(BOUND) do
@@ -118,7 +148,13 @@ function M.setup(opts)
   local cfg = config.apply(opts)
   unbind()
 
-  contextmenu.setup({ renderer = cfg.renderer, native_popup = cfg.native_popup })
+  -- `native_popup` only matters for a bound mouse: `contextmenu.setup` sets
+  -- 'mousemodel' to "extend" unless told to keep the native popup, and a
+  -- key-only menu has no business changing how the mouse behaves.
+  contextmenu.setup({
+    renderer = cfg.renderer,
+    native_popup = cfg.native_popup or not cfg.mouse,
+  })
 
   if cfg.mouse then
     vim.keymap.set(
@@ -135,6 +171,7 @@ function M.setup(opts)
     end, { desc = "ui.menu: context menu at the cursor" })
     BOUND[#BOUND + 1] = { modes = { "n", "v" }, lhs = cfg.key }
   end
+  start_prewarm(cfg)
 end
 
 --- Register another `<plugin>.integrations.menu`-style contributor at runtime.

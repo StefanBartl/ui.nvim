@@ -117,7 +117,7 @@ is called -- it takes over a global mapping, so it is opt-in.
 | Key | Mode | Action | Option |
 | --- | --- | --- | --- |
 | `<RightMouse>` | normal, visual | Open the menu at the pointer. Inside a Visual selection it is kept; elsewhere the cursor moves to the pointer. On the tab bar / statusline the native click runs instead (their own menus) | `mouse = false` |
-| `<A-b>` | normal, visual | Open the same menu at the cursor | `key = "<other>"` / `false` |
+| none by default | normal, visual | The same menu at the cursor — bound only when `key = "<A-b>"` (or any lhs) is set | `key` |
 
 See [`lua/ui/menu/README.md`](../lua/ui/menu/README.md).
 
