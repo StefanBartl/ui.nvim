@@ -134,6 +134,12 @@ function M.warm()
   if vim.fn.mode() ~= "n" or vim.fn.getcmdwintype() ~= "" then
     return false
   end
+  -- `state()`: halfway through a mapping ("m"), an operator pending ("o"), a
+  -- completion menu up ("a"), or blocked waiting for input ("w") -- all moments
+  -- where an open/close would land in the middle of something the user started.
+  if vim.fn.state("moaw") ~= "" then
+    return false
+  end
   local win = vim.api.nvim_get_current_win()
   if vim.api.nvim_win_get_config(win).relative ~= "" then
     return false
@@ -151,21 +157,49 @@ function M.warm()
   return ok and type(surface) == "table"
 end
 
---- Start the idle-time preload of the contributors' modules (once per setup).
+--- `gen` is bumped whenever a running preload must stop (`prewarm = false` in a
+--- later `setup`); `started` keeps a repeated `setup` from starting a second chain.
+---@type { gen: integer, started: boolean }
+local prewarm_state = { gen = 0, started = false }
+
+--- Start the idle-time preload of the contributors' modules. Idempotent: a
+--- second `setup()` while the preload is running (or done) starts nothing, and
+--- `prewarm = false` stops a chain that is still going.
 ---@param cfg Ui.Menu.Opts
 local function start_prewarm(cfg)
   if not cfg.prewarm then
+    prewarm_state.gen = prewarm_state.gen + 1
+    prewarm_state.started = false
     return
   end
+  if prewarm_state.started then
+    return
+  end
+  prewarm_state.started = true
+  local gen = prewarm_state.gen
+  local function alive()
+    return gen == prewarm_state.gen
+  end
   local function go()
+    if not alive() then
+      return
+    end
     contributors.prewarm(contributors.prewarm_modules(config.get()), function()
-      vim.schedule(M.warm)
-    end)
+      vim.schedule(function()
+        if alive() then
+          pcall(M.warm)
+        end
+      end)
+    end, nil, alive)
   end
   if vim.v.vim_did_enter == 1 then
     go()
   else
-    vim.api.nvim_create_autocmd("VimEnter", { once = true, callback = go })
+    vim.api.nvim_create_autocmd("VimEnter", {
+      group = vim.api.nvim_create_augroup("UiMenuPrewarm", { clear = true }),
+      once = true,
+      callback = go,
+    })
   end
 end
 
@@ -222,6 +256,8 @@ function M.add(entry)
   contributors.add(entry)
 end
 
+--- The live configuration table -- a reference, not a copy: read it, do not
+--- mutate it (change it through `setup`).
 ---@return Ui.Menu.Opts
 function M.config()
   return config.get()

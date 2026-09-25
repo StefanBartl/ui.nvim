@@ -728,12 +728,21 @@ describe("ui.menu", function()
   describe("warm", function()
     local real_open, real_enabled
 
+    local real_state
+
     before_each(function()
       real_open, real_enabled = contextmenu.open, contextmenu.is_enabled
+      -- An idle editor answers ""; the headless `-c` context this suite runs in
+      -- answers "oS" (an Ex command is executing), which would veto every warm.
+      real_state = vim.fn.state
+      vim.fn.state = function()
+        return ""
+      end
     end)
 
     after_each(function()
       contextmenu.open, contextmenu.is_enabled = real_open, real_enabled
+      vim.fn.state = real_state
       pcall(vim.cmd, "stopinsert")
     end)
 
@@ -814,6 +823,21 @@ describe("ui.menu", function()
       assert.equals(0, calls)
     end)
 
+    it("does nothing while a mapping, operator or completion is in progress", function()
+      local calls = 0
+      contextmenu.is_enabled = function()
+        return true
+      end
+      contextmenu.open = function()
+        calls = calls + 1
+      end
+      vim.fn.state = function()
+        return "o"
+      end
+      assert.is_false(menu.warm())
+      assert.equals(0, calls)
+    end)
+
     it("does not report success when the open raised", function()
       contextmenu.is_enabled = function()
         return true
@@ -822,6 +846,84 @@ describe("ui.menu", function()
         error("boom")
       end
       assert.is_false(menu.warm())
+    end)
+  end)
+
+  describe("prewarm start", function()
+    local real_prewarm, calls
+
+    before_each(function()
+      real_prewarm, calls = contributors.prewarm, 0
+      contributors.prewarm = function()
+        calls = calls + 1
+      end
+      -- A clean slate: `prewarm = false` resets the started flag.
+      menu.setup({ mouse = false, key = false, prewarm = false })
+    end)
+
+    after_each(function()
+      contributors.prewarm = real_prewarm
+      menu.setup({ mouse = false, key = false, prewarm = false })
+    end)
+
+    -- While the suite runs `v:vim_did_enter` is still 0, so the chain waits for
+    -- VimEnter: firing it here is what an editor that has started would already
+    -- have done.
+    local function enter()
+      vim.cmd("doautocmd VimEnter")
+    end
+
+    it("starts one chain, however often setup() runs", function()
+      menu.setup({ mouse = false, key = false })
+      menu.setup({ mouse = false, key = false })
+      menu.setup({ mouse = false, key = false })
+      enter()
+      assert.equals(1, calls)
+    end)
+
+    it("prewarm = false starts none, and lets a later setup start one again", function()
+      menu.setup({ mouse = false, key = false, prewarm = false })
+      enter()
+      assert.equals(0, calls)
+      menu.setup({ mouse = false, key = false })
+      enter()
+      assert.equals(1, calls)
+    end)
+
+    it("a setup with prewarm = false cancels a chain that has not started yet", function()
+      menu.setup({ mouse = false, key = false })
+      menu.setup({ mouse = false, key = false, prewarm = false })
+      enter()
+      assert.equals(0, calls)
+    end)
+
+    it("a chain whose setup was superseded stops loading", function()
+      contributors.prewarm = real_prewarm
+      local loaded = 0
+      package.preload["uitest.a.menu"] = function()
+        loaded = loaded + 1
+        return {}
+      end
+      local alive = true
+      local finished = false
+      contributors.prewarm(
+        { "uitest.a.menu" },
+        function()
+          finished = true
+        end,
+        0,
+        function()
+          return alive
+        end
+      )
+      alive = false
+      vim.wait(300, function()
+        return false
+      end)
+      assert.equals(0, loaded, "nothing loaded after the chain was superseded")
+      assert.is_false(finished)
+      package.preload["uitest.a.menu"] = nil
+      package.loaded["uitest.a.menu"] = nil
     end)
   end)
 
