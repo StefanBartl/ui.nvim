@@ -103,7 +103,7 @@ by default -- nothing here needs to be turned on: `ui.setup({ keymaps = {
 next = "<C-Right>", close = false } })` renames `next` and drops `close`
 entirely, leaving every other action (`prev`, `close_all`, `toggle_pin`,
 `reopen_closed`, `move_right`, `move_left`, `move_to_tab`, `toggle_theme`,
-`theme_picker`) at its default.
+`theme_picker`, `toggle_sticky`) at its default.
 `keymaps =
 false` (or
 `ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
@@ -314,7 +314,7 @@ end)
 | --- | --- | --- | --- |
 | `<leader>ut` | `toggle_theme` | `n` | Toggle between the two themes in `theme.theme_toggle` -- same as `:UI toggle` |
 | `<leader>uP` | `theme_picker` | `n` | Open the visual theme picker with live preview -- same as `:UI picker` |
-| *(none)* | `toggle_sticky` | `n` | Toggle the sticky code context on/off -- same switch as `:UI sticky`, but works without the `:UI` command. **No default**: it stays unbound until you name a key, `keymaps = { toggle_sticky = "<M-p>" }`. Which keys a terminal can actually deliver is what `lib.nvim.bindings.keymap.portability.classify()` answers: `<C-p>`/`<C-o>` are portable, `<C-;>`/`<C-,>`/`<C-.>`/`<C-ü>`/`<C-0>` have no control byte and arrive only via CSI-u terminals, `<M-p>` needs "Alt sends Escape" |
+| `<M-p>`, `<leader>us` | `toggle_sticky` | `n` | Toggle the sticky code context on/off -- same switch as `:UI sticky`, but works without the `:UI` command. Two keys on purpose: Alt+P is top right of the letter block but needs a terminal that sends Escape for Alt; `<leader>us` works everywhere. `keymaps = { toggle_sticky = false }` drops both, `= "<C-x>"` or a list replaces them. Which keys a terminal can actually deliver is what `lib.nvim.bindings.keymap.portability.classify()` answers: `<C-p>`/`<C-o>` are portable, `<C-;>`/`<C-,>`/`<C-.>`/`<C-ü>`/`<C-0>` have no control byte and arrive only via CSI-u terminals |
 
 Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of

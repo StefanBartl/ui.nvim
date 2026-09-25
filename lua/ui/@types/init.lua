@@ -60,7 +60,7 @@
 ---@field move_to_tab? Ui.Keymaps.Lhs # default "<leader>tt" -- move current buffer to a new tab
 ---@field toggle_theme? Ui.Keymaps.Lhs # default "<leader>ut" -- toggle between the two configured themes
 ---@field theme_picker? Ui.Keymaps.Lhs # default "<leader>uP" -- open the visual theme picker (live preview)
----@field toggle_sticky? Ui.Keymaps.Lhs # no default (opt-in): toggle the sticky code context, same switch as `:UI sticky` -- e.g. `"<M-p>"`
+---@field toggle_sticky? Ui.Keymaps.Lhs|string[] # default `{ "<M-p>", "<leader>us" }` -- toggle the sticky code context, same switch as `:UI sticky`
 
 --- Theme options `:UI theme`/`:UI toggle`/`:UI transparency` read. Not "which
 --- colorscheme to boot into" -- that is the host's own init.lua, independent
