@@ -109,6 +109,18 @@ false` (or
 `ui.bindings.keymaps.setup(false)` directly) is the one-line "none of them"
 switch, the same shape `my.nvim`'s own keymaps use.
 
+### Right-click menu
+
+Only when `ui.setup({ menu = { ... } })` (or `require("ui.menu").setup()`)
+is called -- it takes over a global mapping, so it is opt-in.
+
+| Key | Mode | Action | Option |
+| --- | --- | --- | --- |
+| `<RightMouse>` | normal, visual | Open the menu at the pointer. Inside a Visual selection it is kept; elsewhere the cursor moves to the pointer. On the tab bar / statusline the native click runs instead (their own menus) | `mouse = false` |
+| `<A-b>` | normal, visual | Open the same menu at the cursor | `key = "<other>"` / `false` |
+
+See [`lua/ui/menu/README.md`](../lua/ui/menu/README.md).
+
 ### Buffers
 
 | Key | `opts.keymaps` name | Mode | Does |

@@ -33,6 +33,10 @@ local M = {}
 --- `bind_buffer`) -- omitting it, or `opts.all`, leaves the menu at its
 --- already-working default rather than needing to ask for it.
 ---
+--- A `opts.menu` TABLE (`Ui.Menu.Opts`) is different again: it configures and
+--- binds `ui.menu`, the right-click menu -- explicit-only, since it takes over
+--- the global `<RightMouse>`. `menu = true` keeps meaning "the default".
+---
 --- `opts.notify` is explicit-only as well: `true` (or a `Ui.Notify.Opts`
 --- table) makes `vim.notify` render as `ui.notify`'s toasts with a history,
 --- replacing whatever handler the host had -- not something `all = true`
@@ -104,6 +108,16 @@ function M.setup(opts)
   -- `PLAN-ui-kit-migration.md` (data builders always available, only
   -- render/trigger gated). See `ui.contextmenu.set_enabled`'s own doc
   -- comment.
+  -- A table is the other direction: it configures and binds `ui.menu` (the
+  -- right-click menu with the sister plugins' entries), which stays off
+  -- unless asked for since it takes over the global <RightMouse>.
+  if type(opts.menu) == "table" then
+    local ok, err = pcall(require("ui.menu").setup, opts.menu)
+    if not ok then
+      notify.error("menu setup failed: " .. tostring(err))
+    end
+  end
+
   if opts.menu == false then
     local ok, err = pcall(require("ui.contextmenu").set_enabled, false)
     if not ok then
