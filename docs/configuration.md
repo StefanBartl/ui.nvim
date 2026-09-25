@@ -194,7 +194,7 @@ answers for one name):
 
 | Language | Pinned | Left out on purpose | Checked against |
 |---|---|---|---|
-| Lua | `function_declaration`/`function_definition`, `if`/`elseif`/`else`, `for`, `while`, `repeat`, `do` | | parser (spec) |
+| Lua | `function_declaration`/`function_definition`, `if`/`elseif`/`else`, `for`, `while`, `repeat`, `do` | table constructors (`{ ... }`; the old bare `struct` pattern took them for structs) | parser (spec) |
 | Markdown | `section`, i.e. the heading chain (see above) | fenced code, lists, quotes | parser (spec) |
 | Rust | `function_item`, `impl_item`, `trait_item`, `struct_item`, `enum_item`, `mod_item`, `if`/`for`/`while`/`loop`/`match` expressions, `match_arm`, `else_clause` | calls, closures, struct literals, `x?` (`try_expression`) | parser (spec) |
 | Python | `function_definition`, `class_definition`, `if`/`elif`/`else`, `for`, `while`, `with`, `try`/`except`/`finally`, `match`/`case` | decorators, comprehensions, lambdas | parser (spec) |
@@ -205,7 +205,8 @@ answers for one name):
 | Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions and the `when` branches, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` (so a `try {` line is not pinned, its `catch` is) | grammar (spec) |
 | Bash | `function_definition`, `if`, `elif`, `else`, `for`, `c_style_for_statement`, `while`, `case` and its items | subshells, `{ ...; }` groups | grammar (spec) |
 | Zsh | not checked against a parser: none is installed here, and Neovim does not resolve `zsh` to `bash`, so a Zsh file pins nothing until a Zsh parser is installed; nvim-treesitter's Zsh queries do not name `elif_clause` | | queries |
-| C | `function_definition`, `struct`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case`, `else` | | parser (spec) |
+| C | `function_definition`, `struct`/`union`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case`, `else` | | parser (spec) |
+| C++ | as C, plus `class_specifier`, `namespace_definition`, `linkage_specification` (`extern "C" {`), `try`/`catch` | lambdas, calls, destructor names | node names (spec) |
 | YAML | `block_mapping_pair`: the parent keys of a deeply nested one (`jobs:` > `build:` > `steps:`) | list items (`- name: x`), scalars, flow mappings | parser (spec) |
 | JSON, TOML | nothing: none of their node types is a scope (JSON's `pair` would pin every key; TOML's `[a.b]` `table` is available as a `node_types` entry but not shipped) | | parser (spec) |
 
