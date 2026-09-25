@@ -725,6 +725,106 @@ describe("ui.menu", function()
     end)
   end)
 
+  describe("warm", function()
+    local real_open, real_enabled
+
+    before_each(function()
+      real_open, real_enabled = contextmenu.open, contextmenu.is_enabled
+    end)
+
+    after_each(function()
+      contextmenu.open, contextmenu.is_enabled = real_open, real_enabled
+      pcall(vim.cmd, "stopinsert")
+    end)
+
+    it("opens the menu once and closes the surface it got back", function()
+      local calls, closed = 0, 0
+      contextmenu.is_enabled = function()
+        return true
+      end
+      contextmenu.open = function()
+        calls = calls + 1
+        return {
+          close = function()
+            closed = closed + 1
+          end,
+        }
+      end
+      assert.is_true(menu.warm())
+      assert.equals(1, calls)
+      assert.equals(1, closed)
+    end)
+
+    it("leaves the focus where it was", function()
+      local win = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit")
+      local other = vim.api.nvim_get_current_win()
+      contextmenu.is_enabled = function()
+        return true
+      end
+      contextmenu.open = function()
+        vim.api.nvim_set_current_win(win)
+        return { close = function() end }
+      end
+      assert.is_true(menu.warm())
+      assert.equals(other, vim.api.nvim_get_current_win())
+      vim.cmd("only")
+    end)
+
+    it("does nothing with another renderer, or with the menu disabled", function()
+      local calls = 0
+      contextmenu.open = function()
+        calls = calls + 1
+      end
+      contextmenu.is_enabled = function()
+        return true
+      end
+      menu.setup({ mouse = false, key = false, prewarm = false, renderer = "nvzone" })
+      assert.is_false(menu.warm())
+      menu.setup({ mouse = false, key = false, prewarm = false })
+      contextmenu.is_enabled = function()
+        return false
+      end
+      assert.is_false(menu.warm())
+      assert.equals(0, calls)
+    end)
+
+    it("does nothing outside Normal mode or from a floating window", function()
+      local calls = 0
+      contextmenu.is_enabled = function()
+        return true
+      end
+      contextmenu.open = function()
+        calls = calls + 1
+      end
+      local fbuf = vim.api.nvim_create_buf(false, true)
+      local fwin = vim.api.nvim_open_win(fbuf, true, {
+        relative = "editor",
+        row = 1,
+        col = 1,
+        width = 10,
+        height = 3,
+      })
+      assert.is_false(menu.warm())
+      vim.api.nvim_win_close(fwin, true)
+
+      vim.cmd("normal! V")
+      assert.is_false(menu.warm())
+      vim.cmd("normal! \27")
+      assert.equals(0, calls)
+    end)
+
+    it("does not report success when the open raised", function()
+      contextmenu.is_enabled = function()
+        return true
+      end
+      contextmenu.open = function()
+        error("boom")
+      end
+      assert.is_false(menu.warm())
+    end)
+  end)
+
   describe("Save All", function()
     it("writes every modified named buffer and leaves the others", function()
       local path = vim.fn.tempname()

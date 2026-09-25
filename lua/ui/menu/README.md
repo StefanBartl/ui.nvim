@@ -117,7 +117,11 @@ A contributor's menu module lives inside its plugin, so `require`ing it loads
 the whole plugin: measured in one real setup, the first open took ~1.1 s (two
 plugins took ~0.4 s each). `prewarm` (default on) loads those modules in idle
 slices after startup — those not tied to a filetype and not switched off — so
-the first right click takes ~80 ms instead. `prewarm = false` keeps a lazy
+the first right click takes ~80 ms instead. After the last module it also
+opens and closes the menu once, unseen, within one tick (`ui.menu.warm()`; only
+in Normal mode, with the `"kit"` renderer, from an ordinary window): that takes
+the one-time costs of the first draw out of the first real open -- measured
+~150 ms first open against ~57 ms warm, without it. `prewarm = false` keeps a lazy
 plugin unloaded until the first open, at that price. A plugin that opted out only on its own side
 (`integrations.ui_menu = false` in its setup) is still loaded by `prewarm`, because
 ui.nvim can only read that switch after the plugin is loaded; name it in
@@ -157,7 +161,7 @@ runs the menu has closed and Visual mode is over, so asking then always answered
 
 `require("ui.menu")`: `setup(opts)`, `items(buf?)` (the item list),
 `open({ buf?, mouse? })`, `on_right_click()` (the handler, for your own binding),
-`register_contributor(spec)`, `add(entry)`, `config()`.
+`register_contributor(spec)`, `add(entry)`, `warm()`, `config()`.
 
 Files: `config.lua` (defaults), `contributors.lua` (sister plugins + your rows),
 `sections.lua` (the general sections), `selection.lua`, `icons.lua`.
