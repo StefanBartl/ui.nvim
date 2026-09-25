@@ -189,11 +189,15 @@ function M.setup(opts)
           end
         end,
       },
-      -- No default: a key for this is a personal choice (and the sticky
-      -- overlay itself is opt-in), so it stays unbound until the host names
-      -- one -- `keymaps = { toggle_sticky = "<M-p>" }`. Same switch as
-      -- `:UI sticky`, but it works without the `:UI` command being enabled.
+      -- Two keys, on purpose: Alt+P sits top right of the letter block, but
+      -- Alt needs a terminal that sends Escape for it (lib.nvim's portability
+      -- classifier calls it "common"), so `<leader>us` -- in the `<leader>u`
+      -- family of the two theme actions above -- is the one that works
+      -- everywhere. Same switch as `:UI sticky`, but it works without the `:UI`
+      -- command being enabled. `toggle_sticky = false` drops both, a string or a
+      -- list replaces them.
       toggle_sticky = {
+        default = { "<M-p>", "<leader>us" },
         mode = "n",
         desc = "toggle the sticky code context",
         rhs = function()

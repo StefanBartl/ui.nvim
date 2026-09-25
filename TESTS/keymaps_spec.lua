@@ -45,27 +45,43 @@ describe("ui.bindings.keymaps toggle_sticky", function()
 
   after_each(function()
     context.disable()
-    pcall(vim.keymap.del, "n", "<M-p>")
+    for _, lhs in ipairs({ "<M-p>", "<leader>us", "<M-o>" }) do
+      pcall(vim.keymap.del, "n", lhs)
+    end
   end)
 
-  it("is registered but bound to nothing by default", function()
+  it("binds Alt+P and <leader>us by default, no opt-in required", function()
     keymaps.setup()
-    local entry = find_registered("toggle_sticky")
-    assert.is_not_nil(entry, "registered")
-    assert.is_false(entry.bound == true, "no key unasked")
+    for _, lhs in ipairs({ "<M-p>", "<leader>us" }) do
+      local map = vim.fn.maparg(lhs, "n", false, true)
+      assert.equals("ui.nvim: toggle the sticky code context", map.desc, lhs)
+    end
   end)
 
-  it("binds the key the host names and toggles the sticky context with it", function()
-    keymaps.setup({ toggle_sticky = "<M-p>" })
-    assert.is_true(find_registered("toggle_sticky").bound)
-    local map = vim.fn.maparg("<M-p>", "n", false, true)
-    assert.equals("ui.nvim: toggle the sticky code context", map.desc)
+  it("toggles the sticky code context with either key", function()
+    keymaps.setup()
+    for _, lhs in ipairs({ "<M-p>", "<leader>us" }) do
+      local map = vim.fn.maparg(lhs, "n", false, true)
+      assert.is_false(context.is_enabled())
+      map.callback()
+      assert.is_true(context.is_enabled(), lhs .. " switched it on")
+      map.callback()
+      assert.is_false(context.is_enabled(), lhs .. " switched it off")
+    end
+  end)
 
-    assert.is_false(context.is_enabled())
-    map.callback()
-    assert.is_true(context.is_enabled())
-    map.callback()
-    assert.is_false(context.is_enabled())
+  it("takes a key of your own instead, and false drops both", function()
+    keymaps.setup({ toggle_sticky = "<M-o>" })
+    assert.equals(
+      "ui.nvim: toggle the sticky code context",
+      vim.fn.maparg("<M-o>", "n", false, true).desc
+    )
+    assert.equals("", vim.fn.maparg("<M-p>", "n"), "the default is replaced, not added to")
+    pcall(vim.keymap.del, "n", "<M-o>")
+
+    keymaps.setup({ toggle_sticky = false })
+    assert.equals("", vim.fn.maparg("<M-p>", "n"))
+    assert.equals("", vim.fn.maparg("<leader>us", "n"))
   end)
 end)
 
