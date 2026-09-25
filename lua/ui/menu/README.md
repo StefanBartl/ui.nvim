@@ -118,7 +118,10 @@ the whole plugin: measured in one real setup, the first open took ~1.1 s (two
 plugins took ~0.4 s each). `prewarm` (default on) loads those modules in idle
 slices after startup — those not tied to a filetype and not switched off — so
 the first right click takes ~80 ms instead. `prewarm = false` keeps a lazy
-plugin unloaded until the first open, at that price. A `plugin = "..."` gate on
+plugin unloaded until the first open, at that price. A plugin that opted out only on its own side
+(`integrations.ui_menu = false` in its setup) is still loaded by `prewarm`, because
+ui.nvim can only read that switch after the plugin is loaded; name it in
+`menu = { integrations = { <name> = false } }` as well to keep it unloaded. A `plugin = "..."` gate on
 one of your own rows is checked the same way (by `require`), so it loads a lazy
 plugin the first time the menu opens.
 
