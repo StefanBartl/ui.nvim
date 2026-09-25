@@ -301,4 +301,18 @@ incomplete -- everything below it needs lib.nvim, and a missing NvChad no
 longer stops the report (it stopped being fatal at step 4).
 
 ==============================================================================
+RIGHT-CLICK MENU                                                    *ui-menu*
+
+`ui.setup({ menu = { ... } })` (or `require("ui.menu").setup()`) binds
+`<RightMouse>` (menu at the pointer) and `<A-b>` (at the cursor). Off until
+asked for. It shows a fly-out per installed sister plugin, the general sections
+Code / Clipboard / File / Delete / Tools, and rows of your own (`extra`).
+
+A sister plugin appears when it is installed, `menu.integrations.<name>` is not
+false, and the plugin has not switched itself off (`integrations.ui_menu =
+false` in its own setup). Delete All / Delete File are off unless enabled in
+`menu.entries`. "Copy/Delete Marked" act on the Visual selection captured when
+the menu opened. See lua/ui/menu/README.md.
+
+==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

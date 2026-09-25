@@ -31,7 +31,8 @@ require("ui").setup({
   all = true,      -- shorthand for every flag below
   keymaps = true,  -- buffer/tab navigation and tabline mappings
   usrcmds = true,  -- the :UI command and theme management
-  menu = false,    -- opt out of ui.contextmenu's renderer/trigger
+  menu = false,    -- opt out of ui.contextmenu's renderer/trigger; a TABLE instead configures
+                   -- and binds ui.menu, the right-click menu (see lua/ui/menu/README.md)
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
@@ -263,6 +264,14 @@ does anything, disabling the renderer/trigger while leaving the item
 builders (`entry`/`group`/`submenu`) unconditional -- the semantics decided
 in this plugin's own `ui.kit`/`ui.contextmenu` migration: `menu = false`
 must mean the menu never renders, not that it is installed-but-silent.
+
+A `menu` **table** is the other direction: it configures and binds `ui.menu`
+-- the right-click menu with the sister plugins' entries, the general sections
+(Code, Clipboard, File, Delete, Tools) and rows of your own -- and is
+explicit-only, since it takes over the global `<RightMouse>`. `menu = true`
+does not bind anything. Which sister plugin appears is a three-layer opt-out
+(installed, `menu.integrations.<name>`, the plugin's own switch); see
+[`lua/ui/menu/README.md`](../lua/ui/menu/README.md).
 
 Everything else here is opt-in as before: a host that wants everything
 passes `all = true`, which is what the flags exist to make explicit — the

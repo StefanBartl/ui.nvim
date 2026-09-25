@@ -30,7 +30,7 @@ with the same two commands.
 
 ## Layout
 
-59 spec files, 764 `it()` cases as of 2026-09-21 (the summary line of
+60 spec files, ~800 `it()` cases as of 2026-09-21 (the summary line of
 `scripts/test.sh` is the live count). Grouped by area rather than listed
 alphabetically, since the file names already say what each one covers:
 
@@ -47,6 +47,7 @@ alphabetically, since the file names already say what each one covers:
 | `ui.kit` autocmd records | `ui_kit_autocmd_records_spec.lua` — the twin of the keymap one for the popups' autocmd hooks (per-window groups): surface, chooser, confirm, menu, shortlist, picker and compare are opened and closed repeatedly and `lib.nvim`'s autocmd records must not grow; a control first proves the counter sees a recorded autocmd and that `record = false` still creates a live one |
 | `ui.kit.shortlist`'s preview pane | `ui_kit_shortlist_preview_spec.lua` — the keys are driven through `nvim_feedkeys`, so the mappings themselves are tested: scrolling the preview from the list (`<C-f>`/`<C-p>`, the aliases, half pages), hopping focus (`<Tab>`, the window-cycle keys staying inside the popup), `<CR>` at the cursor line, `q`/`<Esc>` from inside, closing when focus leaves, the read-only preview (yank works, edits do not), the footers and the lit border, `preview_keys` / `hints` / `close_on_leave` (including a bare string as a key list and entries that are not keys), and a preview whose `render` raises (the pane says so instead of keeping the previous item's text, and stays read-only because `Surface:set_lines` puts `modifiable` back) |
 | Context menu | `contextmenu_spec.lua` — ported the same way from the standalone `ui.contextmenu` repo |
+| Right-click menu | `menu_spec.lua` — `ui.menu`: the default sections and the switches over them, the three opt-out layers for sister-plugin contributions (fake modules through `package.preload`), the user's `extra` rows (plugin/ft/when gates, grouping, `cmd`/`keys`), Copy/Delete Marked acting on the selection after Visual mode has ended, the trigger bindings, and the `<RightMouse>` handler's three cases |
 | Sticky context | `context_spec.lua` — a real window over real Lua/Markdown buffers with Neovim's bundled parsers: which scopes are pinned, the heading chain in Markdown and its variants (`markdown.mdx`, registered `rmd`), `headings.max_level` and the per-filetype `max_lines`, the `:UI sticky` command and its completion |
 | Sticky context, real grammars | `context_languages_spec.lua` — Go, Java, C#, JavaScript, TypeScript, Kotlin and Bash against their real parsers; each is skipped where the parser is not installed (`:TSInstall go java c_sharp javascript typescript kotlin bash`) |
 | Misc widgets | `screenkey_spec.lua`, `winbar_spec.lua`, `zen_spec.lua` (the distraction-free float, the hidden frame, and the restore on every way out), `colorpicker_spec.lua` (the colour arithmetic, and the picker float driven through its own window cursor), `notify_spec.lua` (the `vim.notify` seam, the toasts it opens, the history), `keys_spec.lua` (the mappings under a prefix, as a tree and as a menu) |
