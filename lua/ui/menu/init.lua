@@ -117,6 +117,40 @@ function M.on_right_click()
   M.open({ buf = buf, mouse = true })
 end
 
+--- Open and close the menu once, unseen, so the first real open does not pay
+--- the one-time costs: the kit menu's modules, the first floating window
+--- (autocmd-driven lazy plugins load on it), the first build of the entries.
+--- Both calls happen in one tick, so nothing is painted in between.
+---
+--- Skipped unless it is certainly harmless: the kit renderer (the only one
+--- whose `open` hands back a surface to close again), Normal mode, no
+--- command-line window, and the current window an ordinary one.
+---@return boolean warmed
+function M.warm()
+  local cfg = config.get()
+  if cfg.renderer ~= "kit" or not contextmenu.is_enabled() then
+    return false
+  end
+  if vim.fn.mode() ~= "n" or vim.fn.getcmdwintype() ~= "" then
+    return false
+  end
+  local win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_config(win).relative ~= "" then
+    return false
+  end
+  local ok, surface = pcall(function()
+    return contextmenu.open(M.items(vim.api.nvim_win_get_buf(win)), { mouse = false })
+  end)
+  if type(surface) == "table" and type(surface.close) == "function" then
+    pcall(surface.close, surface)
+  end
+  -- Whatever the open moved, focus goes back where the user left it.
+  if vim.api.nvim_win_is_valid(win) and vim.api.nvim_get_current_win() ~= win then
+    pcall(vim.api.nvim_set_current_win, win)
+  end
+  return ok and type(surface) == "table"
+end
+
 --- Start the idle-time preload of the contributors' modules (once per setup).
 ---@param cfg Ui.Menu.Opts
 local function start_prewarm(cfg)
@@ -124,7 +158,9 @@ local function start_prewarm(cfg)
     return
   end
   local function go()
-    contributors.prewarm(contributors.prewarm_modules(config.get()))
+    contributors.prewarm(contributors.prewarm_modules(config.get()), function()
+      vim.schedule(M.warm)
+    end)
   end
   if vim.v.vim_did_enter == 1 then
     go()
