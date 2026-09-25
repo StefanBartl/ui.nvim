@@ -119,9 +119,12 @@ plugins took ~0.4 s each). `prewarm` (default on) loads those modules in idle
 slices after startup — those not tied to a filetype and not switched off — so
 the first right click takes ~80 ms instead. After the last module it also
 opens and closes the menu once, unseen, within one tick (`ui.menu.warm()`; only
-in Normal mode, with the `"kit"` renderer, from an ordinary window): that takes
+in Normal mode with nothing pending -- no operator, mapping or completion, checked with
+`state()` because `mode()` still says `"n"` after a bare `d` -- with the `"kit"`
+renderer, from an ordinary window): that takes
 the one-time costs of the first draw out of the first real open -- measured
-~150 ms first open against ~57 ms warm, without it. `prewarm = false` keeps a lazy
+~150 ms first open against ~57 ms warm, without it. A second `setup()` does not start a second preload, and `prewarm = false` in a later
+one stops a preload that is still running. `prewarm = false` keeps a lazy
 plugin unloaded until the first open, at that price. A plugin that opted out only on its own side
 (`integrations.ui_menu = false` in its setup) is still loaded by `prewarm`, because
 ui.nvim can only read that switch after the plugin is loaded; name it in

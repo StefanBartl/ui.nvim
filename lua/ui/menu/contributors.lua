@@ -295,9 +295,13 @@ end
 ---@param modules string[]
 ---@param done? fun()  # called after the last one
 ---@param delay? integer  # ms before the first one (default 300)
-function M.prewarm(modules, done, delay)
+---@param alive? fun(): boolean  # checked before every step: false stops the chain (a newer setup took over)
+function M.prewarm(modules, done, delay, alive)
   local i = 0
   local function step()
+    if alive and not alive() then
+      return
+    end
     i = i + 1
     local name = modules[i]
     if not name then
