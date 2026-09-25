@@ -1227,7 +1227,14 @@ describe("ui.context", function()
         "repeat_statement",
         "do_statement",
       },
-      c = { "function_definition", "struct_specifier", "switch_statement", "case_statement" },
+      c = {
+        "function_definition",
+        "struct_specifier",
+        "union_specifier",
+        "switch_statement",
+        "case_statement",
+      },
+      cpp = { "class_specifier", "namespace_definition", "linkage_specification" },
       markdown = { "section" },
       rust = {
         "function_item",
@@ -1289,6 +1296,8 @@ describe("ui.context", function()
     }
     -- What must stay out: an expression or a call is not a place you are in.
     local NOT_PINNED = {
+      lua = { "table_constructor" },
+      cpp = { "destructor_name", "lambda_expression" },
       rust = { "call_expression", "closure_expression", "struct_expression", "try_expression" },
       go = { "call_expression", "composite_literal" },
       java = { "method_invocation", "lambda_expression" },
@@ -1806,6 +1815,43 @@ describe("ui.context", function()
         )
       end
     )
+  end)
+
+  describe("a compact anchor with the cursor on the window's first row", function()
+    it("still draws on the very first refresh (no earlier float to judge by)", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      vim.cmd("new")
+      local win = vim.api.nvim_get_current_win()
+      local buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "local function outer(a, b)",
+        "  if a > b then",
+        "    print(a)",
+        "    print(b)",
+        "  end",
+        "  return a",
+        "end",
+      })
+      vim.bo[buf].filetype = "lua"
+      vim.bo[buf].buftype = ""
+      vim.api.nvim_win_set_height(win, 8)
+
+      context.setup({ position = { anchor = "top-right" } })
+      context.enable()
+      -- Cursor on screen row 0, far left: the state `zt`, a search jump or
+      -- `k` at the window edge leaves behind. With no float yet the overlay
+      -- used to be judged "covering the cursor" on the row alone and closed,
+      -- so it never got a geometry to be judged by and stayed hidden.
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = 3, lnum = 3, col = 0 })
+      end)
+      assert.is_nil((context.float(win)), "precondition: nothing drawn yet")
+      assert.is_true(context.refresh(win) > 0)
+      assert.is_not_nil((context.float(win)))
+    end)
   end)
 
   describe("style = 'chips'", function()

@@ -161,7 +161,8 @@ local cfg = {
     "function",
     "method",
     "^class",
-    "struct",
+    "^struct", -- not `struct` anywhere: that also took Lua's `table_constructor` and C++'s `destructor_name`
+    "^union", -- c, c++: union_specifier
     "impl",
     "^module",
     "^mod_item$", -- rust
@@ -173,6 +174,8 @@ local cfg = {
     "^elseif",
     "^elif", -- python, bash
     "^else_clause$",
+    "^else_statement$", -- lua
+    "^linkage_specification$", -- c, c++: `extern "C" {`
     "^for",
     "_for_statement$", -- java: enhanced_for_statement; bash: c_style_for_statement
     "^while",
@@ -1301,13 +1304,18 @@ function M.refresh(win)
     -- A "full" anchor spans every column, so the row alone decides it, same
     -- as before there was a column to speak of. A compact anchor only
     -- covers its own box, so a cursor elsewhere on that row must not close
-    -- it -- checked against the live float's own geometry (authoritative,
-    -- and already there whenever a previous draw might need covering; with
-    -- none yet, this stays row-only for one frame, until the first draw
-    -- gives it something to check against).
+    -- it -- checked against the float's own geometry, which is
+    -- authoritative. The float is drawn first to have that geometry:
+    -- deciding "hit" without one used to hide the overlay for good whenever
+    -- the cursor sat on the top row -- `zt`, a search jump, `k` at the window
+    -- edge -- because a closed overlay never gets a geometry to be judged by.
     local anchor = ANCHORS[cfg.position.anchor] or ANCHORS.top
     local col_hit = true
     if row_hit and anchor.h ~= "full" then
+      -- Always (re)drawn first: a no-op when nothing changed (the draw is
+      -- keyed), and it means the geometry judged below is this entry list's
+      -- own, not that of the previous scroll position.
+      draw(win, buf, entries)
       local f = floats[win]
       if f and vim.api.nvim_win_is_valid(f.win) then
         local wcfg = vim.api.nvim_win_get_config(f.win)
