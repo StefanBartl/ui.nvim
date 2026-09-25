@@ -62,6 +62,7 @@ function M.setup(opts)
       "move_to_tab",
       "toggle_theme",
       "theme_picker",
+      "toggle_sticky",
     },
     actions = {
       next = {
@@ -186,6 +187,24 @@ function M.setup(opts)
           if not ok2 then
             notify.warn("[ui.bindings.keymaps] Theme toggle failed: " .. tostring(err2))
           end
+        end,
+      },
+      -- No default: a key for this is a personal choice (and the sticky
+      -- overlay itself is opt-in), so it stays unbound until the host names
+      -- one -- `keymaps = { toggle_sticky = "<M-p>" }`. Same switch as
+      -- `:UI sticky`, but it works without the `:UI` command being enabled.
+      toggle_sticky = {
+        mode = "n",
+        desc = "toggle the sticky code context",
+        rhs = function()
+          local ok2, res = pcall(function()
+            return require("ui.context").toggle()
+          end)
+          if not ok2 then
+            notify.warn("[ui.bindings.keymaps] Sticky toggle failed: " .. tostring(res))
+            return
+          end
+          notify.info(res and "Sticky context on" or "Sticky context off")
         end,
       },
       theme_picker = {

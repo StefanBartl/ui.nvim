@@ -314,6 +314,7 @@ end)
 | --- | --- | --- | --- |
 | `<leader>ut` | `toggle_theme` | `n` | Toggle between the two themes in `theme.theme_toggle` -- same as `:UI toggle` |
 | `<leader>uP` | `theme_picker` | `n` | Open the visual theme picker with live preview -- same as `:UI picker` |
+| *(none)* | `toggle_sticky` | `n` | Toggle the sticky code context on/off -- same switch as `:UI sticky`, but works without the `:UI` command. **No default**: it stays unbound until you name a key, `keymaps = { toggle_sticky = "<M-p>" }`. Which keys a terminal can actually deliver is what `lib.nvim.bindings.keymap.portability.classify()` answers: `<C-p>`/`<C-o>` are portable, `<C-;>`/`<C-,>`/`<C-.>`/`<C-ü>`/`<C-0>` have no control byte and arrive only via CSI-u terminals, `<M-p>` needs "Alt sends Escape" |
 
 Every one of these is wrapped: a failure notifies and returns rather than
 raising, because they sit on keys pressed constantly and a traceback out of

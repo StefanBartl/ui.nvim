@@ -40,6 +40,35 @@ local ALL_ACTIONS = {
   "theme_picker",
 }
 
+describe("ui.bindings.keymaps toggle_sticky", function()
+  local context = require("ui.context")
+
+  after_each(function()
+    context.disable()
+    pcall(vim.keymap.del, "n", "<M-p>")
+  end)
+
+  it("is registered but bound to nothing by default", function()
+    keymaps.setup()
+    local entry = find_registered("toggle_sticky")
+    assert.is_not_nil(entry, "registered")
+    assert.is_false(entry.bound == true, "no key unasked")
+  end)
+
+  it("binds the key the host names and toggles the sticky context with it", function()
+    keymaps.setup({ toggle_sticky = "<M-p>" })
+    assert.is_true(find_registered("toggle_sticky").bound)
+    local map = vim.fn.maparg("<M-p>", "n", false, true)
+    assert.equals("ui.nvim: toggle the sticky code context", map.desc)
+
+    assert.is_false(context.is_enabled())
+    map.callback()
+    assert.is_true(context.is_enabled())
+    map.callback()
+    assert.is_false(context.is_enabled())
+  end)
+end)
+
 describe("ui.bindings.keymaps.setup with no opts", function()
   it("binds every action at its shipped default -- no opt-in required", function()
     keymaps.setup()
