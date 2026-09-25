@@ -5,7 +5,9 @@ sections (Code, Clipboard, File, Delete, Tools), rows of your own — and the tw
 triggers that open it. Drawn by [`ui.contextmenu`](../contextmenu/README.md), so
 no third-party menu plugin is needed.
 
-Off until asked for, because it takes over the global `<RightMouse>`:
+Off until asked for, because it takes over the global `<RightMouse>` (and
+sets `'mousemodel'` to `"extend"`, which is what makes a right click there
+start Visual mode — see "The selection"):
 
 ```lua
 require("ui").setup({
@@ -48,7 +50,7 @@ A plugin contributes when **all** of these hold:
 | --- | --- | --- |
 | 1. installed | its `<plugin>.integrations.menu` module `require`s | nobody — not installed means not shown, silently |
 | 2. ui.nvim's side | `menu = { integrations = { <name> = false } }`, or `integrations = false` for none | you, in the ui.nvim spec |
-| 3. the plugin's side | the plugin's `submenu()` returns nil, or its module's `enabled()` returns false | you, in that plugin's own setup — plugins name it `integrations.ui_menu = false` (markdown.nvim: `menu = { enable = false }`) |
+| 3. the plugin's side | the plugin's `submenu()` returns nil, or its module's `enabled()` returns false | you, in that plugin's own setup. The name this repo recommends for that switch is `integrations.ui_menu = false`; what exists today varies per plugin (markdown.nvim: `menu = { enable = false }`) |
 
 Known names: `markdown`, `open`, `dap`, `cascade`, `fileops`, `images`,
 `spotlight`, `color_my_ascii`, `lsp`, `gopath`, `filetree`. A plugin whose
@@ -104,6 +106,17 @@ menu = { extra = {
 
 `require("ui.menu").add({ ... })` appends one at runtime.
 
+## First open and lazy plugins
+
+A contributor's menu module lives inside its plugin, so `require`ing it loads
+the whole plugin: measured in one real setup, the first open took ~1.1 s (two
+plugins took ~0.4 s each). `prewarm` (default on) loads those modules in idle
+slices after startup — those not tied to a filetype and not switched off — so
+the first right click takes ~80 ms instead. `prewarm = false` keeps a lazy
+plugin unloaded until the first open, at that price. A `plugin = "..."` gate on
+one of your own rows is checked the same way (by `require`), so it loads a lazy
+plugin the first time the menu opens.
+
 ## The selection
 
 The Visual selection is captured when the menu is **built**. By the time an entry
@@ -118,16 +131,19 @@ runs the menu has closed and Visual mode is over, so asking then always answered
   cursor to the pointer.
 - Clicks on the tab bar and the statusline are replayed natively — those have
   their own menus (`ui.tabline.menu`, `ui.statusline.menu`) and no second one
-  opens on top.
+  opens on top. A click on a window's winbar is replayed natively too (its own
+  handler answers a right click; a left click would run its navigate action)
+  and the menu opens for that window's buffer.
 
 ## Triggers
 
 | Option | Default | |
 | --- | --- | --- |
 | `mouse` | `true` | `<RightMouse>` (normal and visual): menu at the pointer |
-| `key` | `"<A-b>"` | same menu at the cursor; `false` for none |
+| `key` | `false` | bind this key to the same menu at the cursor (`"<A-b>"`, say). No global key is taken unasked |
 | `renderer` | `"kit"` | `ui.contextmenu` renderer; `"auto"` prefers nvzone/menu when installed |
-| `native_popup` | `false` | `true` keeps Neovim's own right-click popup |
+| `native_popup` | `false` | `true` keeps Neovim's own right-click popup. With `mouse = false` `'mousemodel'` is left alone regardless |
+| `prewarm` | `true` | load the sister plugins' menu modules one per idle tick after startup (see below) |
 
 ## API
 

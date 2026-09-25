@@ -112,7 +112,9 @@ function M.setup(opts)
   -- right-click menu with the sister plugins' entries), which stays off
   -- unless asked for since it takes over the global <RightMouse>.
   if type(opts.menu) == "table" then
-    local ok, err = pcall(require("ui.menu").setup, opts.menu)
+    local ok, err = pcall(function()
+      require("ui.menu").setup(opts.menu)
+    end)
     if not ok then
       notify.error("menu setup failed: " .. tostring(err))
     end

@@ -473,6 +473,30 @@ describe("ui.menu", function()
       vim.g.ui_menu_spec_keys = nil
     end)
 
+    it("a row that is malformed or whose `when` raises is dropped, not fatal", function()
+      menu.setup({
+        mouse = false,
+        key = false,
+        extra = {
+          { label = 42, cmd = function() end },
+          {
+            label = "Raises",
+            cmd = function() end,
+            when = function()
+              error("boom")
+            end,
+          },
+          { label = "Fine", cmd = function() end },
+        },
+      })
+      local items
+      assert.has_no.errors(function()
+        items = menu.items(buf)
+      end)
+      assert.is_nil(find(items, "Raises"))
+      assert.is_not_nil(find(items, "Fine"))
+    end)
+
     it("a row without cmd or keys is dropped", function()
       menu.setup({ mouse = false, key = false, extra = { { label = "Nothing" } } })
       assert.is_nil(find(menu.items(buf), "Nothing"))
@@ -490,10 +514,23 @@ describe("ui.menu", function()
       return type(m) == "table" and m.desc ~= nil and m.desc:find("ui.menu", 1, true) ~= nil
     end
 
-    it("binds <RightMouse> and the cursor key, and nothing else, by default", function()
+    it("binds <RightMouse> by default and takes no global key unasked", function()
+      pcall(vim.keymap.del, "n", "<A-b>")
       menu.setup({})
       assert.is_true(mapped("<RightMouse>"))
+      assert.is_false(mapped("<A-b>"))
+      menu.setup({ key = "<A-b>" })
       assert.is_true(mapped("<A-b>"))
+    end)
+
+    it("a key-only menu leaves 'mousemodel' alone", function()
+      local before = vim.o.mousemodel
+      vim.o.mousemodel = "popup_setpos"
+      menu.setup({ mouse = false, key = "<A-b>" })
+      assert.equals("popup_setpos", vim.o.mousemodel)
+      menu.setup({ mouse = true, key = false })
+      assert.equals("extend", vim.o.mousemodel)
+      vim.o.mousemodel = before
     end)
 
     it("mouse = false / key = false bind nothing", function()
@@ -564,6 +601,33 @@ describe("ui.menu", function()
       assert.equals(0, #opened)
     end)
 
+    it("replays the native right click on a winbar (line == 0), not a left click", function()
+      package.loaded["ui.tabline.menu"] = {
+        pointer_on_tabline = function()
+          return false
+        end,
+      }
+      package.loaded["ui.statusline.menu"] = {
+        pointer_on_statusline = function()
+          return false
+        end,
+      }
+      local real_pos, real_exec = vim.fn.getmousepos, vim.cmd.exec
+      local replayed = {}
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = 0, column = 0 }
+      end
+      vim.cmd.exec = function(s)
+        replayed[#replayed + 1] = s
+      end
+      menu.on_right_click()
+      vim.fn.getmousepos, vim.cmd.exec = real_pos, real_exec
+      assert.equals(1, #replayed)
+      assert.is_truthy(replayed[1]:find("RightMouse", 1, true))
+      assert.is_nil(replayed[1]:find("LeftMouse", 1, true))
+      assert.equals(1, #opened, "the menu still opens for the window's buffer")
+    end)
+
     it("keeps a Visual selection the pointer is inside of", function()
       package.loaded["ui.tabline.menu"] = {
         pointer_on_tabline = function()
@@ -586,6 +650,69 @@ describe("ui.menu", function()
       assert.equals(1, #opened)
       assert.equals("V", opened[1].mode)
       assert.is_true(opened[1].mouse)
+    end)
+  end)
+
+  describe("prewarm", function()
+    it("lists only what is switched on and not tied to a filetype", function()
+      local list = contributors.prewarm_modules(menu.config())
+      assert.is_true(vim.tbl_contains(list, "wkddap.integrations.menu"))
+      assert.is_true(vim.tbl_contains(list, "filetree.integrations.menu"))
+      -- markdown / color_my_ascii wait for a buffer of their filetype.
+      assert.is_false(vim.tbl_contains(list, "markdown.integrations.menu"))
+      assert.is_false(vim.tbl_contains(list, "color_my_ascii.integrations.menu"))
+
+      menu.setup({
+        mouse = false,
+        key = false,
+        integrations = { dap = false, filetree = false },
+        entries = { git = false },
+      })
+      list = contributors.prewarm_modules(menu.config())
+      assert.is_false(vim.tbl_contains(list, "wkddap.integrations.menu"))
+      assert.is_false(vim.tbl_contains(list, "filetree.integrations.menu"))
+      assert.is_false(vim.tbl_contains(list, "gitsuite.integrations.menu"))
+
+      menu.setup({ mouse = false, key = false, integrations = false })
+      assert.same(
+        { "gitsuite.integrations.menu", "emojis.unicode" },
+        contributors.prewarm_modules(menu.config())
+      )
+    end)
+
+    it("loads the modules one after another, then reports done", function()
+      local loaded = {}
+      package.preload["uitest.a.menu"] = function()
+        loaded[#loaded + 1] = "a"
+        return {}
+      end
+      package.preload["uitest.b.menu"] = function()
+        loaded[#loaded + 1] = "b"
+        return {}
+      end
+      local done = false
+      contributors.prewarm({ "uitest.a.menu", "uitest.b.menu", "uitest.not.installed" }, function()
+        done = true
+      end, 0)
+      assert.is_true(vim.wait(2000, function()
+        return done
+      end))
+      assert.same({ "a", "b" }, loaded)
+    end)
+  end)
+
+  describe("Save All", function()
+    it("writes every modified named buffer and leaves the others", function()
+      local path = vim.fn.tempname()
+      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      local named = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(named, 0, -1, false, { "saved" })
+      vim.api.nvim_set_current_buf(buf)
+      find(menu.items(buf), "Save All").cmd()
+      assert.equals(1, vim.fn.filereadable(path))
+      assert.is_false(vim.bo[named].modified)
+      vim.api.nvim_buf_delete(named, { force = true })
+      vim.fn.delete(path)
     end)
   end)
 
