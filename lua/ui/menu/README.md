@@ -50,7 +50,12 @@ A plugin contributes when **all** of these hold:
 | --- | --- | --- |
 | 1. installed | its `<plugin>.integrations.menu` module `require`s | nobody — not installed means not shown, silently |
 | 2. ui.nvim's side | `menu = { integrations = { <name> = false } }`, or `integrations = false` for none | you, in the ui.nvim spec |
-| 3. the plugin's side | the plugin's `submenu()` returns nil, or its module's `enabled()` returns false | you, in that plugin's own setup. The name this repo recommends for that switch is `integrations.ui_menu = false`; what exists today varies per plugin (markdown.nvim: `menu = { enable = false }`) |
+| 3. the plugin's side | its `integrations.ui_menu = false` (or the plugin's own `menu` group off): its module's `enabled()` returns false, or `submenu()` returns nil | you, in that plugin's own setup |
+
+Every listed plugin implements `integrations.ui_menu` (markdown.nvim, open.nvim,
+dap.nvim, cascade.nvim, fileops.nvim, images.nvim, spotlight.nvim,
+color_my_ascii.nvim, lsp.nvim, gopath.nvim, filetree.nvim); ui.nvim asks each
+module's `enabled()` first.
 
 Known names: `markdown`, `open`, `dap`, `cascade`, `fileops`, `images`,
 `spotlight`, `color_my_ascii`, `lsp`, `gopath`, `filetree`. A plugin whose
@@ -61,7 +66,7 @@ Known names: `markdown`, `open`, `dap`, `cascade`, `fileops`, `images`,
 ```lua
 -- <plugin>/integrations/menu.lua
 local M = {}
-function M.enabled() return require("myplugin.config").get().integrations.ui_menu ~= false end  -- optional
+function M.enabled() return require("myplugin.config").get().integrations.ui_menu ~= false end  -- optional; false = do not compose me
 function M.submenu(label) ... return { name = "  My plugin", items = { ... } } end             -- nil = nothing to show
 return M
 ```

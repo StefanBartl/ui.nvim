@@ -346,6 +346,30 @@ describe("ui.menu", function()
       assert.is_not_nil(find(menu.items(buf), "Plugin A"))
     end)
 
+    it("the filetree row honours the plugin's own enabled() too", function()
+      local on = true
+      package.preload["filetree.integrations.menu"] = function()
+        return {
+          enabled = function()
+            return on
+          end,
+          window_entry = function()
+            return { name = "Open filetree", cmd = function() end }
+          end,
+        }
+      end
+      package.loaded["filetree.integrations.menu"] = nil
+      menu.setup({ mouse = false, key = false })
+      assert.is_not_nil(find(menu.items(buf), "Open filetree"))
+      on = false
+      assert.is_nil(find(menu.items(buf), "Open filetree"))
+      on = true
+      menu.setup({ mouse = false, key = false, integrations = { filetree = false } })
+      assert.is_nil(find(menu.items(buf), "Open filetree"))
+      package.preload["filetree.integrations.menu"] = nil
+      package.loaded["filetree.integrations.menu"] = nil
+    end)
+
     it("register_contributor adds one at runtime", function()
       preload("uitest.a.menu", {
         submenu = function()

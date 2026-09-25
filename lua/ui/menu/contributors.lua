@@ -157,7 +157,12 @@ local function submenus(buf, cfg)
   -- close) the tree, revealing this buffer's file.
   if integration_on(cfg, "filetree") and installed("filetree.integrations.menu") then
     local ok, ft_menu = pcall(require, "filetree.integrations.menu")
-    if ok and type(ft_menu.window_entry) == "function" then
+    local on = ok and type(ft_menu.window_entry) == "function"
+    if on and type(ft_menu.enabled) == "function" then
+      local ok_en, answer = pcall(ft_menu.enabled)
+      on = ok_en and answer ~= false
+    end
+    if on then
       local ok_e, item = pcall(ft_menu.window_entry, buf)
       if ok_e and item then
         item.icon = item.icon or icons.plugin
