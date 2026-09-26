@@ -680,11 +680,15 @@ describe("ui.menu", function()
   describe("prewarm", function()
     it("lists only what is switched on and not tied to a filetype", function()
       local list = contributors.prewarm_modules(menu.config())
-      assert.is_true(vim.tbl_contains(list, "wkddap.integrations.menu"))
+      -- dap has no cheap "just the label" require (no `event` trigger of its
+      -- own): it is `lazy`, so there is nothing here to prewarm.
+      assert.is_false(vim.tbl_contains(list, "wkddap.integrations.menu"))
       assert.is_true(vim.tbl_contains(list, "filetree.integrations.menu"))
       -- markdown / color_my_ascii wait for a buffer of their filetype.
       assert.is_false(vim.tbl_contains(list, "markdown.integrations.menu"))
       assert.is_false(vim.tbl_contains(list, "color_my_ascii.integrations.menu"))
+      -- gitsuite is lazy the same way (see ui.menu.sections): never prewarmed.
+      assert.is_false(vim.tbl_contains(list, "gitsuite.integrations.menu"))
 
       menu.setup({
         mouse = false,
@@ -698,10 +702,114 @@ describe("ui.menu", function()
       assert.is_false(vim.tbl_contains(list, "gitsuite.integrations.menu"))
 
       menu.setup({ mouse = false, key = false, integrations = false })
-      assert.same(
-        { "gitsuite.integrations.menu", "emojis.unicode" },
-        contributors.prewarm_modules(menu.config())
-      )
+      assert.same({ "emojis.unicode" }, contributors.prewarm_modules(menu.config()))
+    end)
+  end)
+
+  describe("lazy contributors (no cheap require exists for just the label)", function()
+    local saved_lazy_config
+
+    ---@param name string
+    ---@param module string
+    ---@param label string
+    ---@param plugin string
+    local function lazy_contributor(name, module, label, plugin)
+      return { name = name, module = module, lazy = { label = label, plugin = plugin } }
+    end
+
+    before_each(function()
+      saved_lazy_config = package.loaded["lazy.core.config"]
+    end)
+
+    after_each(function()
+      package.loaded["lazy.core.config"] = saved_lazy_config
+      package.preload["uitest.lazy.menu"] = nil
+      package.loaded["uitest.lazy.menu"] = nil
+    end)
+
+    it("shows the static label without requiring the module", function()
+      package.loaded["lazy.core.config"] = { plugins = { ["uitest-lazy-plugin"] = {} } }
+      package.preload["uitest.lazy.menu"] = function()
+        error("must not be required just to show the label")
+      end
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      local items
+      assert.has_no.errors(function()
+        items = menu.items(buf)
+      end)
+      assert.is_not_nil(find(items, "Lazy Thing"))
+    end)
+
+    it("requires the module and opens its submenu only when picked", function()
+      package.loaded["lazy.core.config"] = { plugins = { ["uitest-lazy-plugin"] = {} } }
+      local required = false
+      package.preload["uitest.lazy.menu"] = function()
+        required = true
+        return {
+          submenu = function()
+            return { name = "Lazy Thing", items = { { name = "Do it", cmd = function() end } } }
+          end,
+        }
+      end
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      local items = menu.items(buf)
+      assert.is_false(required, "not required just to build the menu")
+
+      local opened
+      local real_open = contextmenu.open
+      contextmenu.open = function(sub_items)
+        opened = sub_items
+      end
+      find(items, "Lazy Thing").cmd()
+      contextmenu.open = real_open
+
+      assert.is_true(required)
+      assert.is_not_nil(opened)
+      assert.equals(1, #opened)
+    end)
+
+    it("is absent when the plugin is not present anywhere, without requiring it", function()
+      package.loaded["lazy.core.config"] = { plugins = {} }
+      package.preload["uitest.lazy.menu"] = function()
+        error("must not be required to decide whether to show it")
+      end
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      local items
+      assert.has_no.errors(function()
+        items = menu.items(buf)
+      end)
+      assert.is_nil(find(items, "Lazy Thing"))
+    end)
+
+    it("is excluded from the prewarm candidate list", function()
+      package.loaded["lazy.core.config"] = { plugins = { ["uitest-lazy-plugin"] = {} } }
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      local list = contributors.prewarm_modules(menu.config())
+      assert.is_false(vim.tbl_contains(list, "uitest.lazy.menu"))
     end)
 
     it("loads the modules one after another, then reports done", function()

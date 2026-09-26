@@ -132,6 +132,19 @@ ui.nvim can only read that switch after the plugin is loaded; name it in
 one of your own rows is checked the same way (by `require`), so it loads a lazy
 plugin the first time the menu opens.
 
+Prewarm itself is a `require()` of the contributor's module, same as opening
+the menu for real — for a plugin with no cheap `event` trigger of its own
+(`dap.nvim`: only `cmd`/`keys`, by design), that `require` is what forces
+lazy.nvim to load it and its dependencies, once per start, whether or not the
+menu is ever opened. Marking a `ContributorSpec` `lazy = { label = "...",
+plugin = "..." }` (see `ui.menu.contributors`) skips that: the entry shows
+`label` from the spec alone, `plugin` is checked against lazy.nvim's own
+registry without loading anything, and the real `submenu()` — and the plugin
+behind it — is only required when the entry is actually picked, opening in a
+fresh popup at the pointer rather than an inline fly-out. `dap` and gitsuite's
+"Git Actions" row (`ui.menu.sections`) both work this way; every other
+contributor keeps the inline fly-out prewarm already covers.
+
 ## The selection
 
 The Visual selection is captured when the menu is **built**. By the time an entry

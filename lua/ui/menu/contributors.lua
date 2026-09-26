@@ -43,6 +43,27 @@ local function installed(name)
   return package.loaded[name] ~= nil or pcall(require, name)
 end
 
+---True when `plugin` (a lazy.nvim plugin name, e.g. `"dap.nvim"`) is
+---configured, without loading it: lazy.nvim's own registry answers this
+---without a `require`, unlike `installed()` above, which is exactly the point
+---for a contributor whose whole reason to be `lazy` is not paying for that
+---`require`. Falls back to `installed()` when lazy.nvim itself is not there to
+---ask (a different manager, or the module already loaded for some other
+---reason).
+---@param plugin string
+---@param module string
+---@return boolean
+local function plugin_present(plugin, module)
+  if package.loaded[module] ~= nil then
+    return true
+  end
+  local ok, lazy_config = pcall(require, "lazy.core.config")
+  if ok and type(lazy_config.plugins) == "table" then
+    return lazy_config.plugins[plugin] ~= nil
+  end
+  return installed(module)
+end
+
 ---@param ft string|nil
 ---@return boolean
 local function is_markdown(ft)
@@ -62,7 +83,16 @@ local BUILTIN = {
     end,
   },
   { name = "open", module = "open.integrations.menu" },
-  { name = "dap", module = "wkddap.integrations.menu" },
+  {
+    name = "dap",
+    module = "wkddap.integrations.menu",
+    -- dap.nvim has no `event` trigger (only `cmd`/`keys`, by design -- see
+    -- its own plugin spec): prewarming this like the others would force
+    -- lazy.nvim to load it and its six dependencies on every start just to
+    -- read a label. `lazy` skips that: one plain entry shown from the
+    -- static label below, the real submenu()/plugin only on pick.
+    lazy = { label = "Debug", plugin = "dap.nvim" },
+  },
   { name = "cascade", module = "cascade.integrations.menu" },
   { name = "fileops", module = "fileops.integrations.menu" },
   { name = "images", module = "images.integrations.menu" },
@@ -117,6 +147,35 @@ local function integration_on(cfg, name)
   return true
 end
 
+---A `lazy` contributor's entry: its static label only, until picked. The real
+---`submenu()` -- and the plugin behind it -- is required and opened only then,
+---in a fresh popup at the pointer, exactly what the first right click used to
+---pay before prewarm existed, now confined to this one entry instead of
+---forcing it for the whole menu on every start.
+---@param c Ui.Menu.ContributorSpec
+---@return Ui.ContextMenu.Item|nil
+local function lazy_entry(c)
+  if not c.lazy or not plugin_present(c.lazy.plugin or c.name, c.module) then
+    return nil
+  end
+  return contextmenu.entry(true, c.lazy.label, function()
+    local ok, mod = pcall(require, c.module)
+    if not ok or type(mod) ~= "table" or type(mod.submenu) ~= "function" then
+      return
+    end
+    if type(mod.enabled) == "function" then
+      local ok_e, on = pcall(mod.enabled)
+      if not (ok_e and on ~= false) then
+        return
+      end
+    end
+    local ok_s, sub = pcall(mod.submenu)
+    if ok_s and sub and type(sub.items) == "table" and #sub.items > 0 then
+      contextmenu.open(sub.items, { mouse = true, title = sub.name })
+    end
+  end, nil, { icon = c.icon or icons[c.name] or icons.plugin })
+end
+
 --- One fly-out per applicable, installed, not-opted-out plugin.
 ---@param buf integer
 ---@param cfg Ui.Menu.Opts
@@ -134,19 +193,26 @@ local function submenus(buf, cfg)
       and ft_matches(c.ft, buf)
       and (c.applies == nil or c.applies(buf))
     then
-      local ok, mod = pcall(require, c.module)
-      local enabled = ok and type(mod) == "table" and type(mod.submenu) == "function"
-      if enabled and type(mod.enabled) == "function" then
-        local ok_e, on = pcall(mod.enabled)
-        enabled = ok_e and on ~= false
-      end
-      if enabled then
-        local ok_s, sub = pcall(mod.submenu)
-        if ok_s and sub then
-          -- Only where the plugin named none of its own: the icon column
-          -- belongs to whoever owns the entry.
-          sub.icon = sub.icon or c.icon or icons[c.name] or icons.plugin
-          out[#out + 1] = sub
+      if c.lazy then
+        local item = lazy_entry(c)
+        if item then
+          out[#out + 1] = item
+        end
+      else
+        local ok, mod = pcall(require, c.module)
+        local enabled = ok and type(mod) == "table" and type(mod.submenu) == "function"
+        if enabled and type(mod.enabled) == "function" then
+          local ok_e, on = pcall(mod.enabled)
+          enabled = ok_e and on ~= false
+        end
+        if enabled then
+          local ok_s, sub = pcall(mod.submenu)
+          if ok_s and sub then
+            -- Only where the plugin named none of its own: the icon column
+            -- belongs to whoever owns the entry.
+            sub.icon = sub.icon or c.icon or icons[c.name] or icons.plugin
+            out[#out + 1] = sub
+          end
         end
       end
     end
@@ -271,7 +337,9 @@ function M.prewarm_modules(cfg)
   vim.list_extend(specs, cfg.contributors or {})
   vim.list_extend(specs, registered)
   for _, c in ipairs(specs) do
-    if integration_on(cfg, c.name) and c.ft == nil and c.applies == nil then
+    -- `lazy` contributors have nothing to prewarm: that is the point of not
+    -- requiring their module until picked.
+    if integration_on(cfg, c.name) and c.ft == nil and c.applies == nil and not c.lazy then
       out[#out + 1] = c.module
     end
   end
@@ -280,9 +348,8 @@ function M.prewarm_modules(cfg)
   end
   local on = cfg.entries or {}
   local tools = (cfg.sections or {}).tools ~= false
-  if on.git and tools then
-    out[#out + 1] = "gitsuite.integrations.menu"
-  end
+  -- gitsuite (the "Git Actions" row in Tools, see ui.menu.sections) is lazy
+  -- the same way: nothing to prewarm.
   if on.unicode_table and tools then
     out[#out + 1] = "emojis.unicode"
   end
