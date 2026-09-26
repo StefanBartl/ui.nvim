@@ -21,6 +21,7 @@ local M = {}
 ---@field icon? string
 ---@field ft? string|string[]  # only in buffers of these filetypes
 ---@field applies? fun(buf: integer): boolean
+---@field lazy? { label: string, plugin?: string }  # skip prewarm and the eager submenu(): show one plain entry from `label`, `require(module)` and open the real submenu only when it is picked. For a plugin lazy.nvim loads whole on any require under it (no cheap "just the label" require exists), e.g. one with no `event` trigger. `plugin` (its lazy.nvim name) lets presence be checked without loading it; defaults to `name`.
 
 ---@class Ui.Menu.Opts
 ---@field mouse? boolean  # bind `<RightMouse>` (default true)

@@ -17,6 +17,24 @@ local function installed(name)
   return package.loaded[name] ~= nil or pcall(require, name)
 end
 
+---True when `plugin` (a lazy.nvim plugin name) is configured, without loading
+---it -- see the sibling of the same name in `ui.menu.contributors` for why:
+---gitsuite.nvim has no cheap "just the label" require, lazy.nvim loads the
+---whole plugin on any require under it.
+---@param plugin string
+---@param module string
+---@return boolean
+local function plugin_present(plugin, module)
+  if package.loaded[module] ~= nil then
+    return true
+  end
+  local ok, lazy_config = pcall(require, "lazy.core.config")
+  if ok and type(lazy_config.plugins) == "table" then
+    return lazy_config.plugins[plugin] ~= nil
+  end
+  return installed(module)
+end
+
 --- Format through conform.nvim when it is installed, else through the LSP.
 local function format_buffer()
   local ok, conform = pcall(require, "conform")
@@ -264,15 +282,30 @@ function M.build(cfg)
   -- Git sits in Tools rather than in a section of its own: a named section
   -- holding a single entry is a frame around one row. Its items are
   -- gitsuite.nvim's own; absent or opted out (`integrations.git`) -> no row.
+  --
+  -- Shown as one plain entry from a static label, not a submenu built here:
+  -- gitsuite.nvim has no `event` trigger of its own that would normally have
+  -- loaded it before this menu opens (only `cmd`/a `BufReadPost`/`BufNewFile`
+  -- that a file-less start never fires), and `installed()`'s own `require`
+  -- probe would force lazy.nvim to load the whole plugin just to draw this
+  -- row. `plugin_present` answers without loading it; the real items() --
+  -- and the plugin behind it -- are required only once this entry is picked.
   local git_row
-  if sec.tools ~= false and on.git and installed("gitsuite.integrations.menu") then
-    local ok, git_menu = pcall(require, "gitsuite.integrations.menu")
-    if ok and type(git_menu.items) == "function" then
-      local ok_items, git_items = pcall(git_menu.items)
-      if ok_items then
-        git_row = contextmenu.submenu("Git Actions", git_items, { icon = icons.git })
+  if
+    sec.tools ~= false
+    and on.git
+    and plugin_present("gitsuite.nvim", "gitsuite.integrations.menu")
+  then
+    git_row = contextmenu.entry(true, "Git Actions", function()
+      local ok, git_menu = pcall(require, "gitsuite.integrations.menu")
+      if not ok or type(git_menu.items) ~= "function" then
+        return
       end
-    end
+      local ok_items, git_items = pcall(git_menu.items)
+      if ok_items and type(git_items) == "table" and #git_items > 0 then
+        contextmenu.open(git_items, { mouse = true, title = "Git Actions" })
+      end
+    end, nil, { icon = icons.git })
   end
 
   contextmenu.group(
