@@ -123,6 +123,19 @@ describe("ui.kit.chip", function()
     assert.equals(1, count)
   end)
 
+  it("re-mounting with only shape keeps the earlier text/color (no wipe)", function()
+    chip.mount({ id = "spec_a", text = "a", color = { fg = "#ff0000", bg = "#00ff00" } })
+    chip.mount({ id = "spec_a", shape = "rect" })
+    assert.is_true(
+      vim.tbl_contains(chip.active(), "spec_a"),
+      "still visible after the shape-only remount"
+    )
+    local win = assert(chip_window(), "chip window found")
+    assert.equals("a", first_line(win), "text survived a remount that didn't repeat it")
+    local hl = normal_hl(win)
+    assert.equals(0xff0000, hl.fg, "color survived a remount that didn't repeat it")
+  end)
+
   it("an explicit { fg, bg } colour is applied verbatim", function()
     chip.mount({ id = "spec_a", text = "x", color = { fg = "#ff0000", bg = "#00ff00" } })
     local hl = normal_hl(assert(chip_window(), "chip window found"))
