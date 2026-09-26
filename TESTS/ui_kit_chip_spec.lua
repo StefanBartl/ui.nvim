@@ -136,6 +136,18 @@ describe("ui.kit.chip", function()
     assert.equals(0xff0000, hl.fg, "color survived a remount that didn't repeat it")
   end)
 
+  it("switching shape on an already-open chip actually changes its border", function()
+    chip.mount({ id = "spec_a", text = "a", shape = "rounded" })
+    local win = assert(chip_window(), "chip window found")
+    local border_before = vim.api.nvim_win_get_config(win).border
+    assert.is_not_nil(border_before, "rounded starts out bordered")
+
+    chip.mount({ id = "spec_a", shape = "rect" })
+    local win2 = assert(chip_window(), "chip window still found after the shape switch")
+    local border_after = vim.api.nvim_win_get_config(win2).border
+    assert.equals("none", border_after, "rect has no border once switched, on the very same chip")
+  end)
+
   it("an explicit { fg, bg } colour is applied verbatim", function()
     chip.mount({ id = "spec_a", text = "x", color = { fg = "#ff0000", bg = "#00ff00" } })
     local hl = normal_hl(assert(chip_window(), "chip window found"))
