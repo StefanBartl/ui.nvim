@@ -218,6 +218,33 @@
 ---@field mark fun()                                     # SEARCH only: freeze the highlighted item, enter MARKED
 ---@field confirm fun()                                  # SEARCH: same as mark; MARKED: pick the 2nd item, enter COMPARE
 
+--- A `kit.chip` colour: a highlight-group name to tint from (theme-linked,
+--- re-tints on `ColorScheme`), or an explicit fixed pair (`"#rrggbb"`
+--- strings or 24-bit numbers). `nil` uses the chip's own default group.
+---@alias Ui.Kit.ChipColor string|{ fg: string|integer, bg?: string|integer }
+
+--- Options for `kit.chip.mount`.
+---@class Ui.Kit.ChipOpts
+---@field id string                              # stable key; a second `mount` with the same id re-configures it
+---@field text? string|fun():string              # re-read on every `refresh`; "" hides the chip
+---@field visible? boolean|fun():boolean         # default: derived from `text` being non-empty
+---@field anchor? "bottom-left"|"bottom-right"|"top-left"|"top-right"  # default "bottom-left"
+---@field shape? "rounded"|"rect"                # default "rounded"
+---@field color? Ui.Kit.ChipColor
+---@field zindex? integer                        # default 60
+
+--- Options for `kit.chip.pulse`.
+---@class Ui.Kit.ChipPulseOpts
+---@field color? Ui.Kit.ChipColor                # default: link "DiagnosticWarn"
+---@field duration_ms? integer                   # default 300
+
+---@class Ui.Kit.ChipModule
+---@field mount fun(opts: Ui.Kit.ChipOpts): string
+---@field refresh fun(id: string)
+---@field pulse fun(id: string, opts?: Ui.Kit.ChipPulseOpts)
+---@field unmount fun(id: string)
+---@field active fun(): string[]
+
 --- Options for `kit.setup`.
 ---@class Ui.Kit.SetupOpts
 ---@field default? string                       # active preset name
@@ -246,6 +273,7 @@
 ---@field theme Ui.Kit.ThemeModule
 ---@field layout Ui.Kit.LayoutModule
 ---@field chooser Ui.Kit.ChooserModule  # low-level escape hatch behind kit.select -- see its own doc comment
+---@field chip Ui.Kit.ChipModule  # persistent editor-corner status chip (mount/refresh/pulse/unmount)
 
 ---@class Ui.Kit.SurfaceModule
 ---@field open fun(opts?: Ui.Kit.SurfaceOpts): Ui.Kit.Surface|nil
