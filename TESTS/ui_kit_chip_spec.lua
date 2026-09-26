@@ -210,6 +210,38 @@ describe("ui.kit.chip", function()
     chip.unmount("a_b")
   end)
 
+  it("a colour-source change with unchanged pixels still keeps the themed flag fresh", function()
+    -- Regression: M.refresh()'s "already applied?" check compared only
+    -- fg/bg, so switching entry.color from a custom table to a highlight
+    -- group (or back) while the *rendered* colour happened not to change --
+    -- easy to hit on a "text" shape chip, where bg is always window_bg()
+    -- regardless of the colour source -- left entry.applied_colors.themed
+    -- stale. The ColorScheme handler gates its re-tint on exactly that
+    -- field, so a chip that had just become theme-linked this way would
+    -- silently stop re-tinting on the next colorscheme change.
+    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#ff0000" })
+    chip.mount({ id = "spec_a", text = "x", shape = "text", color = { fg = "#ff0000" } })
+    assert.equals(0xff0000, normal_hl(chip_window()).fg, "custom colour applied")
+
+    -- Same rendered fg (bg is window_bg() either way on a "text" chip) as
+    -- before, but now sourced from a highlight group instead of a literal.
+    chip.mount({ id = "spec_a", color = "SpecChipThemeGroup" })
+    assert.equals(
+      0xff0000,
+      normal_hl(chip_window()).fg,
+      "still the same colour, nothing to repaint"
+    )
+
+    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#00ff00" })
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+
+    assert.equals(
+      0x00ff00,
+      normal_hl(chip_window()).fg,
+      "re-tinted on ColorScheme -- it is correctly tracked as theme-linked now"
+    )
+  end)
+
   it("a highlight-group colour resolves that group's fg, not a literal", function()
     vim.api.nvim_set_hl(0, "SpecChipTestGroup", { fg = "#123456" })
     chip.mount({ id = "spec_a", text = "x", color = "SpecChipTestGroup" })
