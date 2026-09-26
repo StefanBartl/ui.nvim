@@ -253,6 +253,19 @@ describe("ui.kit.chip", function()
     vim.cmd("tabclose")
   end)
 
+  it("a left-anchored chip sits flush against the screen edge (col 0)", function()
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(0, vim.api.nvim_win_get_config(win).col, "col 0, no inset")
+  end)
+
+  it("a right-anchored chip stays inset from the screen edge", function()
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-right" })
+    local win = assert(chip_window(), "chip window found")
+    local col = vim.api.nvim_win_get_config(win).col
+    assert.is_true(col > 0, "not flush against the right edge")
+  end)
+
   it("unmount closes the window and drops it from active()", function()
     chip.mount({ id = "spec_a", text = "x" })
     assert.is_true(vim.tbl_contains(chip.active(), "spec_a"))
