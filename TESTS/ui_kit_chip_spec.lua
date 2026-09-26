@@ -172,6 +172,44 @@ describe("ui.kit.chip", function()
     assert.equals(hl_a.bg, hl_b.bg, "every text-shape chip blends with the same window background")
   end)
 
+  it('a ColorScheme event keeps shape = "text" transparent (no box regained)', function()
+    -- Regression: the ColorScheme re-tint handler used to call resolve_colors
+    -- without the transparent flag, so a themed shape="text" chip regained a
+    -- visible tinted background on every colorscheme change.
+    chip.mount({ id = "spec_a", text = "x", shape = "text", color = "Special" })
+    local win = assert(chip_window(), "chip window found")
+    local before = normal_hl(win)
+
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+
+    local after = normal_hl(chip_window())
+    assert.equals(before.bg, after.bg, "still blends with the window background after ColorScheme")
+  end)
+
+  it("two ids that used to sanitize the same never bleed colour (no group collision)", function()
+    -- Regression: hl_group_name() used to replace every non-alnum/underscore
+    -- byte with "_", so "a.b" and "a_b" collided onto the same derived
+    -- highlight group -- refreshing one recoloured the other's window too.
+    chip.mount({ id = "a.b", text = "one", color = { fg = "#ff0000", bg = "#000000" } })
+    chip.mount({ id = "a_b", text = "two", color = { fg = "#00ff00", bg = "#000000" } })
+
+    local by_text = {}
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_config(w).relative == "editor" then
+        by_text[first_line(w)] = normal_hl(w)
+      end
+    end
+    assert.equals(0xff0000, by_text["one"] and by_text["one"].fg, 'id "a.b" keeps its own colour')
+    assert.equals(
+      0x00ff00,
+      by_text["two"] and by_text["two"].fg,
+      'id "a_b" keeps its own, different colour'
+    )
+
+    chip.unmount("a.b")
+    chip.unmount("a_b")
+  end)
+
   it("a highlight-group colour resolves that group's fg, not a literal", function()
     vim.api.nvim_set_hl(0, "SpecChipTestGroup", { fg = "#123456" })
     chip.mount({ id = "spec_a", text = "x", color = "SpecChipTestGroup" })
@@ -189,6 +227,30 @@ describe("ui.kit.chip", function()
       return normal_hl(win).fg == 0xffffff
     end, 10)
     assert.equals(0xffffff, normal_hl(win).fg, "reverted to the configured colour")
+  end)
+
+  it("a pending pulse doesn't get stuck after a tab-switch reopen", function()
+    -- Regression: ensure_current_tab() closes and reopens a chip's window
+    -- when the active tabpage differs from the one it was drawn on.
+    -- open_window() used to reuse the (still pulsing) `applied_colors` for
+    -- that reopened window, and the pending pulse-revert then targeted the
+    -- now-closed old window handle and silently no-oped -- leaving the chip
+    -- stuck showing the pulse colour indefinitely.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    local win_before = assert(chip_window(), "chip window found")
+
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 300 })
+    assert.equals(0xff00ff, normal_hl(win_before).fg, "pulse colour applied immediately")
+
+    vim.cmd("tabnew") -- real TabEnter -> ensure_current_tab() reopens the chip here
+    local win_after = assert(chip_window(), "chip window found on the new tab")
+    assert.equals(
+      0xffffff,
+      normal_hl(win_after).fg,
+      "reopened with its real colour, not stuck mid-pulse"
+    )
+
+    vim.cmd("tabclose")
   end)
 
   it("unmount closes the window and drops it from active()", function()
