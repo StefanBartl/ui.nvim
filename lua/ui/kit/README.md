@@ -100,6 +100,49 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | `compare` | pick two items out of one picker, then view them side by side — see [Compare](#compare-pick-two-view-side-by-side) below |
 | `shortlist` | promptless list+preview for a handful of items — see [Shortlist](#shortlist-promptless-list--preview) below |
 
+## Chip (persistent corner status)
+
+`kit.chip` is `kit.toast`'s opposite number: instead of an ephemeral,
+auto-dismissing message, a chip is mounted once under a stable `id` and stays
+on screen — updated in place — until unmounted or its own text says there is
+nothing to show. Built for a plugin's own always-on indicator (an active
+session name, an ambient container count, ...) that today only gets a
+one-shot `vim.notify` toast nobody remembers five seconds later.
+
+```lua
+local chip = require("ui.kit").chip
+
+chip.mount({
+  id = "sessions",
+  text = function() return require("sessions.statusline").component() end,
+  anchor = "bottom-left",              -- or bottom-right / top-left / top-right
+  color = "DiagnosticInfo",            -- a highlight group (theme-linked), or { fg = "#89b4fa", bg = "#1e1e2e" }
+  shape = "rounded",                   -- or "rect" (borderless block)
+})
+
+-- Whenever the consumer's own state changes (a save/load/dirty event, ...):
+chip.refresh("sessions")
+
+-- A brief colour flash on top of the persistent state, e.g. right after a save:
+chip.pulse("sessions", { color = "DiagnosticWarn", duration_ms = 300 })
+
+chip.unmount("sessions")
+```
+
+An empty resolved `text` (or `visible = false`) hides the chip entirely —
+no placeholder box, matching the "return `''` when idle" convention several
+statusline components already use, so wiring one straight into `text` just
+works. There is no polling: the consumer decides when its own state changed
+and calls `refresh(id)` — same reasoning `ui.context`'s overlay gives for
+being driven off events rather than a timer.
+
+Each chip gets its own highlight group rather than sharing `ui.kit.theme`'s
+global `Kit*` groups, so several chips (or a chip and a modal kit popup) can
+be on screen at once with independently coloured chips. A colour given as a
+highlight-group name re-tints itself on `ColorScheme`; an explicit `{ fg, bg
+}` pair stays fixed. A floating window belongs to the tabpage it was opened
+on, so a chip re-opens itself on `TabEnter` to follow the user across tabs.
+
 ## Layout engine (Phase 3, partial)
 
 Turn a declarative region spec into aligned `nvim_open_win` geometry for several

@@ -22,6 +22,7 @@ local preview = require("ui.kit.preview")
 local note = require("ui.kit.note")
 local viewer = require("ui.kit.viewer")
 local toast = require("ui.kit.toast")
+local chip = require("ui.kit.chip")
 local input = require("ui.kit.input")
 local live_input = require("ui.kit.live_input")
 local select = require("ui.kit.select")
@@ -45,6 +46,7 @@ M.surface = surface
 --- instance, same as `kit.select` itself (they share one chooser).
 M.chooser = chooser
 M.layout = layout
+M.chip = chip
 
 --- Register user presets / set the active default preset.
 ---@param opts? Ui.Kit.SetupOpts
