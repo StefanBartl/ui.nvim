@@ -224,8 +224,10 @@ end
 
 --- Build the general sections for the current buffer/mode.
 ---@param cfg Ui.Menu.Opts
+---@param mouse? boolean  anchor "Git Actions"' own popup the same way this
+---  menu was opened (default true, matching `<RightMouse>`)
 ---@return Ui.ContextMenu.Item[]
-function M.build(cfg)
+function M.build(cfg, mouse)
   local out = {}
   local sec, on, hints = cfg.sections or {}, cfg.entries or {}, cfg.hints or {}
   -- Resolved now, while Visual mode (if any) is still live: the entries act
@@ -299,12 +301,15 @@ function M.build(cfg)
     git_row = contextmenu.entry(true, "Git Actions", function()
       local ok, git_menu = pcall(require, "gitsuite.integrations.menu")
       if not ok or type(git_menu.items) ~= "function" then
+        notify.warn("Git Actions: not available")
         return
       end
       local ok_items, git_items = pcall(git_menu.items)
-      if ok_items and type(git_items) == "table" and #git_items > 0 then
-        contextmenu.open(git_items, { mouse = true, title = "Git Actions" })
+      if not (ok_items and type(git_items) == "table" and #git_items > 0) then
+        notify.warn("Git Actions: nothing to show")
+        return
       end
+      contextmenu.open(git_items, { mouse = mouse ~= false, title = "Git Actions" })
     end, nil, { icon = icons.git })
   end
 

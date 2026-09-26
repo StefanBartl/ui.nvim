@@ -32,12 +32,16 @@ local BOUND = {}
 --- Every item of the menu for `buf` (default: the current buffer): plugin
 --- contributions and user rows first, the general sections beneath.
 ---@param buf? integer
+---@param mouse? boolean  anchor a `lazy` contributor's own popup ("Debug",
+---  "Git Actions") the same way this menu itself was, or will be, opened --
+---  at the pointer (default) or at the cursor for a `key`-bound, mouse-less
+---  open. Passed through to `ui.menu.contributors`/`ui.menu.sections`.
 ---@return Ui.ContextMenu.Item[]
-function M.items(buf)
+function M.items(buf, mouse)
   buf = buf or vim.api.nvim_get_current_buf()
   local cfg = config.get()
-  local out = contributors.build(buf, cfg)
-  vim.list_extend(out, sections.build(cfg))
+  local out = contributors.build(buf, cfg, mouse)
+  vim.list_extend(out, sections.build(cfg, mouse))
   return out
 end
 
@@ -45,9 +49,10 @@ end
 ---@param opts? { buf?: integer, mouse?: boolean }  `mouse`: anchor at the pointer (default false = at the cursor)
 function M.open(opts)
   opts = opts or {}
-  local items = M.items(opts.buf)
+  local mouse = opts.mouse == true
+  local items = M.items(opts.buf, mouse)
   if #items > 0 then
-    contextmenu.open(items, { mouse = opts.mouse == true })
+    contextmenu.open(items, { mouse = mouse })
   end
 end
 
@@ -145,7 +150,7 @@ function M.warm()
     return false
   end
   local ok, surface = pcall(function()
-    return contextmenu.open(M.items(vim.api.nvim_win_get_buf(win)), { mouse = false })
+    return contextmenu.open(M.items(vim.api.nvim_win_get_buf(win), false), { mouse = false })
   end)
   if type(surface) == "table" and type(surface.close) == "function" then
     pcall(surface.close, surface)

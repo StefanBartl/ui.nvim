@@ -149,38 +149,54 @@ end
 
 ---A `lazy` contributor's entry: its static label only, until picked. The real
 ---`submenu()` -- and the plugin behind it -- is required and opened only then,
----in a fresh popup at the pointer, exactly what the first right click used to
----pay before prewarm existed, now confined to this one entry instead of
----forcing it for the whole menu on every start.
+---in a fresh popup, exactly what the first right click used to pay before
+---prewarm existed, now confined to this one entry instead of forcing it for
+---the whole menu on every start.
+---
+---Unlike the eager path below, this entry cannot know in advance whether the
+---plugin would say no (`enabled() == false`) or have nothing to show (`nil`/
+---empty `submenu()`) -- finding that out needs the very `require` this whole
+---mechanism exists to avoid paying up front. So it always shows once the
+---plugin is merely present, and a pick that resolves to nothing says so
+---instead of doing nothing silently.
 ---@param c Ui.Menu.ContributorSpec
+---@param mouse boolean  anchor the picked entry's own popup the same way the
+---  menu it is drawn from was opened (`<RightMouse>` vs. a `key` binding at
+---  the cursor) -- a fresh popup that ignored this could land at a stale mouse
+---  position for someone who never touched the mouse.
 ---@return Ui.ContextMenu.Item|nil
-local function lazy_entry(c)
+local function lazy_entry(c, mouse)
   if not c.lazy or not plugin_present(c.lazy.plugin or c.name, c.module) then
     return nil
   end
   return contextmenu.entry(true, c.lazy.label, function()
     local ok, mod = pcall(require, c.module)
     if not ok or type(mod) ~= "table" or type(mod.submenu) ~= "function" then
+      notify.warn(("%s: not available"):format(c.lazy.label))
       return
     end
     if type(mod.enabled) == "function" then
       local ok_e, on = pcall(mod.enabled)
       if not (ok_e and on ~= false) then
+        notify.warn(("%s: turned off in its own setup"):format(c.lazy.label))
         return
       end
     end
     local ok_s, sub = pcall(mod.submenu)
-    if ok_s and sub and type(sub.items) == "table" and #sub.items > 0 then
-      contextmenu.open(sub.items, { mouse = true, title = sub.name })
+    if not (ok_s and sub and type(sub.items) == "table" and #sub.items > 0) then
+      notify.warn(("%s: nothing to show"):format(c.lazy.label))
+      return
     end
+    contextmenu.open(sub.items, { mouse = mouse, title = sub.name })
   end, nil, { icon = c.icon or icons[c.name] or icons.plugin })
 end
 
 --- One fly-out per applicable, installed, not-opted-out plugin.
 ---@param buf integer
 ---@param cfg Ui.Menu.Opts
+---@param mouse boolean  see `lazy_entry`
 ---@return Ui.ContextMenu.Item[]
-local function submenus(buf, cfg)
+local function submenus(buf, cfg, mouse)
   local out = {}
   local specs = {}
   vim.list_extend(specs, BUILTIN)
@@ -194,7 +210,7 @@ local function submenus(buf, cfg)
       and (c.applies == nil or c.applies(buf))
     then
       if c.lazy then
-        local item = lazy_entry(c)
+        local item = lazy_entry(c, mouse)
         if item then
           out[#out + 1] = item
         end
@@ -291,11 +307,13 @@ end
 --- then one section per `section` name of the user's own rows.
 ---@param buf integer
 ---@param cfg Ui.Menu.Opts
+---@param mouse? boolean  anchor a `lazy` contributor's own popup the same way
+---  this menu was opened (default true, matching `<RightMouse>`); see `lazy_entry`
 ---@return Ui.ContextMenu.Item[]
-function M.build(buf, cfg)
+function M.build(buf, cfg, mouse)
   local out = {}
 
-  local subs = submenus(buf, cfg)
+  local subs = submenus(buf, cfg, mouse ~= false)
   -- An "Integrations" frame with nothing in it must not be a state that can occur.
   if #subs > 0 then
     out[#out + 1] = contextmenu.heading("Integrations")
