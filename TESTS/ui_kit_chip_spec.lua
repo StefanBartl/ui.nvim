@@ -130,6 +130,23 @@ describe("ui.kit.chip", function()
     assert.equals(0x00ff00, hl.bg)
   end)
 
+  it('shape = "text" ignores color.bg and blends with the window instead', function()
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      shape = "text",
+      color = { fg = "#ff0000", bg = "#00ff00" },
+    })
+    local hl_a = normal_hl(assert(chip_window(), "chip window found"))
+    assert.equals(0xff0000, hl_a.fg, "fg is still applied")
+    assert.is_not.equal(0x00ff00, hl_a.bg, "bg is not the custom one -- shape = text has no box")
+
+    chip.unmount("spec_a")
+    chip.mount({ id = "spec_a", text = "y", shape = "text" })
+    local hl_b = normal_hl(assert(chip_window(), "chip window found"))
+    assert.equals(hl_a.bg, hl_b.bg, "every text-shape chip blends with the same window background")
+  end)
+
   it("a highlight-group colour resolves that group's fg, not a literal", function()
     vim.api.nvim_set_hl(0, "SpecChipTestGroup", { fg = "#123456" })
     chip.mount({ id = "spec_a", text = "x", color = "SpecChipTestGroup" })

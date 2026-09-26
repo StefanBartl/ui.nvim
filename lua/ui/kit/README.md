@@ -117,7 +117,7 @@ chip.mount({
   text = function() return require("sessions.statusline").component() end,
   anchor = "bottom-left",              -- or bottom-right / top-left / top-right
   color = "DiagnosticInfo",            -- a highlight group (theme-linked), or { fg = "#89b4fa", bg = "#1e1e2e" }
-  shape = "rounded",                   -- or "rect" (borderless block)
+  shape = "rounded",                   -- or "rect" (borderless block) / "text" (no box at all, just coloured text)
 })
 
 -- Whenever the consumer's own state changes (a save/load/dirty event, ...):
