@@ -767,10 +767,10 @@ describe("ui.menu", function()
       local items = menu.items(buf)
       assert.is_false(required, "not required just to build the menu")
 
-      local opened
+      local opened, opened_opts
       local real_open = contextmenu.open
-      contextmenu.open = function(sub_items)
-        opened = sub_items
+      contextmenu.open = function(sub_items, opts)
+        opened, opened_opts = sub_items, opts
       end
       find(items, "Lazy Thing").cmd()
       contextmenu.open = real_open
@@ -778,6 +778,72 @@ describe("ui.menu", function()
       assert.is_true(required)
       assert.is_not_nil(opened)
       assert.equals(1, #opened)
+      assert.is_true(opened_opts.mouse, "anchors at the pointer by default")
+    end)
+
+    it("anchors the reopened popup at the cursor when the menu itself was", function()
+      package.loaded["lazy.core.config"] = { plugins = { ["uitest-lazy-plugin"] = {} } }
+      package.preload["uitest.lazy.menu"] = function()
+        return {
+          submenu = function()
+            return { name = "Lazy Thing", items = { { name = "Do it", cmd = function() end } } }
+          end,
+        }
+      end
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      -- `mouse = false`: the same "opened via a key at the cursor" case `key`
+      -- bindings use (see M.open).
+      local items = menu.items(buf, false)
+
+      local opened_opts
+      local real_open = contextmenu.open
+      contextmenu.open = function(_, opts)
+        opened_opts = opts
+      end
+      find(items, "Lazy Thing").cmd()
+      contextmenu.open = real_open
+
+      assert.is_false(opened_opts.mouse, "does not fall back to the pointer")
+    end)
+
+    it("a pick that resolves to nothing (disabled/empty/gone) does not raise or open", function()
+      package.loaded["lazy.core.config"] = { plugins = { ["uitest-lazy-plugin"] = {} } }
+      package.preload["uitest.lazy.menu"] = function()
+        return {
+          enabled = function()
+            return false
+          end,
+          submenu = function()
+            return { name = "Lazy Thing", items = { { name = "Do it", cmd = function() end } } }
+          end,
+        }
+      end
+      menu.setup({
+        mouse = false,
+        key = false,
+        contributors = {
+          lazy_contributor("uitest_lazy", "uitest.lazy.menu", "Lazy Thing", "uitest-lazy-plugin"),
+        },
+      })
+      local items = menu.items(buf)
+
+      local calls = 0
+      local real_open = contextmenu.open
+      contextmenu.open = function()
+        calls = calls + 1
+      end
+      assert.has_no.errors(function()
+        find(items, "Lazy Thing").cmd()
+      end)
+      contextmenu.open = real_open
+
+      assert.equals(0, calls, "the plugin's own enabled() == false opens nothing")
     end)
 
     it("is absent when the plugin is not present anywhere, without requiring it", function()
