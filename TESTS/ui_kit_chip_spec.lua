@@ -654,7 +654,36 @@ describe("ui.kit.chip", function()
     local win = assert(chip_window(), "chip window found")
     local cfg = vim.api.nvim_win_get_config(win)
     assert.equals(vim.o.lines - vim.o.cmdheight - 1, cfg.row, "row lands ON the statusline row")
+    -- The default `shape` here is "rounded_chip", whose left border is a
+    -- real glyph -- `col = 0` is correct: the glyph itself is the visible
+    -- left edge, nothing to compensate for. See the next test for the
+    -- `dock_left` case, where an invisible-but-reserved left border needs
+    -- `col = -1` instead.
     assert.equals(0, cfg.col, "flush left, no gap")
+    vim.o.laststatus = saved
+  end)
+
+  it("a docked dock_left chip shifts col -1 to offset its invisible left border", function()
+    -- Regression, found live (real terminal screenshots): `dock_left`'s
+    -- left corners/edge are `""` in its border array (see the "gets a
+    -- rounded-except-left-edge border" spec above) -- Neovim still
+    -- reserves 1 screen column for that position even though nothing is
+    -- drawn there (confirmed live: `col = 0` painted the chip's first
+    -- *visible* column one cell in from the real screen edge, not flush).
+    -- `col = -1` pushes that reserved-but-blank cell off-screen so the
+    -- first visible column lands at the real screen edge (0) instead.
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 2
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      anchor = "bottom-left",
+      dock = true,
+      shape = "dock_left",
+    })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(-1, cfg.col, "shifted 1 col off-screen to compensate for the blank left border")
     vim.o.laststatus = saved
   end)
 
