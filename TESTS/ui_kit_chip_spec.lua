@@ -722,6 +722,37 @@ describe("ui.kit.chip", function()
   end)
 
   it(
+    "enabling track_mode on one chip doesn't wipe the shared hooks group for every other chip",
+    function()
+      -- Regression, found by adversarial review: ensure_mode_tracking() used
+      -- to call autocmd.group("UiKitChip", true) -- the `true` (clear)
+      -- argument re-clears an ALREADY-EXISTING group instead of just looking
+      -- it up (lib.nvim.bindings.autocmd's own documented behaviour), wiping
+      -- every autocmd already registered in it -- ensure_hooks()'s own
+      -- VimResized/TabEnter/ColorScheme/VimEnter, and any OTHER chip's own
+      -- ModeChanged tracker -- the moment ANY chip opted into track_mode.
+      -- Silent: no error, nothing logged, chips just silently stopped
+      -- re-tinting/repositioning/following tabs for the rest of the session.
+      chip.mount({ id = "spec_a", text = "x" }) -- ensures the shared group/hooks already exist
+      local before = {}
+      for _, au in ipairs(vim.api.nvim_get_autocmds({ group = "UiKitChip" })) do
+        before[au.id] = true
+      end
+      assert.is_true(next(before) ~= nil, "the shared group already has autocmds before this")
+
+      chip.mount({ id = "spec_b", text = "y", track_mode = true })
+
+      local after = {}
+      for _, au in ipairs(vim.api.nvim_get_autocmds({ group = "UiKitChip" })) do
+        after[au.id] = true
+      end
+      for id in pairs(before) do
+        assert.is_true(after[id], "pre-existing autocmd " .. id .. " survived enabling track_mode")
+      end
+    end
+  )
+
+  it(
     "a tab-switch reopen doesn't leak a duplicate window when a consumer's "
       .. "WinClosed/WinNew autocmd calls refresh() reentrantly",
     function()
