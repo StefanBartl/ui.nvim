@@ -654,24 +654,25 @@ describe("ui.kit.chip", function()
     local win = assert(chip_window(), "chip window found")
     local cfg = vim.api.nvim_win_get_config(win)
     assert.equals(vim.o.lines - vim.o.cmdheight - 1, cfg.row, "row lands ON the statusline row")
-    -- The default `shape` here is "rounded_chip", whose left border is a
-    -- real glyph -- `col = 0` is correct: the glyph itself is the visible
-    -- left edge, nothing to compensate for. See the next test for the
-    -- `dock_left` case, where an invisible-but-reserved left border needs
-    -- `col = -1` instead.
     assert.equals(0, cfg.col, "flush left, no gap")
     vim.o.laststatus = saved
   end)
 
-  it("a docked dock_left chip shifts col -1 to offset its invisible left border", function()
-    -- Regression, found live (real terminal screenshots): `dock_left`'s
-    -- left corners/edge are `""` in its border array (see the "gets a
-    -- rounded-except-left-edge border" spec above) -- Neovim still
-    -- reserves 1 screen column for that position even though nothing is
-    -- drawn there (confirmed live: `col = 0` painted the chip's first
-    -- *visible* column one cell in from the real screen edge, not flush).
-    -- `col = -1` pushes that reserved-but-blank cell off-screen so the
-    -- first visible column lands at the real screen edge (0) instead.
+  it("a docked dock_left chip is ALSO flush at col 0, same as any other shape", function()
+    -- History: a brief `col = -1` "fix" lived here (found live, real
+    -- terminal screenshots showed a ~1-cell gap before the chip's visible
+    -- content) on the theory that Neovim reserves a screen column for
+    -- `dock_left`'s blank (`""`) left corners/edge even though nothing is
+    -- drawn there. That theory holds in isolation, but wasn't the actual
+    -- cause: before/after screenshots with the "fix" applied showed the
+    -- chip's first visible pixel at the exact same screen column, and the
+    -- real source turned out to be this user's own terminal emulator's
+    -- `window_padding` setting (1 full cell on every side, set
+    -- deliberately for an unrelated image-placement feature) -- padding
+    -- applied by the terminal around its whole grid, which no `col` value
+    -- on any Neovim floating window can reach into or compensate for.
+    -- Reverted; `col = 0` is correct for `dock_left` same as any other
+    -- left-anchored shape.
     local saved = vim.o.laststatus
     vim.o.laststatus = 2
     chip.mount({
@@ -683,71 +684,8 @@ describe("ui.kit.chip", function()
     })
     local win = assert(chip_window(), "chip window found")
     local cfg = vim.api.nvim_win_get_config(win)
-    assert.equals(-1, cfg.col, "shifted 1 col off-screen to compensate for the blank left border")
+    assert.equals(0, cfg.col, "flush left, no gap, no shape-specific offset")
     vim.o.laststatus = saved
-  end)
-
-  it("a NON-docked top-left dock_left chip still gets the -1 offset", function()
-    -- Regression, found by adversarial review: the -1 offset above was
-    -- scoped only to the `docked` branch of reflow() -- but `docked`
-    -- requires `edge.v == "bottom"`, so a `dock_left`-shaped chip anchored
-    -- `top-left` (never docked, by definition: docking only ever applies to
-    -- a bottom anchor) fell into the OTHER branch, which set `col = 0` with
-    -- no shape awareness at all -- reproducing the exact pre-fix gap this
-    -- shape exists to avoid.
-    chip.mount({ id = "spec_a", text = "x", anchor = "top-left", shape = "dock_left" })
-    local win = assert(chip_window(), "chip window found")
-    local cfg = vim.api.nvim_win_get_config(win)
-    assert.equals(-1, cfg.col, "top-left dock_left also compensates for its blank left border")
-  end)
-
-  it("a docked-but-degraded (no statusline row) dock_left chip still gets the -1 offset", function()
-    -- Same regression, the other reachable path into the un-fixed branch:
-    -- `dock = true` alone is not enough to take the `docked` branch --
-    -- `status_rows > 0` is also required, so `laststatus = 0` (or
-    -- `laststatus = 1` with a single real window) sends even a `dock =
-    -- true, shape = "dock_left"` chip into the same unguarded branch.
-    local saved = vim.o.laststatus
-    vim.o.laststatus = 0
-    chip.mount({
-      id = "spec_a",
-      text = "x",
-      anchor = "bottom-left",
-      dock = true,
-      shape = "dock_left",
-    })
-    local win = assert(chip_window(), "chip window found")
-    local cfg = vim.api.nvim_win_get_config(win)
-    assert.equals(-1, cfg.col, "degraded dock_left still compensates for its blank left border")
-    vim.o.laststatus = saved
-  end)
-
-  it("a dock_left preset redefined with a real left border does NOT get the -1 offset", function()
-    -- Regression, found by adversarial review: the -1 offset used to key
-    -- off `entry.shape == "dock_left"` by NAME. `ui.kit.theme.setup()`
-    -- lets any consumer fully replace a preset by name (including
-    -- "dock_left") at runtime -- if a consumer gives it a real left
-    -- border glyph, the name-based check would still force col = -1 and
-    -- clip a real, visible column of that consumer's own border. The
-    -- offset must be keyed on the actual resolved border array instead.
-    local theme = require("ui.kit").theme
-    theme.setup({
-      presets = {
-        dock_left = { border = { "╭", "─", "╮", "│", "╯", "─", "╰", "│" } },
-      },
-    })
-    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", shape = "dock_left" })
-    local win = assert(chip_window(), "chip window found")
-    local cfg = vim.api.nvim_win_get_config(win)
-    assert.equals(0, cfg.col, "a real left border glyph must not be clipped")
-    -- Restore the built-in preset so later specs (including the "gets a
-    -- rounded-except-left-edge border" one above, which runs earlier in
-    -- file order but would be affected by a *second* run/reorder) see the
-    -- shipped array, not this test's override -- `theme.setup` has no
-    -- "reset" API, only full replacement.
-    theme.setup({
-      presets = { dock_left = { border = { "", "─", "╮", "│", "╯", "─", "", "" } } },
-    })
   end)
 
   it("a docked chip degrades to the ordinary placement without a statusline row", function()
