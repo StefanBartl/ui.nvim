@@ -1237,20 +1237,27 @@ local function draw_chips(win, buf, entries)
   -- leave shorter entries hugging the box's left edge instead of lining up
   -- under the widest one. Pad the short side with spaces (and shift that
   -- line's marks along with it) so every line fills `width` on the anchor's
-  -- pinned side. `"row"`/`"full"`/`"left"` boxes are already exactly as
-  -- wide as their one line, so `pad` comes out 0 and this is a no-op there.
+  -- pinned side. `"row"` never gets this: it draws exactly one line, so
+  -- there is nothing else in the box for it to align under, and computing
+  -- `pad` for it isn't just wasted work -- `trunc_to_width` can legitimately
+  -- return a string one column short of `width` when the forced cut lands
+  -- right after a double-width character, which would otherwise read as an
+  -- unintended 1-column shift instead of a deliberate right-align.
+  local align = cfg.chips.layout == "stack" and (anchor.h == "right" or anchor.h == "center")
   local lines, byte_lens = {}, {}
   for i, l in ipairs(raw_lines) do
     local line = vim.fn.strwidth(l) > width and trunc_to_width(l, width) or l
-    local pad = width - vim.fn.strwidth(line)
-    if pad > 0 and (anchor.h == "right" or anchor.h == "center") then
-      local lead = anchor.h == "right" and pad or math.floor(pad / 2)
-      if lead > 0 then
-        local prefix = string.rep(" ", lead)
-        line = prefix .. line
-        for _, m in ipairs(raw_marks[i]) do
-          m[1] = m[1] + lead
-          m[2] = m[2] + lead
+    if align then
+      local pad = width - vim.fn.strwidth(line)
+      if pad > 0 then
+        local lead = anchor.h == "right" and pad or math.floor(pad / 2)
+        if lead > 0 then
+          local prefix = string.rep(" ", lead)
+          line = prefix .. line
+          for _, m in ipairs(raw_marks[i]) do
+            m[1] = m[1] + lead
+            m[2] = m[2] + lead
+          end
         end
       end
     end
