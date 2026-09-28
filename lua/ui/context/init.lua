@@ -80,10 +80,14 @@
 --- `layout`: `"row"` (default) joins every entry into one breadcrumb line;
 --- `"stack"` draws one chip per line instead, like `"mimic"`'s one row per
 --- entry, so a long entry's own truncation never eats into a shorter one
---- sharing the same line. `shape`: `"rounded"` (default) is the cap-body-cap
---- look; `"rect"` drops the caps for a flat coloured block.
+--- sharing the same line. `shape`, from the shared `ui.kit.presets`
+--- vocabulary: `"rounded_chip"` (default) is the cap-body-cap look;
+--- `"chip"` drops the caps for a flat coloured block; `"classic"` drops the
+--- coloured background entirely, just the heading/scope colour on plain
+--- text. Old names (`"rounded"`/`"rect"`) still work.
 
 local state = require("ui.context.state")
+local presets = require("ui.kit.presets")
 
 local M = {}
 
@@ -109,7 +113,7 @@ local AUGROUP = "UiContext"
 
 ---@class Ui.Context.ChipsOpts
 ---@field layout? "row"|"stack"  # `"row"` (default): every entry joined into one breadcrumb line. `"stack"`: one chip per line, like `"mimic"`'s one-line-per-entry, but chip-styled -- never truncates one entry's own text just because another entry made the combined line too long.
----@field shape? "rounded"|"rect"  # `"rounded"` (default): a left/right cap, lsp.nvim's winbar look. `"rect"`: a flat coloured block, no caps.
+---@field shape? Ui.Kit.Preset  # `"rounded_chip"` (default): a left/right cap, lsp.nvim's winbar look. `"chip"`: a flat coloured block, no caps. `"classic"`: no coloured background at all. Old names (`"rounded"`/`"rect"`) still accepted.
 
 ---@class Ui.Context.Position
 ---@field anchor? "top"|"bottom"|"top-left"|"top-right"|"top-center"|"bottom-left"|"bottom-right"|"bottom-center"
@@ -148,7 +152,7 @@ local MAX_HEADING_LEVEL = 6
 ---@field persist boolean              # `:UI sticky depth`/`lines` are written to `state_file` and read back at the next `setup`
 ---@field state_file string|nil        # absolute, already resolved; nil = `ui.context.state.default_path()`
 ---@field style "mimic"|"chips"        # how the pinned entries are drawn
----@field chips { layout: "row"|"stack", shape: "rounded"|"rect" } # only read when style = "chips"
+---@field chips { layout: "row"|"stack", shape: Ui.Kit.Preset } # only read when style = "chips"
 ---@field position Ui.Context.Position # where the overlay sits
 local cfg = {
   persist = false,
@@ -247,7 +251,7 @@ local cfg = {
     end)(),
   },
   style = "mimic",
-  chips = { layout = "row", shape = "rounded" },
+  chips = { layout = "row", shape = "rounded_chip" },
   position = { anchor = "top" },
 }
 
@@ -356,6 +360,8 @@ local function groups_spec()
   spec.UiContextChipScope =
     { fg = scope_fg, bg = mix(scope_fg, bg, CHIP_TINT), bold = true, default = true }
   spec.UiContextChipScopeCap = { fg = mix(scope_fg, bg, CHIP_TINT), bg = bg, default = true }
+  -- `shape = "classic"`: same text colour, no coloured background at all.
+  spec.UiContextChipScopeClassic = { fg = scope_fg, bold = true, default = true }
   -- One text group and one row band per heading level. The text group links
   -- to the colorscheme's own heading group, so the palette carries over; the
   -- band is that group's background alone, drawn across the whole row (a
@@ -1087,14 +1093,15 @@ local function chip_entry(buf, e)
 end
 
 ---@internal
----One chip for a single entry: `shape = "rounded"` gets lsp.nvim's
----cap-body-cap look, `"rect"` is just the body, no caps -- adapted to a real
----buffer line (byte-range highlight marks instead of `%#Group#` statusline
----tags).
+---One chip for a single entry: `shape = "rounded_chip"` gets lsp.nvim's
+---cap-body-cap look, `"chip"` is just the body, no caps, `"classic"` drops
+---the coloured background too (plain heading/scope-coloured text) --
+---adapted to a real buffer line (byte-range highlight marks instead of
+---`%#Group#` statusline tags).
 ---@param buf integer
 ---@param e Ui.Context.Entry
----@param squared_left boolean  -- rounded only: the cap is squared off instead of rounded, for a chip that sits at the box's own left edge
----@param shape "rounded"|"rect"
+---@param squared_left boolean  -- rounded_chip only: the cap is squared off instead of rounded, for a chip that sits at the box's own left edge
+---@param shape Ui.Kit.Preset
 ---@return string text
 ---@return { [1]: integer, [2]: integer, [3]: string }[] marks  -- byte ranges, 0-based, end exclusive, relative to this chip alone
 local function chip_segment(buf, e, squared_left, shape)
@@ -1111,7 +1118,13 @@ local function chip_segment(buf, e, squared_left, shape)
   local text, level = chip_entry(buf, e)
   local body = level and ("UiContextChipH" .. level) or "UiContextChipScope"
 
-  if shape == "rect" then
+  if shape == "classic" then
+    -- No coloured box at all: the heading group is already fg-only, and the
+    -- generic scope gets its own fg-only counterpart (UiContextChipScope
+    -- itself carries a tinted background).
+    local classic = level and ("UiContextH" .. level) or "UiContextChipScopeClassic"
+    push(text, classic)
+  elseif shape == "chip" then
     push(" " .. text .. " ", body)
   else
     local cap = level and ("UiContextChipH" .. level .. "Cap") or "UiContextChipScopeCap"
@@ -1131,7 +1144,7 @@ end
 ---@param buf integer
 ---@param entries Ui.Context.Entry[]
 ---@param squared_left boolean  -- passed to the first entry's chip_segment only
----@param shape "rounded"|"rect"
+---@param shape Ui.Kit.Preset
 ---@return string text
 ---@return { [1]: integer, [2]: integer, [3]: string }[] marks
 local function chip_row(buf, entries, squared_left, shape)
@@ -1541,8 +1554,9 @@ local function apply(opts)
     if c.layout == "row" or c.layout == "stack" then
       cfg.chips.layout = c.layout
     end
-    if c.shape == "rounded" or c.shape == "rect" then
-      cfg.chips.shape = c.shape
+    local shape = presets.normalize(c.shape, "ui.context")
+    if presets.is_preset(shape) then
+      cfg.chips.shape = shape
     end
   end
   if type(opts.position) == "table" then

@@ -1,13 +1,19 @@
 ---@module 'ui.tabline.styles'
 --- Named chip-boundary decorators for `ui.tabline.modules.buffers()` --
 --- `cfg.style` resolves through this registry the same way a statusline
---- variant name resolves through `ui.config.variants`: three shipped
---- entries (`rounded`/`square`/`divider`) plus whatever a host adds via
---- `M.register(name, fn)`. Before this, `cfg.style` was a closed set of
---- three string literals hardcoded into `ui.tabline.modules`'s own
---- `apply_boundaries` -- no way for a host to add a fourth look without
---- patching this repo, unlike every other named-choice knob here
---- (`separator_style`, the statusline `variant`).
+--- variant name resolves through `ui.config.variants`: three shipped looks
+--- plus whatever a host adds via `M.register(name, fn)`. Before this,
+--- `cfg.style` was a closed set of three string literals hardcoded into
+--- `ui.tabline.modules`'s own `apply_boundaries` -- no way for a host to add
+--- a fourth look without patching this repo, unlike every other
+--- named-choice knob here (`separator_style`, the statusline `variant`).
+---
+--- The three shipped looks use the canonical `ui.kit.presets` names:
+--- `"rounded_chip"` (default, a cap on every boundary), `"chip"` (flush,
+--- no decoration), plus `"divider"` (a plain separator, outside the three
+--- canonical presets -- see `ui.kit.presets`' own doc comment). The old
+--- names (`"rounded"`/`"square"`) stay registered as aliases pointing at the
+--- same functions, so an existing `cfg.style` never breaks.
 
 local utils = require("ui.tabline.utils")
 
@@ -60,6 +66,10 @@ end
 _registry.square = square
 _registry.divider = divider
 _registry.rounded = rounded
+-- Canonical `ui.kit.presets` names, same functions -- "square"/"rounded"
+-- above stay registered as deprecated aliases, never removed.
+_registry.chip = square
+_registry.rounded_chip = rounded
 
 ---Register a chip-boundary decorator under `name` -- a host's own tabline
 ---look, typically. `fn` mutates `chips` in place given the parallel

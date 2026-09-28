@@ -187,12 +187,23 @@ end
 --- lualine/vim-airline ship for these exact style names.
 --- `default` mirrors `round` -- NvChad's own shipped default statusline is
 --- the rounded-pill look, not the hard-angled one.
+--- `chip`/`rounded_chip` are the canonical `ui.kit.presets` names, added
+--- alongside the historical ones above (`default`/`round`/`block` never
+--- renamed, kept exactly as they were): `rounded_chip` mirrors `round`,
+--- `chip` mirrors `block`. `classic` (the third preset -- no box, plain
+--- text) has deliberately no entry here: every glyph in this table must be
+--- non-empty (see `primitives_separators_spec.lua`'s regression coverage --
+--- an empty separator is the exact historical bug that test guards), and a
+--- statusline module boundary always needs *some* connecting glyph, unlike
+--- a standalone corner chip's box.
 ---@type table<string, {left: string, right: string}>
 M.separators = {
   default = { left = "\xEE\x82\xB6", right = "\xEE\x82\xB4" }, --  /
   round = { left = "\xEE\x82\xB6", right = "\xEE\x82\xB4" }, --  /
   block = { left = "█", right = "█" },
   arrow = { left = "\xEE\x82\xB2", right = "\xEE\x82\xB0" }, --  /
+  rounded_chip = { left = "\xEE\x82\xB6", right = "\xEE\x82\xB4" }, --  /
+  chip = { left = "█", right = "█" },
 }
 
 --- File icon and display name for the statusline's buffer. `nvim-web-devicons`
