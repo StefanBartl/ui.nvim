@@ -20,6 +20,7 @@ describe("ui.windowpicker", function()
       include_unfocusable_windows = false,
       filetype = { "neo-tree", "neo-tree-popup", "notify" },
       buftype = { "terminal", "quickfix" },
+      debug = false,
     })
     vim.cmd("silent! only")
     vim.cmd("silent! %bwipeout!")
@@ -128,6 +129,48 @@ describe("ui.windowpicker", function()
     end, 10)
 
     assert.is_nil(windowpicker.pick())
+  end)
+
+  it("draws each hint three cells wide, not make_scratch's 60-cell empty-size fallback", function()
+    vim.cmd("only")
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    vim.api.nvim_set_current_win(origin)
+    windowpicker.setup({ autoselect_one = false })
+
+    local widths = {}
+    vim.defer_fn(function()
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_config(win).relative ~= "" then
+          widths[#widths + 1] = vim.api.nvim_win_get_width(win)
+        end
+      end
+      vim.api.nvim_feedkeys("F", "n", false)
+    end, 10)
+    windowpicker.pick()
+
+    assert.is_true(#widths >= 1)
+    for _, w in ipairs(widths) do
+      assert.equals(3, w)
+    end
+  end)
+
+  it("records the last call, including whether it prompted", function()
+    vim.cmd("only")
+    assert.is_nil(windowpicker.pick()) -- one window, excluded as current: nothing to pick
+    local call = windowpicker.last_call()
+    assert.is_not_nil(call)
+    assert.equals(0, call.candidates)
+    assert.is_false(call.prompted)
+    assert.is_truthy(call.traceback:find("stack traceback", 1, true))
+
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    vim.api.nvim_set_current_win(origin)
+    windowpicker.setup({ autoselect_one = false })
+    feed("F")
+    windowpicker.pick()
+    assert.is_true(windowpicker.last_call().prompted)
   end)
 
   it("setup() overrides the shipped defaults", function()
