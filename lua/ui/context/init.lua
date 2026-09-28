@@ -382,6 +382,13 @@ local function groups_spec()
         { fg = heading_fg, bg = mix(heading_fg, bg, CHIP_TINT), default = true }
       spec["UiContextChipH" .. level .. "Cap"] =
         { fg = mix(heading_fg, bg, CHIP_TINT), bg = bg, default = true }
+      -- `shape = "classic"`: fg-only counterpart, same idea as
+      -- UiContextChipScopeClassic below -- UiContextH<level> above is a
+      -- `link` to the colorscheme's own heading group and inherits that
+      -- group's bg verbatim (see the hl.bg check just above), so it cannot
+      -- be reused directly for "classic"'s no-background guarantee.
+      spec["UiContextChipH" .. level .. "Classic"] =
+        { fg = heading_fg, bold = true, default = true }
     end
   end
   return spec
@@ -1119,10 +1126,14 @@ local function chip_segment(buf, e, squared_left, shape)
   local body = level and ("UiContextChipH" .. level) or "UiContextChipScope"
 
   if shape == "classic" then
-    -- No coloured box at all: the heading group is already fg-only, and the
-    -- generic scope gets its own fg-only counterpart (UiContextChipScope
-    -- itself carries a tinted background).
-    local classic = level and ("UiContextH" .. level) or "UiContextChipScopeClassic"
+    -- No coloured box at all: UiContextH<level> (the plain heading group
+    -- `body` above descends from) is a `link` to the colorscheme's own
+    -- heading group and inherits THAT group's bg verbatim, so it cannot
+    -- stand in for "classic" here -- UiContextChipH<level>Classic is the
+    -- fg-only extract groups_spec() builds specifically for this, same idea
+    -- as UiContextChipScopeClassic for a non-heading entry.
+    local classic = level and ("UiContextChipH" .. level .. "Classic")
+      or "UiContextChipScopeClassic"
     push(text, classic)
   elseif shape == "chip" then
     push(" " .. text .. " ", body)

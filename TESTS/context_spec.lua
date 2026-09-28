@@ -2090,6 +2090,64 @@ describe("ui.context", function()
       end
     end)
 
+    it("shape = 'classic' draws a heading entry with no background highlight", function()
+      -- Regression: chip_segment() used to reuse UiContextH<level> (a `link`
+      -- to the colorscheme's own @markup.heading.<level>.markdown group)
+      -- directly for shape = "classic", but that link inherits the target
+      -- group's bg verbatim -- contradicting "classic"'s documented
+      -- no-background guarantee whenever a colorscheme gives headings one.
+      -- groups_spec() now builds a dedicated fg-only UiContextChipH<level>Classic
+      -- for exactly this.
+      local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+      if not has_markdown_parser then
+        pending("no Markdown parser available")
+        return
+      end
+      vim.cmd("new")
+      local win = vim.api.nvim_get_current_win()
+      local buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "# Roadmap",
+        "",
+        "text one",
+        "text two",
+        "text three",
+        "text four",
+        "text five",
+        "text six",
+      })
+      vim.bo[buf].filetype = "markdown"
+      vim.bo[buf].buftype = ""
+      vim.api.nvim_win_set_height(win, 8)
+
+      context.setup({ style = "chips", chips = { shape = "classic" } })
+      context.enable()
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = 4, lnum = 8, col = 0 })
+      end)
+      local shown = context.refresh(win)
+      assert.equals(1, shown)
+
+      local _, fbuf = context.float(win)
+      local ns = vim.api.nvim_get_namespaces().ui_context
+      local marks = vim.api.nvim_buf_get_extmarks(fbuf, ns, 0, -1, { details = true })
+      local checked = 0
+      for _, m in ipairs(marks) do
+        local hl_group = m[4].hl_group
+        if hl_group then
+          checked = checked + 1
+          assert.is_nil(
+            hl_group:match("^UiContextH%d+$"),
+            "classic shape must not reuse the raw linked heading group directly: " .. hl_group
+          )
+          local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = hl_group, link = false })
+          assert.is_true(ok, "resolvable highlight group: " .. hl_group)
+          assert.is_nil(hl.bg, "classic shape must carry no background: " .. hl_group)
+        end
+      end
+      assert.is_true(checked > 0, "the heading entry drew at least one highlighted mark")
+    end)
+
     it("shape = 'rect' draws no cap glyphs", function()
       if not has_lua_parser then
         pending("no Lua parser available")
