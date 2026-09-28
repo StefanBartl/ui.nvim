@@ -84,6 +84,11 @@ return {
     used_by = { "default" },
   },
   {
+    -- Intentionally host-specific: compute_text() splits the count via this
+    -- user's own `plugins.personal.list` convention (soft-required, falls
+    -- back to own = 0 without it) -- not a generic lazy.nvim wrapper, so it
+    -- is never `used_by`'d in a shipped preset. Wire it in yourself (see
+    -- docs/modules.md) if your own config has an equivalent list.
     key = "plugin_summary",
     summary = 'lazy.nvim\'s own/external plugin count, e.g. "12/48".',
     builtin = false,
