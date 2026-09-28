@@ -415,6 +415,51 @@ describe("ui.kit.chip", function()
     )
   end)
 
+  it(
+    "an earlier pulse's revert doesn't cut a later pulse short across a window replacement",
+    function()
+      -- Regression, found by adversarial review of the fix just above: once
+      -- the revert callback stopped checking window *identity* and only
+      -- checked window *validity*, an earlier pulse's callback -- now
+      -- matching whatever window is currently live -- could fire on top of a
+      -- later, still-active pulse on a *different* window for the same id,
+      -- reverting it early. Only reachable when the window is replaced
+      -- between the two pulse() calls (unchanged, same-window overlapping
+      -- pulses already raced before this fix, on purpose out of scope here).
+      -- A per-entry generation counter (same shape as sessions.nvim's own
+      -- `hide_generation`) makes each pulse only revertible by its own
+      -- callback.
+      chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+      chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 40 })
+
+      -- Replace the window while pulse 1 is still pending.
+      chip.mount({ id = "spec_a", text = "" })
+      chip.mount({ id = "spec_a", text = "x" })
+      local win_after = assert(chip_window(), "chip window found after replacement")
+
+      -- Start a second, longer pulse on the replacement window.
+      chip.pulse("spec_a", { color = { fg = "#00ff00", bg = "#000000" }, duration_ms = 200 })
+      assert.equals(0x00ff00, normal_hl(win_after).fg, "second pulse colour applied immediately")
+
+      -- Past pulse 1's duration_ms (40ms) but well before pulse 2's (200ms):
+      -- pulse 1's stale callback must not revert pulse 2's still-active colour.
+      vim.wait(90, function()
+        return normal_hl(win_after).fg ~= 0x00ff00
+      end, 10)
+      assert.equals(
+        0x00ff00,
+        normal_hl(win_after).fg,
+        "pulse 2 still showing -- not cut short by pulse 1's stale revert"
+      )
+
+      -- Past pulse 2's own duration_ms: it reverts on schedule, on its own.
+      vim.wait(300, function()
+        return normal_hl(win_after).fg == 0xffffff
+      end, 10)
+      assert.equals(0xffffff, normal_hl(win_after).fg, "pulse 2 reverted on its own schedule")
+    end
+  )
+
   it("a left-anchored chip sits flush against the screen edge (col 0)", function()
     chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
     local win = assert(chip_window(), "chip window found")
