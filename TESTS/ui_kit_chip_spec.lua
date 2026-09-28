@@ -687,6 +687,69 @@ describe("ui.kit.chip", function()
     vim.o.laststatus = saved
   end)
 
+  it("a NON-docked top-left dock_left chip still gets the -1 offset", function()
+    -- Regression, found by adversarial review: the -1 offset above was
+    -- scoped only to the `docked` branch of reflow() -- but `docked`
+    -- requires `edge.v == "bottom"`, so a `dock_left`-shaped chip anchored
+    -- `top-left` (never docked, by definition: docking only ever applies to
+    -- a bottom anchor) fell into the OTHER branch, which set `col = 0` with
+    -- no shape awareness at all -- reproducing the exact pre-fix gap this
+    -- shape exists to avoid.
+    chip.mount({ id = "spec_a", text = "x", anchor = "top-left", shape = "dock_left" })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(-1, cfg.col, "top-left dock_left also compensates for its blank left border")
+  end)
+
+  it("a docked-but-degraded (no statusline row) dock_left chip still gets the -1 offset", function()
+    -- Same regression, the other reachable path into the un-fixed branch:
+    -- `dock = true` alone is not enough to take the `docked` branch --
+    -- `status_rows > 0` is also required, so `laststatus = 0` (or
+    -- `laststatus = 1` with a single real window) sends even a `dock =
+    -- true, shape = "dock_left"` chip into the same unguarded branch.
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 0
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      anchor = "bottom-left",
+      dock = true,
+      shape = "dock_left",
+    })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(-1, cfg.col, "degraded dock_left still compensates for its blank left border")
+    vim.o.laststatus = saved
+  end)
+
+  it("a dock_left preset redefined with a real left border does NOT get the -1 offset", function()
+    -- Regression, found by adversarial review: the -1 offset used to key
+    -- off `entry.shape == "dock_left"` by NAME. `ui.kit.theme.setup()`
+    -- lets any consumer fully replace a preset by name (including
+    -- "dock_left") at runtime -- if a consumer gives it a real left
+    -- border glyph, the name-based check would still force col = -1 and
+    -- clip a real, visible column of that consumer's own border. The
+    -- offset must be keyed on the actual resolved border array instead.
+    local theme = require("ui.kit").theme
+    theme.setup({
+      presets = {
+        dock_left = { border = { "╭", "─", "╮", "│", "╯", "─", "╰", "│" } },
+      },
+    })
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", shape = "dock_left" })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(0, cfg.col, "a real left border glyph must not be clipped")
+    -- Restore the built-in preset so later specs (including the "gets a
+    -- rounded-except-left-edge border" one above, which runs earlier in
+    -- file order but would be affected by a *second* run/reorder) see the
+    -- shipped array, not this test's override -- `theme.setup` has no
+    -- "reset" API, only full replacement.
+    theme.setup({
+      presets = { dock_left = { border = { "", "─", "╮", "│", "╯", "─", "", "" } } },
+    })
+  end)
+
   it("a docked chip degrades to the ordinary placement without a statusline row", function()
     -- `dock` is never a hard requirement on a real statusline row actually
     -- being there (laststatus = 0, or no statusline plugin active) -- it
