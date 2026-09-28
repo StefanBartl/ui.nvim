@@ -590,6 +590,31 @@ describe("ui.kit.chip", function()
     assert.is_true(col > 0, "not flush against the right edge")
   end)
 
+  it("row_offset/col_offset nudge the computed placement, on top of anchor/dock", function()
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
+    local base_win = assert(chip_window(), "chip window found")
+    local base = vim.api.nvim_win_get_config(base_win).row
+    chip.unmount("spec_a")
+
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", row_offset = 2, col_offset = 3 })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(base + 2, cfg.row, "row_offset adds to the computed row")
+    assert.equals(3, cfg.col, "col_offset adds to the computed col (0 + 3)")
+  end)
+
+  it("col_offset = 0 explicitly clears a previously set offset", function()
+    -- `0` is truthy in Lua -- confirms the mount() field isn't accidentally
+    -- using the `dock`/`visible`-style `opts.x ~= nil` guard AND the plain
+    -- `or` idiom in a way that makes an explicit 0 fall through to the old
+    -- value instead of overwriting it.
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", col_offset = 5 })
+    chip.mount({ id = "spec_a", text = "x", col_offset = 0 })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(0, cfg.col, "col_offset = 0 overwrites the earlier 5, not kept")
+  end)
+
   it("a bottom-anchored chip leaves the statusline row free", function()
     local saved = vim.o.laststatus
     vim.o.laststatus = 2
