@@ -18,7 +18,7 @@ describe("ui.windowpicker", function()
       include_current_win = false,
       autoselect_one = true,
       include_unfocusable_windows = false,
-      filetype = { "neo-tree", "neo-tree-popup", "notify" },
+      filetype = { "neo-tree", "neo-tree-popup", "notify", "replacer-progress" },
       buftype = { "terminal", "quickfix" },
       debug = false,
     })
@@ -249,42 +249,152 @@ describe("ui.windowpicker", function()
     end)
   end)
 
-  it("cancels the pick when another window takes focus while the hints are up", function()
-    vim.cmd("only")
-    local origin = vim.api.nvim_get_current_win()
-    vim.cmd("vsplit")
-    vim.api.nvim_set_current_win(origin)
-    windowpicker.setup({ autoselect_one = false })
+  describe("focus taken while the hints are up", function()
+    ---@return integer origin, integer other
+    local function two_windows()
+      vim.cmd("only")
+      local origin = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit")
+      local other = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(origin)
+      windowpicker.setup({ autoselect_one = false, include_current_win = false })
+      return origin, other
+    end
 
-    local intruder
-    vim.defer_fn(function()
-      -- Something async opening a focused float (a dashboard whose scan just
-      -- finished): no key is fed here, so getchar() only returns because the
-      -- picker cancels itself.
-      intruder = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
+    ---A focused float, like a dashboard whose scan just finished.
+    ---@return integer win
+    local function open_intruder()
+      return vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
         relative = "editor",
         row = 1,
         col = 1,
         width = 10,
         height = 3,
       })
-    end, 10)
-    -- Safety net so a broken cancel fails the assertion instead of hanging.
-    vim.defer_fn(function()
-      vim.api.nvim_feedkeys("Z", "n", false)
-    end, 400)
+    end
 
-    assert.is_nil(windowpicker.pick())
-    assert.is_true(windowpicker.last_call().focus_lost)
-    assert.is_true(windowpicker.last_call().prompted)
-    assert.equals(intruder, vim.api.nvim_get_current_win()) -- focus stays where it went
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      local cfg = vim.api.nvim_win_get_config(win)
-      if cfg.relative ~= "" then
-        assert.equals(intruder, win) -- every hint overlay is gone, only the intruder floats
+    ---Safety net so a broken cancel fails an assertion instead of hanging the
+    ---suite in getchar(). The flag keeps it from feeding a stray key later,
+    ---after the pick already returned.
+    ---@return fun() disarm
+    local function arm_safety_net()
+      local done = false
+      vim.defer_fn(function()
+        if not done then
+          vim.api.nvim_feedkeys("Z", "n", false)
+        end
+      end, 400)
+      return function()
+        done = true
       end
     end
-    vim.api.nvim_win_close(intruder, true)
+
+    it("cancels the pick when another window takes focus", function()
+      two_windows()
+      local intruder
+      vim.defer_fn(function()
+        -- No key is fed: getchar() only returns because the picker cancels itself.
+        intruder = open_intruder()
+      end, 10)
+      local disarm = arm_safety_net()
+
+      assert.is_nil(windowpicker.pick())
+      disarm()
+
+      assert.is_true(windowpicker.last_call().focus_lost)
+      assert.is_true(windowpicker.last_call().prompted)
+      assert.equals(intruder, vim.api.nvim_get_current_win()) -- focus stays where it went
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_config(win).relative ~= "" then
+          assert.equals(intruder, win) -- every hint overlay is gone, only the intruder floats
+        end
+      end
+      assert.equals(0, vim.fn.getchar(1)) -- the cancelling <Esc> was consumed, nothing leaked
+      vim.api.nvim_win_close(intruder, true)
+    end)
+
+    it("queues the cancelling <Esc> only once when focus moves twice", function()
+      local _, other = two_windows()
+      local intruder
+      vim.defer_fn(function()
+        intruder = open_intruder() -- first WinEnter
+        -- Second WinEnter before getchar() got to run. It must land in a window
+        -- other than the one the pick started in, or the hook's own "did focus
+        -- actually move" check would swallow it and the test proves nothing.
+        vim.api.nvim_set_current_win(other)
+      end, 10)
+      local disarm = arm_safety_net()
+
+      assert.is_nil(windowpicker.pick())
+      disarm()
+
+      assert.is_true(windowpicker.last_call().focus_lost)
+      assert.equals(0, vim.fn.getchar(1)) -- a second queued <Esc> would show up here
+      vim.api.nvim_win_close(intruder, true)
+    end)
+
+    it("stays cancelled and drains the <Esc> when the user's key wins the race", function()
+      local _, other = two_windows()
+      local intruder
+      vim.defer_fn(function()
+        -- The user's letter is queued first, so getchar() returns it; the
+        -- <Esc> queued by the WinEnter hook right after is still pending.
+        vim.api.nvim_input("F")
+        intruder = open_intruder()
+      end, 10)
+      local disarm = arm_safety_net()
+
+      local picked = windowpicker.pick()
+      disarm()
+
+      assert.is_nil(picked) -- not `other`: the layout the letter referred to is stale
+      assert.are_not.equal(other, picked)
+      assert.is_true(windowpicker.last_call().focus_lost)
+      assert.equals(0, vim.fn.getchar(1)) -- the leftover <Esc> was swallowed, not leaked
+      vim.api.nvim_win_close(intruder, true)
+    end)
+  end)
+
+  it("never offers lib.nvim's progress float as a target", function()
+    -- The shipped defaults, not whatever earlier tests' after_each left in
+    -- `cfg`: reload the module so this asserts the defaults themselves.
+    package.loaded["ui.windowpicker"] = nil
+    local fresh = require("ui.windowpicker")
+    package.loaded["ui.windowpicker"] = windowpicker
+
+    vim.cmd("only")
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    local other = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(origin)
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].filetype = "replacer-progress"
+    local progress = vim.api.nvim_open_win(buf, false, {
+      relative = "editor",
+      row = 1,
+      col = 1,
+      width = 20,
+      height = 1,
+      focusable = true, -- the kit/float progress styles are focusable on purpose
+    })
+
+    -- With the float excluded exactly one candidate (`other`) is left, so
+    -- autoselect returns it without prompting. If the float were offered, this
+    -- would reach getchar(); the timer turns that hang into a failure.
+    local done = false
+    vim.defer_fn(function()
+      if not done then
+        vim.api.nvim_feedkeys("Z", "n", false)
+      end
+    end, 400)
+    local picked = fresh.pick()
+    done = true
+
+    assert.equals(other, picked)
+    assert.equals(1, fresh.last_call().candidates)
+    assert.is_false(fresh.last_call().prompted)
+    vim.api.nvim_win_close(progress, true)
   end)
 
   it("leaves focus_lost false for a normal pick", function()

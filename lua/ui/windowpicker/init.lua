@@ -32,8 +32,8 @@ local M = {}
 
 ---Same shipped defaults as this config's former nvim-window-picker spec
 ---(`plugins/ui.lua`): `include_current_win = false`, `autoselect_one = true`,
----and the neo-tree/notify filetypes plus terminal/quickfix buftypes hidden
----from the picker. `chars` and `include_unfocusable_windows` were never
+---and the neo-tree/notify/progress filetypes plus terminal/quickfix buftypes
+---hidden from the picker. `chars` and `include_unfocusable_windows` were never
 ---overridden there either, so they carry nvim-window-picker's own upstream
 ---defaults for continuity.
 ---@type Ui.WindowPicker.Opts
@@ -42,7 +42,10 @@ local cfg = {
   include_current_win = false,
   autoselect_one = true,
   include_unfocusable_windows = false,
-  filetype = { "neo-tree", "neo-tree-popup", "notify" },
+  -- "replacer-progress" is the filetype of lib.nvim.progress's float/kit
+  -- styles: focusable by design, but a window the running operation closes
+  -- again on its own -- a file opened into it would vanish with it.
+  filetype = { "neo-tree", "neo-tree-popup", "notify", "replacer-progress" },
   buftype = { "terminal", "quickfix" },
   debug = false,
 }
@@ -215,11 +218,16 @@ local function run_pick(opts, call)
   -- longer in, and the keystroke they type next would be swallowed by the
   -- picker instead of reaching the window they are looking at. Cancel the
   -- pick instead: `<Esc>` is what unblocks getchar() and reads as "no hint".
+  --
+  -- The `<Esc>` is queued exactly once (`focus_lost` guards it): getchar()
+  -- consumes one key, and anything left over would reach the window that just
+  -- took focus -- a `nice_quit` float such as the gitsuite dashboard closes
+  -- on `<Esc>`, i.e. it would shut itself the moment it opened.
   local origin = vim.api.nvim_get_current_win()
   local focus_hook = autocmd.create(
     "WinEnter",
     function()
-      if vim.api.nvim_get_current_win() ~= origin then
+      if not call.focus_lost and vim.api.nvim_get_current_win() ~= origin then
         call.focus_lost = true
         vim.api.nvim_input("<Esc>")
       end
@@ -230,6 +238,14 @@ local function run_pick(opts, call)
   local ok, code = pcall(vim.fn.getchar)
   autocmd.delete(focus_hook)
 
+  -- The user's own key can win the race against the queued `<Esc>` (getchar()
+  -- then returned that key and the `<Esc>` is still pending): swallow that one
+  -- `<Esc>` so it doesn't leak, and treat the pick as cancelled either way --
+  -- the hints described a layout the user is no longer in.
+  if call.focus_lost and code ~= 27 and vim.fn.getchar(1) == 27 then
+    pcall(vim.fn.getchar)
+  end
+
   for _, overlay in ipairs(overlays) do
     if vim.api.nvim_win_is_valid(overlay) then
       pcall(vim.api.nvim_win_close, overlay, true)
@@ -237,7 +253,7 @@ local function run_pick(opts, call)
   end
   vim.cmd.redraw()
 
-  if not ok or type(code) ~= "number" then
+  if call.focus_lost or not ok or type(code) ~= "number" then
     return nil
   end
   local picked = vim.fn.nr2char(code):lower()
