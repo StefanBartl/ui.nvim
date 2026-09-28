@@ -369,6 +369,41 @@ describe("ui.kit.chip", function()
     vim.o.laststatus = saved
   end)
 
+  it(
+    "a tab-switch reopen doesn't leak a duplicate window when a consumer's "
+      .. "WinClosed/WinNew autocmd calls refresh() reentrantly",
+    function()
+      -- Regression: a consumer (e.g. sessions.nvim) wires a *generic*
+      -- WinClosed/WinNew autocmd (no pattern -- fires for every window) to
+      -- chip.refresh() for its own bookkeeping. ensure_current_tab()'s
+      -- close-then-reopen cycle on TabEnter fires exactly those events for
+      -- the chip's OWN window mid-transition, so the reentrant refresh() used
+      -- to see a momentarily nil/invalid entry.win and open a second window
+      -- that never got closed again -- a leaked duplicate chip.
+      local group = vim.api.nvim_create_augroup("SpecChipReentrancy", { clear = true })
+      vim.api.nvim_create_autocmd({ "WinClosed", "WinNew" }, {
+        group = group,
+        callback = function()
+          chip.refresh("spec_a")
+        end,
+      })
+
+      chip.mount({ id = "spec_a", text = "x" })
+      vim.cmd("tabnew") -- real TabEnter -> ensure_current_tab() closes+reopens the chip here
+
+      local wins = {}
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_config(w).relative == "editor" then
+          wins[#wins + 1] = w
+        end
+      end
+      assert.equals(1, #wins, "exactly one chip window survives the reopen, no leaked duplicate")
+
+      vim.api.nvim_del_augroup_by_id(group)
+      vim.cmd("tabclose")
+    end
+  )
+
   it("unmount closes the window and drops it from active()", function()
     chip.mount({ id = "spec_a", text = "x" })
     assert.is_true(vim.tbl_contains(chip.active(), "spec_a"))
