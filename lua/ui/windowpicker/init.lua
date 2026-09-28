@@ -1,6 +1,6 @@
 ---@module 'ui.windowpicker'
---- Pick a window by letter: a one-cell floating hint, centered over every
---- eligible window in the current tabpage, then one keypress jumps to (or
+--- Pick a window by letter: a small floating hint (the letter with a cell of
+--- padding either side), centered over every eligible window in the current tabpage, then one keypress jumps to (or
 --- returns) the matching window. Replaces `s1n7ax/nvim-window-picker`'s
 --- `pick_window()` for the config that consumes this (its one call site is
 --- `config/neotree/keymaps/filesystem/files.lua`, via neo-tree's own
@@ -27,7 +27,7 @@ local M = {}
 ---@field include_unfocusable_windows? boolean    Offer windows `nvim_win_get_config` marks unfocusable
 ---@field filetype? string[]                      Buffer filetypes to exclude
 ---@field buftype? string[]                       Buffer buftypes to exclude
----@field debug? boolean                           Print the caller's traceback when a pick starts
+---@field debug? boolean                           Report the caller's traceback once a pick has finished
 
 ---Same shipped defaults as this config's former nvim-window-picker spec
 ---(`plugins/ui.lua`): `include_current_win = false`, `autoselect_one = true`,
@@ -46,11 +46,19 @@ local cfg = {
   debug = false,
 }
 
+---Cells a hint spans. Three, not one: `make_scratch` used to read any
+---resolved width <= 2 as "no size given" and fall back to 60 columns, so a
+---`width = 1` hint was a 60-cell bar with the letter at its left edge. Kept
+---at three (letter plus a padding cell each side) even with that fixed, so
+---the picker also works against a lib.nvim that still has the fallback.
+local HINT_WIDTH = 3
+
 ---@class Ui.WindowPicker.Call
----@field time integer         `os.time()` of the call
----@field traceback string     Who called `pick()` (stack minus `pick` itself)
----@field candidates integer   Eligible windows found
----@field prompted boolean     Whether hints were actually shown
+---@field time integer            `os.time()` of the call
+---@field traceback string        Who called `pick()` (stack minus `pick` itself)
+---@field candidates integer      Eligible windows found (0 until they were counted)
+---@field prompted boolean        Whether at least one hint was actually shown
+---@field picked integer|nil      The window `pick()` returned, once it finished
 
 ---What the most recent `M.pick()` call looked like. Kept unconditionally
 ---(one small table per call) so "who just opened the picker?" can be
@@ -132,14 +140,10 @@ local function eligible_windows(opts)
   return out
 end
 
-local HINT_WIDTH = 3
-
 ---@internal
----A three-cell floating hint (` F `), centered over `win`.
----
----Three cells, not one: `make_scratch` treats any resolved width <= 2 as
----"no size given" and falls back to 60 columns, so `width = 1` used to paint
----a 60-cell bar across the window with the letter at its left edge.
+---A `HINT_WIDTH`-cell floating hint, centered over `win`. In a window
+---narrower than the hint it spills over the split border rather than getting
+---narrower, since `make_scratch` can't be asked for less on older lib.nvim.
 ---@param win integer
 ---@param char string
 ---@return integer|nil overlay_win
@@ -161,28 +165,15 @@ local function show_hint(win, char)
   })
 end
 
----Pick a window by letter.
----
----Returns the picked window id; `nil` when there was nothing to pick from,
----the pick was cancelled (`<C-c>`, or any key that isn't one of the hint
----letters), or exactly one window qualified and `autoselect_one` returned
----it without prompting.
----@param opts? Ui.WindowPicker.Opts
+---@internal
+---The pick itself. `call` is this pick's own record (see `M.pick`), filled in
+---as the pick progresses so it stays accurate even if a later step raises.
+---@param opts Ui.WindowPicker.Opts  Already merged with the shipped defaults
+---@param call Ui.WindowPicker.Call
 ---@return integer|nil
-function M.pick(opts)
-  opts = vim.tbl_extend("force", cfg, opts or {})
-  ensure_groups()
-
+local function run_pick(opts, call)
   local windows = eligible_windows(opts)
-  last_call = {
-    time = os.time(),
-    traceback = debug.traceback("", 2),
-    candidates = #windows,
-    prompted = false,
-  }
-  if opts.debug then
-    notify.info(("pick() called, %d candidate window(s)%s"):format(#windows, last_call.traceback))
-  end
+  call.candidates = #windows
   if #windows == 0 then
     -- Not just an internal no-op: `:UI winpick` is a directly user-invoked
     -- command too, and a silent "nothing happened" there is indistinguishable
@@ -196,8 +187,6 @@ function M.pick(opts)
     end
     return nil
   end
-
-  last_call.prompted = true
 
   ---@type string[]
   local chars = {}
@@ -215,6 +204,7 @@ function M.pick(opts)
       end
     end
   end
+  call.prompted = #overlays > 0
   vim.cmd.redraw()
 
   local ok, code = pcall(vim.fn.getchar)
@@ -244,6 +234,49 @@ function M.pick(opts)
     end
   end
   return nil
+end
+
+---Pick a window by letter.
+---
+---Returns the picked window id; `nil` when there was nothing to pick from,
+---the pick was cancelled (`<C-c>`, or any key that isn't one of the hint
+---letters), or exactly one window qualified and `autoselect_one` returned
+---it without prompting.
+---
+---Every call is recorded first thing (`M.last_call()`), including its caller's
+---traceback, so "who opened the picker?" can be answered afterwards. With
+---`debug` the same record is also reported -- after the pick has finished,
+---never while the hints are up: a multi-line message there would raise a
+---hit-enter prompt that swallows the very key the picker is waiting for.
+---@param opts? Ui.WindowPicker.Opts
+---@return integer|nil
+function M.pick(opts)
+  opts = vim.tbl_extend("force", cfg, opts or {})
+  ensure_groups()
+
+  ---@type Ui.WindowPicker.Call
+  local call = {
+    time = os.time(),
+    traceback = debug.traceback("", 2), -- level 1 is this function, 2 its caller
+    candidates = 0,
+    prompted = false,
+  }
+  last_call = call
+
+  local picked = run_pick(opts, call)
+  call.picked = picked
+
+  if opts.debug then
+    notify.info(
+      ("pick(): %d candidate(s), prompted=%s, picked=%s%s"):format(
+        call.candidates,
+        tostring(call.prompted),
+        tostring(picked),
+        call.traceback
+      )
+    )
+  end
+  return picked
 end
 
 ---Override the shipped defaults. Merged, not replaced.

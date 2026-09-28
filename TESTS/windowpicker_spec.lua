@@ -155,13 +155,14 @@ describe("ui.windowpicker", function()
     end
   end)
 
-  it("records the last call, including whether it prompted", function()
+  it("records the last call, including whether it prompted and what it picked", function()
     vim.cmd("only")
     assert.is_nil(windowpicker.pick()) -- one window, excluded as current: nothing to pick
     local call = windowpicker.last_call()
     assert.is_not_nil(call)
     assert.equals(0, call.candidates)
     assert.is_false(call.prompted)
+    assert.is_nil(call.picked)
     assert.is_truthy(call.traceback:find("stack traceback", 1, true))
 
     local origin = vim.api.nvim_get_current_win()
@@ -169,8 +170,83 @@ describe("ui.windowpicker", function()
     vim.api.nvim_set_current_win(origin)
     windowpicker.setup({ autoselect_one = false })
     feed("F")
-    windowpicker.pick()
-    assert.is_true(windowpicker.last_call().prompted)
+    local picked = windowpicker.pick()
+    call = windowpicker.last_call()
+    assert.equals(1, call.candidates) -- origin is excluded as "current"
+    assert.is_true(call.prompted)
+    assert.equals(picked, call.picked)
+  end)
+
+  it(
+    "records the call before counting windows, so a raising pick still leaves it behind",
+    function()
+      vim.cmd("only")
+      windowpicker.pick() -- leaves a record with 0 candidates
+      local before = windowpicker.last_call()
+      local real = vim.api.nvim_tabpage_list_wins
+      vim.api.nvim_tabpage_list_wins = function()
+        error("boom")
+      end
+      local ok = pcall(windowpicker.pick)
+      vim.api.nvim_tabpage_list_wins = real
+      assert.is_false(ok)
+      assert.are_not.equal(before, windowpicker.last_call()) -- a fresh record, not the stale one
+    end
+  )
+
+  describe("debug", function()
+    local real_notify, messages, floats_at_report
+
+    before_each(function()
+      messages, floats_at_report = {}, nil
+      real_notify = vim.notify
+      vim.notify = function(msg)
+        messages[#messages + 1] = msg
+        if msg:find("pick():", 1, true) then
+          local n = 0
+          for _, win in ipairs(vim.api.nvim_list_wins()) do
+            if vim.api.nvim_win_get_config(win).relative ~= "" then
+              n = n + 1
+            end
+          end
+          floats_at_report = n
+        end
+      end
+    end)
+
+    after_each(function()
+      vim.notify = real_notify
+    end)
+
+    it("stays silent unless enabled", function()
+      vim.cmd("only")
+      windowpicker.pick()
+      for _, msg in ipairs(messages) do
+        assert.is_nil(msg:find("pick():", 1, true))
+      end
+    end)
+
+    it("reports the traceback only after the hints are gone", function()
+      vim.cmd("only")
+      local origin = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit")
+      vim.api.nvim_set_current_win(origin)
+      windowpicker.setup({ autoselect_one = false, debug = true })
+
+      feed("F")
+      windowpicker.pick()
+
+      local report
+      for _, msg in ipairs(messages) do
+        if msg:find("pick():", 1, true) then
+          report = msg
+        end
+      end
+      assert.is_not_nil(report)
+      assert.is_truthy(report:find("prompted=true", 1, true))
+      assert.is_truthy(report:find("stack traceback", 1, true))
+      assert.equals(0, floats_at_report) -- no hint overlay left while the report is emitted
+    end)
   end)
 
   it("setup() overrides the shipped defaults", function()
