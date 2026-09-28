@@ -427,6 +427,17 @@ describe("ui.kit.chip", function()
 
       vim.api.nvim_del_augroup_by_id(group)
       vim.cmd("tabclose")
+      -- `tabclose` only closes windows on the tab it just left -- if the
+      -- guard actually regressed, the reentrant open can land the leaked
+      -- duplicate on the ORIGINAL tab instead, which survives `tabclose`
+      -- and then breaks the next test with an unrelated-looking failure.
+      -- Sweep every remaining editor-relative float unconditionally so a
+      -- failure here never bleeds into later tests.
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_config(w).relative == "editor" then
+          pcall(vim.api.nvim_win_close, w, true)
+        end
+      end
 
       if not ok then
         error(err, 0)
