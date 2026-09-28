@@ -545,6 +545,38 @@ describe("ui.kit.chip", function()
     assert.equals(0xffffff, normal_hl(win).fg, "still reverted on its own schedule afterwards")
   end)
 
+  it("a window replacement mid-pulse ends pulse_active too, not just the pulse colour", function()
+    -- Regression, found by a fourth round of adversarial review: open_window()
+    -- always repaints the *steady* colour when a chip's window gets
+    -- (re)created (e.g. ensure_current_tab()'s tab-switch reopen) -- by
+    -- design, so a reopened chip is never stuck showing a stale pulse
+    -- colour. But it left `entry.pulse_active` untouched, still `true`,
+    -- even though the pulse's visual effect had just ended right there --
+    -- so a legitimate, unrelated colour change (a plain mount(id,
+    -- {color=...}), or a ColorScheme re-tint) made afterwards, but still
+    -- within the original pulse's duration_ms, was wrongly deferred: it
+    -- updated entry.color but M.refresh()'s colour reconciliation kept
+    -- skipping it (pulse_active still read `true`) until the stale pulse's
+    -- own callback eventually happened to catch up.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 500 })
+
+    vim.cmd("tabnew") -- real TabEnter -> ensure_current_tab() reopens the chip here
+    local win_after = assert(chip_window(), "chip window found on the new tab")
+    assert.equals(0xffffff, normal_hl(win_after).fg, "reopened showing the steady colour")
+
+    -- A brand new, unrelated colour change, still well inside the original
+    -- pulse's 500ms window -- must apply immediately, not wait for it.
+    chip.mount({ id = "spec_a", color = { fg = "#00ff00", bg = "#000000" } })
+    assert.equals(
+      0x00ff00,
+      normal_hl(win_after).fg,
+      "the new colour applied right away, not deferred behind the ended pulse"
+    )
+
+    vim.cmd("tabclose")
+  end)
+
   it("a left-anchored chip sits flush against the screen edge (col 0)", function()
     chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
     local win = assert(chip_window(), "chip window found")
