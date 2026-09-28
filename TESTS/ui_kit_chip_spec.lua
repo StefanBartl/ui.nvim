@@ -252,6 +252,39 @@ describe("ui.kit.chip", function()
     assert.equals(before.bg, after.bg, "still blends with the window background after ColorScheme")
   end)
 
+  it("VimEnter re-settles colour once startup finishes, deferred not synchronous", function()
+    -- Regression (Issue 1, startup pop-in): a chip mounted before VimEnter
+    -- (e.g. during a plugin's `lazy = false` spec loading) can carry a
+    -- colour/position resolved from not-yet-settled startup state, and
+    -- previously only reached its correct final state whenever some
+    -- unrelated later event happened to call refresh() -- no defined bound,
+    -- reading as an arbitrary pop-in a few seconds after startup.
+    -- ensure_hooks() now re-resolves every mounted chip's colour (and
+    -- reflows it) once on VimEnter, wrapped in vim.schedule() so it runs
+    -- after whatever else the VimEnter event itself still has queued -- not
+    -- synchronously inside the autocmd, which could still be too early.
+    vim.api.nvim_set_hl(0, "SpecSettleGroup", { fg = "#111111" })
+    chip.mount({ id = "spec_a", text = "x", color = "SpecSettleGroup" })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(0x111111, normal_hl(win).fg)
+
+    -- Change what the colour source now resolves to -- nothing here calls
+    -- refresh(), so only the settle pass can pick this up.
+    vim.api.nvim_set_hl(0, "SpecSettleGroup", { fg = "#222222" })
+
+    vim.api.nvim_exec_autocmds("VimEnter", {})
+    assert.equals(
+      0x111111,
+      normal_hl(win).fg,
+      "not re-settled synchronously inside the VimEnter autocmd"
+    )
+
+    vim.wait(200, function()
+      return normal_hl(win).fg == 0x222222
+    end, 10)
+    assert.equals(0x222222, normal_hl(win).fg, "re-settled once the scheduled tick ran")
+  end)
+
   it("two ids that used to sanitize the same never bleed colour (no group collision)", function()
     -- Regression: hl_group_name() used to replace every non-alnum/underscore
     -- byte with "_", so "a.b" and "a_b" collided onto the same derived
@@ -349,6 +382,37 @@ describe("ui.kit.chip", function()
     )
 
     vim.cmd("tabclose")
+  end)
+
+  it("pulse still reverts correctly when the chip's window is replaced mid-pulse", function()
+    -- Regression: M.pulse()'s deferred revert callback used to guard on
+    -- `e.win == win`, the window handle captured when the pulse started. If
+    -- the chip's window closed and reopened (e.g. a hide/show cycle driven
+    -- by a text change, the same shape ":LastSession"'s refresh()-then-
+    -- pulse() sequence can produce) before `duration_ms` elapsed, that
+    -- captured handle no longer matched the chip's *current* window and the
+    -- guard silently skipped the revert. Reverting onto whatever window is
+    -- current for the id (not the one the pulse started on) fixes it.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 60 })
+
+    -- Replace the window mid-pulse: hide (closes it) then show again (opens
+    -- a brand new one).
+    chip.mount({ id = "spec_a", text = "" })
+    chip.mount({ id = "spec_a", text = "x" })
+    local win_after = assert(chip_window(), "chip window found after replacement")
+
+    -- Past the original pulse's duration_ms: its deferred callback has now
+    -- fired against the *replacement* window and must not error or leave it
+    -- showing anything but the configured colour.
+    vim.wait(200, function()
+      return normal_hl(win_after).fg == 0xffffff
+    end, 10)
+    assert.equals(
+      0xffffff,
+      normal_hl(win_after).fg,
+      "reverted to the configured colour on the replacement window"
+    )
   end)
 
   it("a left-anchored chip sits flush against the screen edge (col 0)", function()
