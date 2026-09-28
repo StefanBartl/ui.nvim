@@ -369,6 +369,25 @@ describe("ui.kit.chip", function()
     vim.o.laststatus = saved
   end)
 
+  it("does not count the chip's own float as a second real window (laststatus = 1)", function()
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 1
+    -- Precondition: exactly one real window before mounting -- otherwise
+    -- this wouldn't exercise the bug at all (a genuine second split DOES
+    -- legitimately trip laststatus=1's statusline).
+    assert.equals(1, #vim.api.nvim_tabpage_list_wins(0))
+
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-right", shape = "rect" })
+    local win = assert(chip_window(), "chip window found")
+    local row = vim.api.nvim_win_get_config(win).row
+    -- The chip's own float must not count toward laststatus=1's "more than
+    -- one window" check -- real Neovim draws no statusline for a lone real
+    -- window here, so the chip may sit flush against the cmdline, same as
+    -- the laststatus=0 case above.
+    assert.equals(vim.o.lines - vim.o.cmdheight - 1, row)
+    vim.o.laststatus = saved
+  end)
+
   it(
     "a tab-switch reopen doesn't leak a duplicate window when a consumer's "
       .. "WinClosed/WinNew autocmd calls refresh() reentrantly",
