@@ -108,7 +108,7 @@
 ---@field bufwidth? integer # exact buffer-chip width in columns; unset (default) computes one from the available space and buffer count instead
 ---@field bufwidth_min? integer # lower clamp for the auto-computed width; default 12. Ignored when `bufwidth` is set
 ---@field bufwidth_max? integer # upper clamp for the auto-computed width; default 24. Ignored when `bufwidth` is set
----@field style? string # chip-boundary look, resolved through `ui.tabline.styles` -- "rounded" (default), "square", "divider", or a name a host registered via `require("ui.tabline.styles").register()`. An unrecognized/unset value falls back to "rounded"
+---@field style? string # chip-boundary look, resolved through `ui.tabline.styles` -- "rounded_chip" (default), "chip", "divider", or a name a host registered via `require("ui.tabline.styles").register()`. Old names ("rounded"/"square") still resolve. An unrecognized/unset value falls back to "rounded_chip"
 ---@field tree_offset_ft? string # filetype the "tree_offset" module reserves space for; default "filetree" (filetree.nvim)
 ---@field context_menu? boolean # right-click on a buffer chip opens its tab menu (`ui.tabline.menu`); default true, `false` leaves a right click behaving like a left one
 ---@field drag? boolean # press-and-drag a buffer chip along the bar to reorder it (`ui.tabline.drag`); default true

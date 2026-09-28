@@ -135,9 +135,10 @@ local styles = require("ui.tabline.styles")
 
 --- Decorate chip boundaries per `cfg.style`, mutating `chips` in place --
 --- resolved through `ui.tabline.styles`'s registry (the three shipped
---- looks -- "rounded" default, "square", "divider" -- plus whatever a host
---- registered under its own name). An unrecognized or unset name falls
---- back to "rounded" rather than silently rendering unstyled -- same
+--- looks -- "rounded_chip" default, "chip", "divider" -- plus whatever a
+--- host registered under its own name; the old "rounded"/"square" names
+--- still resolve, as aliases). An unrecognized or unset name falls back to
+--- "rounded_chip" rather than silently rendering unstyled -- same
 --- degrade-not-crash contract `get_separators()` already uses for the
 --- statusline's own `separator_style`. See `ui.tabline.styles`'s own doc
 --- comment for what each shipped look actually does.
@@ -148,7 +149,7 @@ local styles = require("ui.tabline.styles")
 ---@param flush_right boolean # whether the visible run actually reaches the right edge of its budget
 ---@return nil
 local function apply_boundaries(chips, chip_bufs, cur, style, flush_right)
-  local style_fn = styles.resolve(style) or styles.resolve("rounded")
+  local style_fn = styles.resolve(style) or styles.resolve("rounded_chip")
   style_fn(chips, chip_bufs, cur, flush_right)
 end
 
