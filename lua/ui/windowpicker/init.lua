@@ -238,11 +238,14 @@ local function run_pick(opts, call)
   local ok, code = pcall(vim.fn.getchar)
   autocmd.delete(focus_hook)
 
-  -- The user's own key can win the race against the queued `<Esc>` (getchar()
-  -- then returned that key and the `<Esc>` is still pending): swallow that one
-  -- `<Esc>` so it doesn't leak, and treat the pick as cancelled either way --
-  -- the hints described a layout the user is no longer in.
-  if call.focus_lost and code ~= 27 and vim.fn.getchar(1) == 27 then
+  -- Something else can win the race against the queued `<Esc>` and be what
+  -- getchar() actually returns -- the user's own key, or even the user's own
+  -- literal `<Esc>` pressed to cancel manually at that exact moment. Either
+  -- way a second, still-pending `<Esc>` would leak to whatever just took
+  -- focus. `code == 27` does NOT mean "nothing is left to drain": that 27
+  -- could be the user's own, with the hook's own `<Esc>` still queued right
+  -- behind it. Check the queue itself instead of trying to infer it from `code`.
+  if call.focus_lost and vim.fn.getchar(1) == 27 then
     pcall(vim.fn.getchar)
   end
 
@@ -275,10 +278,12 @@ end
 
 ---Pick a window by letter.
 ---
----Returns the picked window id; `nil` when there was nothing to pick from,
----the pick was cancelled (`<C-c>`, or any key that isn't one of the hint
----letters), or exactly one window qualified and `autoselect_one` returned
----it without prompting.
+---Returns the picked window id: directly, without prompting, whenever
+---exactly one window qualifies and `autoselect_one` allowed it; otherwise
+---once a hint letter is pressed. `nil` when there was nothing to pick from,
+---the pick was cancelled (`<C-c>`, any key that isn't one of the hint
+---letters, or focus moving to another window while the hints were up), or
+---the window `autoselect_one` would have returned closed before it could.
 ---
 ---Every call is recorded first thing (`M.last_call()`), including its caller's
 ---traceback, so "who opened the picker?" can be answered afterwards. With
