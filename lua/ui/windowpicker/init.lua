@@ -283,7 +283,8 @@ end
 ---once a hint letter is pressed. `nil` when there was nothing to pick from,
 ---the pick was cancelled (`<C-c>`, any key that isn't one of the hint
 ---letters, or focus moving to another window while the hints were up), or
----the window `autoselect_one` would have returned closed before it could.
+---the matched window -- the one `autoselect_one` would have returned, or the
+---one whose hint letter was pressed -- had already closed before it could.
 ---
 ---Every call is recorded first thing (`M.last_call()`), including its caller's
 ---traceback, so "who opened the picker?" can be answered afterwards. With
