@@ -1959,6 +1959,71 @@ describe("ui.context", function()
     )
 
     it(
+      "layout = 'row' (default) under a right anchor never left-pads even when forced truncation "
+        .. "lands one column short at a double-width character",
+      function()
+        -- Regression: right/center alignment only makes sense for `"stack"`
+        -- (several lines to line up under each other) -- `"row"` always
+        -- draws exactly one line, so there is nothing to align it under.
+        -- The alignment code used to run for `"row"` too, and
+        -- `trunc_to_width` can legitimately return a string one column
+        -- short of the target width when the forced cut lands right after
+        -- a double-width character -- which the old code then "corrected"
+        -- with a spurious 1-column leading pad, shifting the whole
+        -- breadcrumb right for no reason.
+        local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        vim.cmd("new")
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_get_current_buf()
+
+        -- Box width 10; the chip is `<left-cap> <text> <right-cap>`, so
+        -- pick `text` so the cut lands exactly after the cap + space +
+        -- N ASCII chars (width 1 each), with the next character (a CJK
+        -- glyph, width 2) too wide to fit -- `trunc_to_width` then stops
+        -- one column short of the box, whatever the caps' own width is.
+        local box_width = 10
+        local cap_w = vim.fn.strwidth(vim.fn.nr2char(0xE0B6))
+        local n = box_width - 2 - cap_w
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+          "# " .. string.rep("x", n) .. "中" .. string.rep("y", 5),
+          "",
+          "text",
+        })
+        vim.bo[buf].filetype = "markdown"
+        vim.bo[buf].buftype = ""
+        vim.api.nvim_win_set_height(win, 6)
+
+        context.setup({
+          style = "chips",
+          position = {
+            anchor = "top-right",
+            col = vim.api.nvim_win_get_width(win) - box_width,
+          },
+        })
+        context.enable()
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 2, lnum = 3, col = 0 })
+        end)
+        local shown = context.refresh(win)
+        assert.equals(1, shown)
+        local lines = overlay_lines(win)
+        assert.equals(1, #lines)
+        -- Confirms the forced cut really did land one column short, i.e.
+        -- this test actually exercises the edge case it claims to.
+        assert.equals(box_width - 1, vim.fn.strwidth(lines[1]))
+        assert.equals(
+          vim.fn.nr2char(0xE0B6),
+          vim.fn.strcharpart(lines[1], 0, 1),
+          "the default 'row' breadcrumb must never be left-padded: " .. lines[1]
+        )
+      end
+    )
+
+    it(
       "resizes an existing float for new content, instead of staying stuck at the first draw's size",
       function()
         local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
