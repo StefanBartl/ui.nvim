@@ -460,6 +460,50 @@ describe("ui.kit.chip", function()
     end
   )
 
+  it("a stale pulse from an unmounted-then-remounted id doesn't cut the new pulse short", function()
+    -- Regression, found by a second round of adversarial review of the
+    -- generation-counter fix just above: the counter lives on the
+    -- per-id `entry` table, but M.unmount(id) discards that table
+    -- (`chips[id] = nil`) without cancelling its still-pending pulse
+    -- timer, and a subsequent M.mount(id, ...) allocates a brand-new
+    -- entry whose OWN counter restarts from scratch. A stale callback
+    -- from a pulse on the old, orphaned entry can then land on the same
+    -- generation number as the new entry's own first pulse purely by
+    -- numeric coincidence, and (since the old fix only checked the
+    -- generation counter, not which entry it belongs to) wrongly revert
+    -- it early. Capturing the entry TABLE itself, and requiring
+    -- `chips[id]` to still point at that exact table, closes the gap: a
+    -- callback from an unmounted entry can never match again, no matter
+    -- what its generation reads.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 40 })
+
+    -- Tear the chip down and remount it under the SAME id while pulse 1
+    -- is still pending -- a brand-new entry table, generation reset.
+    chip.unmount("spec_a")
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    local win_after = assert(chip_window(), "chip window found after remount")
+
+    -- Its own first pulse also starts at generation 1 -- the exact
+    -- numeric collision with pulse 1's stale callback.
+    chip.pulse("spec_a", { color = { fg = "#00ff00", bg = "#000000" }, duration_ms = 200 })
+    assert.equals(0x00ff00, normal_hl(win_after).fg, "second pulse colour applied immediately")
+
+    vim.wait(90, function()
+      return normal_hl(win_after).fg ~= 0x00ff00
+    end, 10)
+    assert.equals(
+      0x00ff00,
+      normal_hl(win_after).fg,
+      "pulse 2 still showing -- not cut short by pulse 1's stale, now-orphaned revert"
+    )
+
+    vim.wait(300, function()
+      return normal_hl(win_after).fg == 0xffffff
+    end, 10)
+    assert.equals(0xffffff, normal_hl(win_after).fg, "pulse 2 reverted on its own schedule")
+  end)
+
   it("a left-anchored chip sits flush against the screen edge (col 0)", function()
     chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
     local win = assert(chip_window(), "chip window found")
