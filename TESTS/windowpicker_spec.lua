@@ -249,6 +249,55 @@ describe("ui.windowpicker", function()
     end)
   end)
 
+  it("cancels the pick when another window takes focus while the hints are up", function()
+    vim.cmd("only")
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    vim.api.nvim_set_current_win(origin)
+    windowpicker.setup({ autoselect_one = false })
+
+    local intruder
+    vim.defer_fn(function()
+      -- Something async opening a focused float (a dashboard whose scan just
+      -- finished): no key is fed here, so getchar() only returns because the
+      -- picker cancels itself.
+      intruder = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
+        relative = "editor",
+        row = 1,
+        col = 1,
+        width = 10,
+        height = 3,
+      })
+    end, 10)
+    -- Safety net so a broken cancel fails the assertion instead of hanging.
+    vim.defer_fn(function()
+      vim.api.nvim_feedkeys("Z", "n", false)
+    end, 400)
+
+    assert.is_nil(windowpicker.pick())
+    assert.is_true(windowpicker.last_call().focus_lost)
+    assert.is_true(windowpicker.last_call().prompted)
+    assert.equals(intruder, vim.api.nvim_get_current_win()) -- focus stays where it went
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local cfg = vim.api.nvim_win_get_config(win)
+      if cfg.relative ~= "" then
+        assert.equals(intruder, win) -- every hint overlay is gone, only the intruder floats
+      end
+    end
+    vim.api.nvim_win_close(intruder, true)
+  end)
+
+  it("leaves focus_lost false for a normal pick", function()
+    vim.cmd("only")
+    local origin = vim.api.nvim_get_current_win()
+    vim.cmd("vsplit")
+    vim.api.nvim_set_current_win(origin)
+    windowpicker.setup({ autoselect_one = false })
+    feed("F")
+    windowpicker.pick()
+    assert.is_false(windowpicker.last_call().focus_lost)
+  end)
+
   it("setup() overrides the shipped defaults", function()
     windowpicker.setup({ chars = "AB" })
     assert.equals("AB", windowpicker.config().chars)

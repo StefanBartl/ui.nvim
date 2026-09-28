@@ -15,6 +15,7 @@
 --- `lib.nvim.window.make_scratch`, the same primitive every other floating
 --- overlay in this ecosystem uses) sidesteps that fight entirely.
 
+local autocmd = require("lib.nvim.bindings.autocmd")
 local window = require("lib.nvim.window")
 local notify = require("lib.nvim.notify").create("[ui.windowpicker]")
 
@@ -59,6 +60,7 @@ local HINT_WIDTH = 3
 ---@field candidates integer      Eligible windows found (0 until they were counted)
 ---@field prompted boolean        Whether at least one hint was actually shown
 ---@field picked integer|nil      The window `pick()` returned, once it finished
+---@field focus_lost boolean      The pick was cancelled because another window took focus
 
 ---What the most recent `M.pick()` call looked like. Kept unconditionally
 ---(one small table per call) so "who just opened the picker?" can be
@@ -207,7 +209,26 @@ local function run_pick(opts, call)
   call.prompted = #overlays > 0
   vim.cmd.redraw()
 
+  -- getchar() keeps the event loop running, so something async can open a
+  -- window with `enter = true` while the hints are up (a dashboard whose scan
+  -- just finished, say). The hints then describe a layout the user is no
+  -- longer in, and the keystroke they type next would be swallowed by the
+  -- picker instead of reaching the window they are looking at. Cancel the
+  -- pick instead: `<Esc>` is what unblocks getchar() and reads as "no hint".
+  local origin = vim.api.nvim_get_current_win()
+  local focus_hook = autocmd.create(
+    "WinEnter",
+    function()
+      if vim.api.nvim_get_current_win() ~= origin then
+        call.focus_lost = true
+        vim.api.nvim_input("<Esc>")
+      end
+    end,
+    { record = false, desc = "ui.windowpicker: cancel the pick when another window takes focus" }
+  )
+
   local ok, code = pcall(vim.fn.getchar)
+  autocmd.delete(focus_hook)
 
   for _, overlay in ipairs(overlays) do
     if vim.api.nvim_win_is_valid(overlay) then
@@ -260,6 +281,7 @@ function M.pick(opts)
     traceback = debug.traceback("", 2), -- level 1 is this function, 2 its caller
     candidates = 0,
     prompted = false,
+    focus_lost = false,
   }
   last_call = call
 
@@ -268,10 +290,11 @@ function M.pick(opts)
 
   if opts.debug then
     notify.info(
-      ("pick(): %d candidate(s), prompted=%s, picked=%s%s"):format(
+      ("pick(): %d candidate(s), prompted=%s, picked=%s, focus_lost=%s%s"):format(
         call.candidates,
         tostring(call.prompted),
         tostring(picked),
+        tostring(call.focus_lost),
         call.traceback
       )
     )
