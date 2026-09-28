@@ -1232,9 +1232,29 @@ local function draw_chips(win, buf, entries)
   end
   local col, width = resolve_col_width(win, natural_width)
 
+  -- `layout = "stack"` gives every entry its own line, each sized to its
+  -- own content -- so a box anchored on the right/center would otherwise
+  -- leave shorter entries hugging the box's left edge instead of lining up
+  -- under the widest one. Pad the short side with spaces (and shift that
+  -- line's marks along with it) so every line fills `width` on the anchor's
+  -- pinned side. `"row"`/`"full"`/`"left"` boxes are already exactly as
+  -- wide as their one line, so `pad` comes out 0 and this is a no-op there.
   local lines, byte_lens = {}, {}
   for i, l in ipairs(raw_lines) do
-    lines[i] = vim.fn.strwidth(l) > width and trunc_to_width(l, width) or l
+    local line = vim.fn.strwidth(l) > width and trunc_to_width(l, width) or l
+    local pad = width - vim.fn.strwidth(line)
+    if pad > 0 and (anchor.h == "right" or anchor.h == "center") then
+      local lead = anchor.h == "right" and pad or math.floor(pad / 2)
+      if lead > 0 then
+        local prefix = string.rep(" ", lead)
+        line = prefix .. line
+        for _, m in ipairs(raw_marks[i]) do
+          m[1] = m[1] + lead
+          m[2] = m[2] + lead
+        end
+      end
+    end
+    lines[i] = line
     byte_lens[i] = #lines[i]
   end
 

@@ -2090,6 +2090,69 @@ describe("ui.context", function()
       end
     end)
 
+    it(
+      "layout = 'stack' with anchor 'top-right' right-aligns a shorter chip under a wider one",
+      function()
+        -- Regression: a compact right/center anchor sized the box to the
+        -- widest stacked chip, but every line still started at column 0 of
+        -- that box -- a shorter chip hugged the box's left edge instead of
+        -- lining up flush with the wider one's right edge.
+        local has_markdown_parser = pcall(vim.treesitter.language.add, "markdown")
+        if not has_markdown_parser then
+          pending("no Markdown parser available")
+          return
+        end
+        vim.cmd("new")
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+          "# Roadmap",
+          "",
+          "## Cdx",
+          "",
+          "text",
+        })
+        vim.bo[buf].filetype = "markdown"
+        vim.bo[buf].buftype = ""
+
+        context.setup({
+          style = "chips",
+          chips = { layout = "stack" },
+          position = { anchor = "top-right" },
+        })
+        context.enable()
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = 4, lnum = 5, col = 0 })
+        end)
+        local shown = context.refresh(win)
+        assert.equals(2, shown)
+        local wcfg = vim.api.nvim_win_get_config((context.float(win)))
+        local lines = overlay_lines(win)
+        assert.equals(2, #lines)
+
+        local roadmap_line, cdx_line
+        for _, l in ipairs(lines) do
+          if l:find("Roadmap", 1, true) then
+            roadmap_line = l
+          elseif l:find("Cdx", 1, true) then
+            cdx_line = l
+          end
+        end
+        assert.truthy(roadmap_line, "expected a 'Roadmap' chip line")
+        assert.truthy(cdx_line, "expected a 'Cdx' chip line")
+
+        -- Both lines now fill the box exactly -- the wider one naturally,
+        -- the narrower one padded on its left -- so their chip glyphs end
+        -- flush with the same right-hand column.
+        assert.equals(wcfg.width, vim.fn.strwidth(roadmap_line))
+        assert.equals(wcfg.width, vim.fn.strwidth(cdx_line))
+        assert.truthy(
+          cdx_line:match("^ "),
+          "the narrower chip must be left-padded to right-align: " .. cdx_line
+        )
+      end
+    )
+
     it("shape = 'classic' draws a heading entry with no background highlight", function()
       -- Regression: chip_segment() used to reuse UiContextH<level> (a `link`
       -- to the colorscheme's own @markup.heading.<level>.markdown group)
