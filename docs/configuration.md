@@ -93,7 +93,9 @@ shorter entry sharing the same line the way `"row"`'s single shared line
 would). `chips.shape` is `"rounded"` (default) or `"rect"` (a flat coloured
 block, no caps). Both apply to either anchor style; `"stack"` with a compact
 anchor sizes the box to its widest chip, same as `"row"` sizes to its one
-line's width.
+line's width -- and a `"top-right"`/`"bottom-right"`/`"*-center"` anchor then
+right-aligns (respectively centres) each shorter chip under the widest one,
+instead of leaving it hugging the box's left edge.
 
 A heading's chip colour comes from its own `@markup.heading.N.markdown`
 group (`UiContextChipH1`..`6`, plus a `...Cap` variant for the rounded caps,
