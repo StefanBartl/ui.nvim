@@ -21,6 +21,11 @@
 --- there's nothing to show" convention `sessions.statusline.component()`
 --- already uses, so wiring one straight into `text` just works.
 ---
+--- `text` may embed `\n` to stack several lines in one box (casedesk.nvim's
+--- case pin does this for "case number, title on the line below") -- the
+--- box's height follows the line count, and its width follows the widest
+--- line, not a fixed one-row assumption.
+---
 --- Colour has two independent modes, both accepted as `opts.color`: a
 --- highlight-group name (its `fg` is tinted into the window background --
 --- `CHIP_TINT`, the same mix `ui.context`'s chip style uses, so it reads as
@@ -187,6 +192,25 @@ local function resolve_text(v)
 end
 
 ---@internal
+---A chip's resolved text may embed `\n` to stack several lines in one box
+---(casedesk.nvim's pin does this for "case number, title on the line
+---below") -- split into the list `nvim_buf_set_lines` wants. Always at
+---least one line, even for `""`, so a caller never has to special-case an
+---empty chip's line count.
+---@param text string
+---@return string[]
+local function split_lines(text)
+  if text == "" then
+    return { "" }
+  end
+  local lines = {}
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    lines[#lines + 1] = line
+  end
+  return lines
+end
+
+---@internal
 ---@param v boolean|fun():boolean|nil
 ---@return boolean|nil  nil = "not set", let the caller derive it from the text instead
 local function resolve_visible(v)
@@ -233,10 +257,10 @@ end
 ---@param entry table
 local function open_window(entry)
   local surf = surface.open({
-    lines = { entry.text },
+    lines = entry.lines,
     theme = preset_for_shape(entry.shape),
     width = entry.width,
-    height = 1,
+    height = entry.height,
     relative = "editor",
     row = 0,
     col = 0,
@@ -253,6 +277,7 @@ local function open_window(entry)
   entry.applied_border = entry.border
   entry.applied_text = entry.text
   entry.applied_width = entry.width
+  entry.applied_height = entry.height
   surf:on_close(function()
     if chips[entry.id] == entry then
       entry.surf = nil
@@ -332,7 +357,8 @@ local function reflow()
     local status_rows = edge.v == "bottom" and bottom_statusline_rows() or 0
     local offset = MARGIN
     for _, entry in ipairs(list) do
-      local box_h = entry.border == "none" and 1 or 3
+      local content_h = entry.height or 1
+      local box_h = entry.border == "none" and content_h or (content_h + 2)
       local row = edge.v == "top" and offset
         or math.max(0, vim.o.lines - vim.o.cmdheight - status_rows - offset - box_h + 1)
       -- Flush against the left edge (col 0), not inset by MARGIN -- a
@@ -457,7 +483,13 @@ function M.refresh(id)
   end
 
   entry.text = text
-  entry.width = vim.fn.strdisplaywidth(text) + 2
+  entry.lines = split_lines(text)
+  entry.height = #entry.lines
+  local width = 0
+  for _, line in ipairs(entry.lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(line))
+  end
+  entry.width = width + 2
   entry.border = preset_for_shape(entry.shape) == "minimal" and "none" or "rounded"
 
   if not entry.win or not api.nvim_win_is_valid(entry.win) then
@@ -470,7 +502,7 @@ function M.refresh(id)
     -- when they differ from what is already showing -- otherwise every one
     -- of those events would repaint a chip whose rendered output never moved.
     if entry.applied_text ~= text then
-      entry.surf:set_lines({ text })
+      entry.surf:set_lines(entry.lines)
       entry.applied_text = text
     end
 
@@ -479,6 +511,11 @@ function M.refresh(id)
       wconfig = wconfig or {}
       wconfig.width = entry.width
       entry.applied_width = entry.width
+    end
+    if entry.applied_height ~= entry.height then
+      wconfig = wconfig or {}
+      wconfig.height = entry.height
+      entry.applied_height = entry.height
     end
     if entry.applied_border ~= entry.border then
       wconfig = wconfig or {}
