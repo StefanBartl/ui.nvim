@@ -410,16 +410,27 @@ describe("ui.kit.chip", function()
       chip.mount({ id = "spec_a", text = "x" })
       vim.cmd("tabnew") -- real TabEnter -> ensure_current_tab() closes+reopens the chip here
 
-      local wins = {}
-      for _, w in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_get_config(w).relative == "editor" then
-          wins[#wins + 1] = w
+      -- The assertion itself runs inside a pcall so the augroup/tab cleanup
+      -- below always happens, even when it fails -- which is exactly when a
+      -- regression of the guard this test exists to catch would otherwise
+      -- leak a pattern-less WinClosed/WinNew autocmd and an orphaned tab
+      -- into every test that runs after this one.
+      local ok, err = pcall(function()
+        local wins = {}
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_config(w).relative == "editor" then
+            wins[#wins + 1] = w
+          end
         end
-      end
-      assert.equals(1, #wins, "exactly one chip window survives the reopen, no leaked duplicate")
+        assert.equals(1, #wins, "exactly one chip window survives the reopen, no leaked duplicate")
+      end)
 
       vim.api.nvim_del_augroup_by_id(group)
       vim.cmd("tabclose")
+
+      if not ok then
+        error(err, 0)
+      end
     end
   )
 
