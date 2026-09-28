@@ -103,6 +103,30 @@ describe("ui.kit.chip", function()
     assert.is_false(vim.tbl_contains(chip.active(), "spec_a"))
   end)
 
+  -- Regression: resolve_visible() used the classic `a and b or c` idiom
+  -- (`ok and out and true or (ok and false or nil)`), which cannot express
+  -- a `visible` PROVIDER (a function, not a literal) returning `false` --
+  -- `ok and out` collapses to `false` the moment `out` is `false`, so the
+  -- whole expression always fell through to `nil` ("not set"), and
+  -- M.refresh()'s own text-derived fallback then re-showed the chip
+  -- regardless. A real consumer hit this live: sessions.nvim's chip
+  -- auto-hide timer flips its `visible = function() return X end` closure
+  -- to return `false` and calls refresh() -- with the bug, the chip never
+  -- actually hid, no matter how long `timeout_ms` allowed.
+  it("a visible PROVIDER (function) returning false wins over non-empty text", function()
+    chip.mount({
+      id = "spec_a",
+      text = "ignored",
+      visible = function()
+        return false
+      end,
+    })
+    assert.is_false(
+      vim.tbl_contains(chip.active(), "spec_a"),
+      "a visible() function returning false must hide the chip, same as a literal false"
+    )
+  end)
+
   it("updates the buffer content in place on refresh (no re-mount needed)", function()
     local text = "first"
     chip.mount({
