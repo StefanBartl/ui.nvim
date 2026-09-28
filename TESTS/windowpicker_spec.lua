@@ -381,7 +381,7 @@ describe("ui.windowpicker", function()
     it(
       "drains the leftover <Esc> when the user's own key winning the race is <Esc> itself",
       function()
-        local _, other = two_windows()
+        two_windows()
         local intruder
         vim.defer_fn(function()
           -- The user's own <Esc> is queued first, so getchar() returns 27 for
@@ -396,7 +396,6 @@ describe("ui.windowpicker", function()
         disarm()
 
         assert.is_nil(picked)
-        assert.are_not.equal(other, picked)
         assert.is_true(windowpicker.last_call().focus_lost)
         assert.equals(0, vim.fn.getchar(1)) -- the hook's own <Esc> was drained too, not leaked
         vim.api.nvim_win_close(intruder, true)
