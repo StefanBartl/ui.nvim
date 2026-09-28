@@ -111,6 +111,31 @@ describe("ui.windowpicker", function()
     assert.is_nil(windowpicker.pick())
   end)
 
+  it(
+    "excludes unfocusable windows by default, offers them with include_unfocusable_windows",
+    function()
+      vim.cmd("only")
+      local origin = vim.api.nvim_get_current_win()
+      local unfocusable = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), false, {
+        relative = "editor",
+        row = 1,
+        col = 1,
+        width = 10,
+        height = 3,
+        focusable = false,
+      })
+      vim.api.nvim_set_current_win(origin)
+
+      -- Excluded by default: the unfocusable float doesn't qualify, so nothing does.
+      assert.is_nil(windowpicker.pick())
+
+      windowpicker.setup({ include_unfocusable_windows = true })
+      assert.equals(unfocusable, windowpicker.pick()) -- autoselects: the only candidate now
+
+      vim.api.nvim_win_close(unfocusable, true)
+    end
+  )
+
   it("returns nil instead of a stale id when the target window closes during the wait", function()
     vim.cmd("only")
     local origin = vim.api.nvim_get_current_win()
@@ -334,7 +359,7 @@ describe("ui.windowpicker", function()
     end)
 
     it("stays cancelled and drains the <Esc> when the user's key wins the race", function()
-      local _, other = two_windows()
+      two_windows()
       local intruder
       vim.defer_fn(function()
         -- The user's letter is queued first, so getchar() returns it; the
@@ -348,11 +373,35 @@ describe("ui.windowpicker", function()
       disarm()
 
       assert.is_nil(picked) -- not `other`: the layout the letter referred to is stale
-      assert.are_not.equal(other, picked)
       assert.is_true(windowpicker.last_call().focus_lost)
       assert.equals(0, vim.fn.getchar(1)) -- the leftover <Esc> was swallowed, not leaked
       vim.api.nvim_win_close(intruder, true)
     end)
+
+    it(
+      "drains the leftover <Esc> when the user's own key winning the race is <Esc> itself",
+      function()
+        local _, other = two_windows()
+        local intruder
+        vim.defer_fn(function()
+          -- The user's own <Esc> is queued first, so getchar() returns 27 for
+          -- it -- indistinguishable by code alone from the hook's own <Esc>,
+          -- queued right after, which is still pending.
+          vim.api.nvim_input("<Esc>")
+          intruder = open_intruder()
+        end, 10)
+        local disarm = arm_safety_net()
+
+        local picked = windowpicker.pick()
+        disarm()
+
+        assert.is_nil(picked)
+        assert.are_not.equal(other, picked)
+        assert.is_true(windowpicker.last_call().focus_lost)
+        assert.equals(0, vim.fn.getchar(1)) -- the hook's own <Esc> was drained too, not leaked
+        vim.api.nvim_win_close(intruder, true)
+      end
+    )
   end)
 
   it("never offers lib.nvim's progress float as a target", function()
