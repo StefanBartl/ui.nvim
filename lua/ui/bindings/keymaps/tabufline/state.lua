@@ -103,9 +103,15 @@ end
 --- a documented, stable contract instead of reaching into that key
 --- directly -- see this file's own `vim.t`/`vim.NIL` warning above for why
 --- reaching in directly is a real hazard, not just a style preference.
+--- Empty for an invalid/closed tabpage, same as an unpinned one -- indexing
+--- `vim.t[tab]` directly would raise "Invalid tabpage id" instead, and
+--- `M.set_pinned_list_for_tab` right below already guards the same case.
 ---@param tab integer # tabpage handle, as `nvim_list_tabpages()` yields
 ---@return integer[]
 function M.pinned_bufs_for_tab(tab)
+  if not api.nvim_tabpage_is_valid(tab) then
+    return {}
+  end
   return vim.t[tab].ui_pinned or {}
 end
 
