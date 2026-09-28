@@ -95,6 +95,38 @@ function M.pinned_bufs()
   return vim.t.ui_pinned or {}
 end
 
+--- The pinned bufnrs for `tab` (any tabpage handle, not necessarily the
+--- current one) -- `M.pinned_bufs()` above, but explicitly tab-parametrized
+--- so a caller working across every tab at once (a session save, in
+--- particular) never has to switch tabs just to read pin state. A thin
+--- wrapper around `vim.t[tab].ui_pinned` so callers outside this module have
+--- a documented, stable contract instead of reaching into that key
+--- directly -- see this file's own `vim.t`/`vim.NIL` warning above for why
+--- reaching in directly is a real hazard, not just a style preference.
+---@param tab integer # tabpage handle, as `nvim_list_tabpages()` yields
+---@return integer[]
+function M.pinned_bufs_for_tab(tab)
+  return vim.t[tab].ui_pinned or {}
+end
+
+--- Replace `tab`'s entire pin list with `bufnrs` in one write -- a session
+--- restore's counterpart to `M.pinned_bufs_for_tab` above. Unlike
+--- `M.set_pinned`, this does not re-place anything in `vim.t.bufs`: a
+--- restore path is expected to have already resolved `bufnrs` from its own
+--- sidecar (dropping anything no longer valid) and to run after the
+--- buffer-order sidecar has already settled `vim.t.bufs` for that tab, so
+--- there is nothing here to reorder around. A no-op when `tab` is no longer
+--- a valid tabpage.
+---@param tab integer
+---@param bufnrs integer[]
+---@return nil
+function M.set_pinned_list_for_tab(tab, bufnrs)
+  if not api.nvim_tabpage_is_valid(tab) then
+    return
+  end
+  vim.t[tab].ui_pinned = bufnrs
+end
+
 --- Pin or unpin `bufnr` in the current tab, then re-place it to keep the
 --- invariant `move_buf_to`/`move_buf` (below) both uphold: pinned buffers
 --- always sit before unpinned ones in `vim.t.bufs`. Pinning moves `bufnr` to

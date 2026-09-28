@@ -449,5 +449,32 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       -- an unrelated valid buffer must read false regardless.
       assert.is_false(state.is_pinned(a))
     end)
+
+    describe("pinned_bufs_for_tab / set_pinned_list_for_tab", function()
+      it("reads the same tab's pins as pinned_bufs, by explicit tab handle", function()
+        local tab = vim.api.nvim_get_current_tabpage()
+        state.set_pinned(a, true)
+        assert.same(state.pinned_bufs(), state.pinned_bufs_for_tab(tab))
+      end)
+
+      it("is empty for a tab with nothing pinned", function()
+        local tab = vim.api.nvim_get_current_tabpage()
+        assert.same({}, state.pinned_bufs_for_tab(tab))
+      end)
+
+      it("replaces the whole pin list in one write, without touching vim.t.bufs", function()
+        local tab = vim.api.nvim_get_current_tabpage()
+        state.set_pinned(a, true) -- reorders vim.t.bufs to { a, b, c }
+        state.set_pinned_list_for_tab(tab, { b, c })
+        assert.same({ b, c }, state.pinned_bufs_for_tab(tab))
+        assert.same({ a, b, c }, vim.t.bufs) -- unchanged by the raw write above
+      end)
+
+      it("does nothing for an invalid tabpage, without throwing", function()
+        assert.has_no.errors(function()
+          state.set_pinned_list_for_tab(999999, { a })
+        end)
+      end)
+    end)
   end)
 end)
