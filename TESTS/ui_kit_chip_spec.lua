@@ -35,6 +35,16 @@ local function first_line(win)
 end
 
 ---@param win integer|nil
+---@return string[]
+local function all_lines(win)
+  if not win then
+    return {}
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+end
+
+---@param win integer|nil
 ---@return { fg?: integer, bg?: integer }
 local function normal_hl(win)
   if not win then
@@ -109,6 +119,38 @@ describe("ui.kit.chip", function()
     -- refresh() updates the existing window rather than closing/reopening it
     assert.equals(win, chip_window(), "same window reused")
     assert.equals("second", first_line(win))
+  end)
+
+  it("splits an embedded newline into a multi-line box", function()
+    chip.mount({ id = "spec_a", text = "AB-1234\nGrid stays red" })
+    local win = assert(chip_window(), "chip window found")
+    assert.same({ "AB-1234", "Grid stays red" }, all_lines(win))
+    assert.equals(2, vim.api.nvim_win_get_config(win).height)
+  end)
+
+  it("a multi-line chip's width follows its widest line", function()
+    chip.mount({ id = "spec_a", text = "short\na much longer second line" })
+    local win = assert(chip_window(), "chip window found")
+    local width = vim.api.nvim_win_get_config(win).width
+    assert.is_true(width >= vim.fn.strdisplaywidth("a much longer second line"))
+  end)
+
+  it("growing from one line to two on refresh resizes the window in place", function()
+    local text = "one line"
+    chip.mount({
+      id = "spec_a",
+      text = function()
+        return text
+      end,
+    })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(1, vim.api.nvim_win_get_config(win).height)
+
+    text = "one line\nand a second"
+    chip.refresh("spec_a")
+    assert.equals(win, chip_window(), "same window reused")
+    assert.equals(2, vim.api.nvim_win_get_config(win).height)
+    assert.same({ "one line", "and a second" }, all_lines(win))
   end)
 
   it("mounting the same id twice reconfigures instead of duplicating", function()
