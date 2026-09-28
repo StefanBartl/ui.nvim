@@ -27,6 +27,7 @@ local M = {}
 ---@field include_unfocusable_windows? boolean    Offer windows `nvim_win_get_config` marks unfocusable
 ---@field filetype? string[]                      Buffer filetypes to exclude
 ---@field buftype? string[]                       Buffer buftypes to exclude
+---@field debug? boolean                           Print the caller's traceback when a pick starts
 
 ---Same shipped defaults as this config's former nvim-window-picker spec
 ---(`plugins/ui.lua`): `include_current_win = false`, `autoselect_one = true`,
@@ -42,7 +43,20 @@ local cfg = {
   include_unfocusable_windows = false,
   filetype = { "neo-tree", "neo-tree-popup", "notify" },
   buftype = { "terminal", "quickfix" },
+  debug = false,
 }
+
+---@class Ui.WindowPicker.Call
+---@field time integer         `os.time()` of the call
+---@field traceback string     Who called `pick()` (stack minus `pick` itself)
+---@field candidates integer   Eligible windows found
+---@field prompted boolean     Whether hints were actually shown
+
+---What the most recent `M.pick()` call looked like. Kept unconditionally
+---(one small table per call) so "who just opened the picker?" can be
+---answered after the fact via `M.last_call()`, without `debug` having been on.
+---@type Ui.WindowPicker.Call|nil
+local last_call = nil
 
 ---@internal
 ---@param list string[]|nil
@@ -118,8 +132,14 @@ local function eligible_windows(opts)
   return out
 end
 
+local HINT_WIDTH = 3
+
 ---@internal
----A one-cell floating hint letter, centered over `win`.
+---A three-cell floating hint (` F `), centered over `win`.
+---
+---Three cells, not one: `make_scratch` treats any resolved width <= 2 as
+---"no size given" and falls back to 60 columns, so `width = 1` used to paint
+---a 60-cell bar across the window with the letter at its left edge.
 ---@param win integer
 ---@param char string
 ---@return integer|nil overlay_win
@@ -130,10 +150,10 @@ local function show_hint(win, char)
     relative = "win",
     win = win,
     row = math.max(0, math.floor((h - 1) / 2)),
-    col = math.max(0, math.floor((w - 1) / 2)),
-    width = 1,
+    col = math.max(0, math.floor((w - HINT_WIDTH) / 2)),
+    width = HINT_WIDTH,
     height = 1,
-    lines = { char },
+    lines = { " " .. char .. " " },
     border = "none",
     focusable = false,
     enter = false,
@@ -154,6 +174,15 @@ function M.pick(opts)
   ensure_groups()
 
   local windows = eligible_windows(opts)
+  last_call = {
+    time = os.time(),
+    traceback = debug.traceback("", 2),
+    candidates = #windows,
+    prompted = false,
+  }
+  if opts.debug then
+    notify.info(("pick() called, %d candidate window(s)%s"):format(#windows, last_call.traceback))
+  end
   if #windows == 0 then
     -- Not just an internal no-op: `:UI winpick` is a directly user-invoked
     -- command too, and a silent "nothing happened" there is indistinguishable
@@ -167,6 +196,8 @@ function M.pick(opts)
     end
     return nil
   end
+
+  last_call.prompted = true
 
   ---@type string[]
   local chars = {}
@@ -219,6 +250,14 @@ end
 ---@param opts Ui.WindowPicker.Opts|nil
 function M.setup(opts)
   cfg = vim.tbl_extend("force", cfg, opts or {})
+end
+
+---The most recent `pick()` call (caller traceback, candidate count, whether it
+---prompted); nil before the first call. For diagnosing a picker that opened
+---without being asked: `:lua =require("ui.windowpicker").last_call()`.
+---@return Ui.WindowPicker.Call|nil
+function M.last_call()
+  return last_call
 end
 
 ---@return Ui.WindowPicker.Opts
