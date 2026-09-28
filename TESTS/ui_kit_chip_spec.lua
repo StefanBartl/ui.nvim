@@ -638,6 +638,89 @@ describe("ui.kit.chip", function()
     vim.o.laststatus = saved
   end)
 
+  it('shape = "dock_left" gets a rounded-except-left-edge border', function()
+    chip.mount({ id = "spec_a", text = "x", shape = "dock_left" })
+    local win = assert(chip_window(), "chip window found")
+    assert.same(
+      { "", "─", "╮", "│", "╯", "─", "", "" },
+      vim.api.nvim_win_get_config(win).border
+    )
+  end)
+
+  it("a docked chip sits flush on the statusline row, no gap above it", function()
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 2
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", dock = true })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(vim.o.lines - vim.o.cmdheight - 1, cfg.row, "row lands ON the statusline row")
+    assert.equals(0, cfg.col, "flush left, no gap")
+    vim.o.laststatus = saved
+  end)
+
+  it("a docked chip degrades to the ordinary placement without a statusline row", function()
+    -- `dock` is never a hard requirement on a real statusline row actually
+    -- being there (laststatus = 0, or no statusline plugin active) -- it
+    -- degrades to exactly the placement a non-docked chip gets, not some
+    -- other row.
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 0
+
+    chip.mount({ id = "spec_b", text = "x", anchor = "bottom-left" })
+    local reference_win = assert(chip_window(), "reference chip window found")
+    local reference_row = vim.api.nvim_win_get_config(reference_win).row
+    chip.unmount("spec_b")
+
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", dock = true })
+    local docked_win = assert(chip_window(), "docked chip window found")
+    local docked_row = vim.api.nvim_win_get_config(docked_win).row
+
+    assert.equals(reference_row, docked_row, "same placement a non-docked chip would get")
+    vim.o.laststatus = saved
+  end)
+
+  it("a function-valued colour resolves fresh on every refresh", function()
+    local current = "#ffffff"
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      color = function()
+        return { fg = current, bg = "#000000" }
+      end,
+    })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(0xffffff, normal_hl(win).fg, "initial function-resolved colour applied")
+
+    current = "#00ff00"
+    chip.refresh("spec_a")
+    assert.equals(
+      0x00ff00,
+      normal_hl(win).fg,
+      "re-resolved fresh on refresh, not cached from mount time"
+    )
+  end)
+
+  it("track_mode fires exactly one extra refresh per ModeChanged when on, none when off", function()
+    local calls = 0
+    chip.mount({
+      id = "spec_a",
+      text = function()
+        calls = calls + 1
+        return "x"
+      end,
+      track_mode = true,
+    })
+
+    local before = calls
+    vim.api.nvim_exec_autocmds("ModeChanged", {})
+    assert.equals(before + 1, calls, "exactly one extra refresh from ModeChanged while tracking")
+
+    chip.mount({ id = "spec_a", track_mode = false })
+    local after_off = calls
+    vim.api.nvim_exec_autocmds("ModeChanged", {})
+    assert.equals(after_off, calls, "no extra refresh once tracking is turned back off")
+  end)
+
   it(
     "a tab-switch reopen doesn't leak a duplicate window when a consumer's "
       .. "WinClosed/WinNew autocmd calls refresh() reentrantly",
