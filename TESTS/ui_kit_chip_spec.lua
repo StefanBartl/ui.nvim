@@ -298,6 +298,35 @@ describe("ui.kit.chip", function()
     assert.is_true(col > 0, "not flush against the right edge")
   end)
 
+  it("a bottom-anchored chip leaves the statusline row free", function()
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 2
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-right", shape = "rect" })
+    local win = assert(chip_window(), "chip window found")
+    local row = vim.api.nvim_win_get_config(win).row
+    -- The statusline sits one row above the cmdline; a borderless ("rect")
+    -- chip is 1 row tall, so its own row must land one more row up than
+    -- that -- landing ON `lines - cmdheight - 1` would draw it over the
+    -- statusline instead of above it (the bug this reserves against).
+    assert.is_true(
+      row < vim.o.lines - vim.o.cmdheight - 1,
+      ("row %d overlaps the statusline"):format(row)
+    )
+    vim.o.laststatus = saved
+  end)
+
+  it("a bottom-anchored chip sits right above the cmdline when laststatus is 0", function()
+    local saved = vim.o.laststatus
+    vim.o.laststatus = 0
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-right", shape = "rect" })
+    local win = assert(chip_window(), "chip window found")
+    local row = vim.api.nvim_win_get_config(win).row
+    -- No statusline drawn at all -- nothing to reserve, so the chip may sit
+    -- flush against the cmdline the same as before this fix.
+    assert.equals(vim.o.lines - vim.o.cmdheight - 1, row)
+    vim.o.laststatus = saved
+  end)
+
   it("unmount closes the window and drops it from active()", function()
     chip.mount({ id = "spec_a", text = "x" })
     assert.is_true(vim.tbl_contains(chip.active(), "spec_a"))

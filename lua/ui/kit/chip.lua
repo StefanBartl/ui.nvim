@@ -287,6 +287,29 @@ local function ensure_current_tab()
 end
 
 ---@internal
+---Whether the editor's bottom-most content row (the one just above the
+---cmdline) is occupied by a window's statusline -- the row a bottom-anchored
+---chip must leave alone rather than draw over.
+---
+---`laststatus`, not a fixed assumption: `0` never shows one, `1` only once
+---there is more than one window (so a lone-window session has no reserved
+---row at all), `2`/`3` always do. Getting this wrong is exactly the bug this
+---function exists to fix -- a bottom-right chip used to land ON the
+---statusline row (only `cmdheight` was reserved), invisible over it or
+---clipping its rightmost cells rather than sitting above it.
+---@return integer 0 or 1
+local function bottom_statusline_rows()
+  local laststatus = vim.o.laststatus
+  if laststatus == 0 then
+    return 0
+  end
+  if laststatus == 1 then
+    return #api.nvim_tabpage_list_wins(0) > 1 and 1 or 0
+  end
+  return 1
+end
+
+---@internal
 ---Reposition every visible chip, grouped by anchor corner and stacked away
 ---from the edge in mount order. Border rows are approximated the same way
 ---`ui.kit.toast`'s own stacking does (one extra row of gap, not exact
@@ -306,11 +329,12 @@ local function reflow()
       return a.order < b.order
     end)
     local edge = ANCHORS[anchor] or ANCHORS["bottom-left"]
+    local status_rows = edge.v == "bottom" and bottom_statusline_rows() or 0
     local offset = MARGIN
     for _, entry in ipairs(list) do
       local box_h = entry.border == "none" and 1 or 3
       local row = edge.v == "top" and offset
-        or math.max(0, vim.o.lines - vim.o.cmdheight - offset - box_h + 1)
+        or math.max(0, vim.o.lines - vim.o.cmdheight - status_rows - offset - box_h + 1)
       -- Flush against the left edge (col 0), not inset by MARGIN -- a
       -- bordered float's `col` is where its own border starts, so 0 already
       -- sits exactly at the screen edge without clipping anything. The right
