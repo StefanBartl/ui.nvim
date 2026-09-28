@@ -504,6 +504,47 @@ describe("ui.kit.chip", function()
     assert.equals(0xffffff, normal_hl(win_after).fg, "pulse 2 reverted on its own schedule")
   end)
 
+  it("refresh() during an active pulse doesn't cut it short", function()
+    -- Regression, found by a third round of adversarial review: none of the
+    -- fixes above touch M.refresh()'s own colour reconciliation, which
+    -- unconditionally re-applies whatever `entry.color` resolves to and
+    -- never knew a pulse could be in flight. Any refresh() call during
+    -- duration_ms -- sessions.nvim wires it into ordinary dirty-tracking
+    -- autocmds (BufAdd/BufDelete/WinNew/WinClosed/...), so this fires on
+    -- nearly every real pulse -- used to snap the colour straight back
+    -- before the pulse's own revert ever ran.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 200 })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(0xff00ff, normal_hl(win).fg, "pulse colour applied immediately")
+
+    chip.refresh("spec_a") -- nothing else changed; simulates an unrelated dirty-tracking event
+    assert.equals(0xff00ff, normal_hl(win).fg, "refresh() left the active pulse colour alone")
+
+    vim.wait(300, function()
+      return normal_hl(win).fg == 0xffffff
+    end, 10)
+    assert.equals(0xffffff, normal_hl(win).fg, "still reverted on its own schedule afterwards")
+  end)
+
+  it("mount() during an active pulse doesn't cut it short", function()
+    -- Same bug, the other real trigger the review flagged: M.mount() always
+    -- tail-calls M.refresh() at its end, so re-mounting an id (even to
+    -- change something unrelated to colour) during a pending pulse hit the
+    -- exact same unconditional colour reconciliation.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = "#ffffff", bg = "#000000" } })
+    chip.pulse("spec_a", { color = { fg = "#ff00ff", bg = "#0000ff" }, duration_ms = 200 })
+    local win = assert(chip_window(), "chip window found")
+
+    chip.mount({ id = "spec_a", text = "x" }) -- re-mount, color left unspecified (unchanged)
+    assert.equals(0xff00ff, normal_hl(win).fg, "mount() left the active pulse colour alone")
+
+    vim.wait(300, function()
+      return normal_hl(win).fg == 0xffffff
+    end, 10)
+    assert.equals(0xffffff, normal_hl(win).fg, "still reverted on its own schedule afterwards")
+  end)
+
   it("a left-anchored chip sits flush against the screen edge (col 0)", function()
     chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
     local win = assert(chip_window(), "chip window found")
