@@ -222,6 +222,18 @@ local function start_live_refresh(key, screenrow, screencol)
     LIVE_REFRESH_MS,
     LIVE_REFRESH_MS,
     vim.schedule_wrap(function()
+      -- This tick was already queued (libuv fired it, vim.schedule_wrap is
+      -- waiting for the main loop) by the moment a NEWER timer replaced
+      -- `timer` in `state.live_timer` -- belonging to a hover that has
+      -- since moved on to a different key. Comparing the captured `timer`
+      -- upvalue against the CURRENT `state.live_timer` (not just
+      -- `state.current_key`) catches that: without it, this stale tick's
+      -- own `stop_live_refresh()` call below would stop whatever timer
+      -- happens to be current -- the newer one, not this already-
+      -- superseded one -- freezing the popup it just started refreshing.
+      if state.live_timer ~= timer then
+        return
+      end
       if state.current_key ~= key then
         stop_live_refresh()
         return
