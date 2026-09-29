@@ -42,6 +42,8 @@ theme list.
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
 | `:UI tabline-styles` | — | List the registered tabline styles (`rounded`/`square`/`divider` plus anything a host registered), marking the active one |
+| `:UI modules` | — | List every statusline segment in `ui.statusline.catalog`, split into builtin/standalone, with wiring hints |
+| `:UI progress` | — | Popup list of whatever `lib.nvim.progress`'s "statusline" style is currently tracking (same registry `plugin_progress` renders inline and its hover tooltip already surfaces, reachable here without a mouse) |
 | `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
 | `:UI help` | — | The subcommand list, in a float |
 

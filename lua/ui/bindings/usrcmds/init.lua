@@ -681,6 +681,33 @@ local function ui_modules(_args)
   notify.info(table.concat(lines, "\n"))
 end
 
+---Popup view of whatever `lib.nvim.progress`'s "statusline" style is
+---currently tracking -- the same registry `ui.statusline.modules
+---.plugin_progress` renders inline and hovering that module already surfaces
+---(see `ui.statusline.hover`'s `live` support), but reachable on demand
+---without a mouse or a narrow statusline segment doing the truncating.
+---@param _args string[]
+local function ui_progress(_args)
+  local ok, sl = pcall(require, "lib.nvim.progress.styles.statusline")
+  if not ok then
+    notify.warn("lib.nvim.progress not available")
+    return
+  end
+
+  local active = sl.active() -- string[], oldest first
+  if #active == 0 then
+    notify.info("No plugin operation is currently running.")
+    return
+  end
+
+  local lines = { ("%d operation(s) in progress:"):format(#active), "" }
+  for _, text in ipairs(active) do
+    lines[#lines + 1] = "  " .. text
+  end
+
+  notify.info(table.concat(lines, "\n"))
+end
+
 ---Toggle between configured themes
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_toggle(_args)
@@ -748,6 +775,7 @@ local function ui_help(_args)
 │  :UI tabline-styles         List all styles          │
 │                                                      │
 │  :UI modules                List available segments  │
+│  :UI progress               Show what's running now  │
 │  :UI status                 Show the current config  │
 │  :UI help                   Show this help           │
 │                                                      │
@@ -782,6 +810,7 @@ local SUBCOMMANDS = {
   { name = "tabline-styles", fn = ui_tabline_styles },
   { name = "picker", fn = ui_picker },
   { name = "modules", fn = ui_modules },
+  { name = "progress", fn = ui_progress },
   { name = "toggle", fn = ui_toggle },
   { name = "status", fn = ui_status },
   { name = "help", fn = ui_help },
