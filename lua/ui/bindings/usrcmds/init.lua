@@ -630,6 +630,76 @@ local function ui_tabline_styles(_args)
   notify.info(table.concat(lines, "\n"))
 end
 
+---Handle kit-preset command: switches `ui.kit.theme`'s active default --
+---the border/color preset (`rounded`/`solid`/`double`/`ascii`/`minimal`/
+---`menu`/...) that every `ui.kit` surface (popup, toast, menu, viewer,
+---confirm, chooser, chip, the statusline hover tooltip, ...) resolves
+---through. Unlike `:UI theme` (the colorscheme) or `:UI tabline-style`
+---(chip boundary shape), nothing surfaced this one interactively before --
+---`ui.kit.theme.setup({ default = ... })` from Lua was the only way in.
+---
+---Best-effort "combined look" switch: when a `ui.tabline.styles` entry of
+---the SAME name is also registered (e.g. a future "ascii"/"hacker" preset
+---that ships a matching tabline style), that switches too, in one command --
+---see `switch_tabline_style`. Silently skipped when no such style exists
+---(true for every kit preset today), so this never errors over a kit-only
+---preset.
+---@param args string[]
+local function ui_kit_preset(args)
+  local kit_theme = require("ui.kit.theme")
+  local name = args[2]
+
+  if not name or name == "" then
+    notify.info(
+      string.format(
+        "Current kit preset: %s\nUse :UI kit-preset <name> to switch",
+        kit_theme.default()
+      )
+    )
+    return
+  end
+
+  if not vim.tbl_contains(kit_theme.presets(), name) then
+    notify.error(
+      string.format(
+        "Kit preset '%s' not found.\n\nAvailable presets:\n%s",
+        name,
+        table.concat(kit_theme.presets(), ", ")
+      )
+    )
+    return
+  end
+
+  kit_theme.setup({ default = name })
+  local also_tabline = switch_tabline_style(name)
+  notify.info(
+    prefix(
+      ICON.theme,
+      ("Kit preset changed to: %s%s"):format(
+        name,
+        also_tabline and " (tabline style matched too)" or ""
+      )
+    )
+  )
+end
+
+---List every registered kit preset -- see `ui_kit_preset`'s own doc comment
+---for what it controls.
+---@param _args string[] # Unused: this subcommand takes no argument
+local function ui_kit_presets(_args)
+  local kit_theme = require("ui.kit.theme")
+  local names = kit_theme.presets()
+  local current = kit_theme.default()
+
+  local lines = { string.format("Available kit presets (%d):", #names), "" }
+  for _, name in ipairs(names) do
+    local marker = (name == current) and "* " or "  "
+    lines[#lines + 1] = marker .. name
+  end
+
+  notify.info(table.concat(lines, "\n"))
+end
+
 ---Open the visual theme picker
 ---@param _args string[] # Unused: this subcommand takes no argument
 local function ui_picker(_args)
@@ -774,6 +844,11 @@ local function ui_help(_args)
 │  :UI tabline-style <name>   Switch tabline style     │
 │  :UI tabline-styles         List all styles          │
 │                                                      │
+│  :UI kit-preset             Show the current preset  │
+│  :UI kit-preset <name>      Switch popup/toast border│
+│                             + colors (ui.kit.theme)  │
+│  :UI kit-presets            List all presets         │
+│                                                      │
 │  :UI modules                List available segments  │
 │  :UI progress               Show what's running now  │
 │  :UI status                 Show the current config  │
@@ -808,6 +883,8 @@ local SUBCOMMANDS = {
   { name = "variants", fn = ui_variants },
   { name = "tabline-style", fn = ui_tabline_style },
   { name = "tabline-styles", fn = ui_tabline_styles },
+  { name = "kit-preset", fn = ui_kit_preset },
+  { name = "kit-presets", fn = ui_kit_presets },
   { name = "picker", fn = ui_picker },
   { name = "modules", fn = ui_modules },
   { name = "progress", fn = ui_progress },
@@ -918,6 +995,10 @@ local function complete(arglead, cmdline, _cursorpos)
       -- Same registry-not-static-list reasoning as "variant" above, one
       -- module over: require("ui.tabline.styles").register(name, fn).
       return filter(arglead, require("ui.tabline.styles").list())
+    end
+
+    if subcmd == "kit-preset" then
+      return filter(arglead, require("ui.kit.theme").presets())
     end
   end
 
