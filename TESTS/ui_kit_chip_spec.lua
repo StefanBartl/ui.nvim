@@ -663,6 +663,77 @@ describe("ui.kit.chip", function()
     )
   end)
 
+  it("min_width floors the box width when content is narrower", function()
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left" })
+    local base_win = assert(chip_window(), "chip window found")
+    local base_width = vim.api.nvim_win_get_config(base_win).width
+    chip.unmount("spec_a")
+
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", min_width = base_width + 10 })
+    local win = assert(chip_window(), "chip window found")
+    assert.equals(
+      base_width + 10,
+      vim.api.nvim_win_get_config(win).width,
+      "min_width wins over the shorter natural width"
+    )
+  end)
+
+  it("content wider than min_width still grows the box past it", function()
+    chip.mount({
+      id = "spec_a",
+      text = "a long line of text",
+      anchor = "bottom-left",
+      min_width = 3,
+    })
+    local win = assert(chip_window(), "chip window found")
+    assert.is_true(
+      vim.api.nvim_win_get_config(win).width > 3,
+      "min_width is a floor, not a cap -- wider content still wins"
+    )
+  end)
+
+  it("min_width = 0 explicitly clears a previously set floor", function()
+    chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", min_width = 20 })
+    local widened = assert(chip_window(), "chip window found")
+    assert.equals(20, vim.api.nvim_win_get_config(widened).width)
+
+    chip.mount({ id = "spec_a", text = "x", min_width = 0 })
+    local win = assert(chip_window(), "chip window found")
+    assert.is_true(
+      vim.api.nvim_win_get_config(win).width < 20,
+      "min_width = 0 overwrites the earlier 20, not kept"
+    )
+  end)
+
+  it(
+    "a non-numeric/negative/NaN/Infinity min_width sanitizes to 0 instead of crashing mount()",
+    function()
+      -- Same malformed-input class row_offset/col_offset already guard
+      -- against: ui.kit.chip is a shared primitive, so a bad-typed value
+      -- from any one caller's own (possibly unvalidated) config must never
+      -- crash mount() for every consumer.
+      assert.has_no.errors(function()
+        chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", min_width = true })
+      end)
+      assert.has_no.errors(function()
+        chip.mount({ id = "spec_a", text = "x", min_width = -5 })
+      end)
+      assert.has_no.errors(function()
+        chip.mount({ id = "spec_a", text = "x", min_width = 0 / 0 })
+      end)
+      assert.has_no.errors(function()
+        chip.mount({ id = "spec_a", text = "x", min_width = math.huge })
+      end)
+      local win = assert(chip_window(), "chip window found")
+      local base = vim.fn.strdisplaywidth("x") + 2
+      assert.equals(
+        base,
+        vim.api.nvim_win_get_config(win).width,
+        "every malformed value sanitized to 0 (no floor)"
+      )
+    end
+  )
+
   it("a bottom-anchored chip leaves the statusline row free", function()
     local saved = vim.o.laststatus
     vim.o.laststatus = 2
