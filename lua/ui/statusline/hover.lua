@@ -17,6 +17,7 @@
 
 local layout = require("ui.statusline.layout")
 local catalog = require("ui.statusline.catalog")
+local surface = require("ui.kit.surface")
 
 local api = vim.api
 
@@ -120,39 +121,36 @@ local function show_popup(text, screenrow, screencol)
     width = math.max(width, vim.fn.strdisplaywidth(l))
   end
 
-  local buf = api.nvim_create_buf(false, true)
-  vim.bo[buf].bufhidden = "wipe"
-  api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-
   local row = math.max(0, screenrow - 1 - (#lines + 2))
   local col = math.max(0, math.min(screencol - 1, vim.o.columns - width - 2))
 
-  local ok, winid = pcall(api.nvim_open_win, buf, false, {
+  -- `ui.kit.surface` (not a raw `nvim_open_win`) so this tooltip's border and
+  -- colors come from the active `ui.kit.theme` preset like every other
+  -- surface in the fleet does -- a stray "always rounded, always
+  -- NormalFloat/FloatBorder" float here used to be the one popup a preset
+  -- switch (`:UI theme ascii`, or a future one) silently skipped.
+  local opened = surface.open({
+    lines = lines,
     relative = "editor",
     row = row,
     col = col,
     width = width,
     height = #lines,
-    style = "minimal",
-    border = "rounded",
     focusable = false,
-    noautocmd = true,
-    -- Below every `ui.kit` surface (`base`/`popup` 50, `menu` 60, `toast`
-    -- 70 -- see ui.kit.theme's own BASE.zindex) on purpose: a right-click
-    -- opens the "manage this module" menu at the exact spot this tooltip is
-    -- already showing (the pointer has not moved between hover and click),
-    -- and an ambient hint has no business rendering on top of something the
-    -- user just asked for. It stays open underneath, harmlessly invisible,
-    -- until the next real mouse move clears or replaces it.
+    -- Below every other `ui.kit` surface (`base`/`popup` 50, `menu` 60,
+    -- `toast` 70) on purpose: a right-click opens the "manage this module"
+    -- menu at the exact spot this tooltip is already showing (the pointer
+    -- has not moved between hover and click), and an ambient hint has no
+    -- business rendering on top of something the user just asked for. It
+    -- stays open underneath, harmlessly invisible, until the next real
+    -- mouse move clears or replaces it.
     zindex = 40,
   })
-  if not ok then
-    pcall(api.nvim_buf_delete, buf, { force = true })
+  if not opened then
     return
   end
 
-  vim.wo[winid].winhighlight = "Normal:NormalFloat,FloatBorder:FloatBorder"
-  state.popup_winid = winid
+  state.popup_winid = opened.winid
 end
 
 ---@return nil
@@ -360,5 +358,11 @@ M.pointer_target = pointer_target
 ---@internal Exposed for tests only (see `ui.statusline.utils.clickable._dispatch`
 ---for the same leading-underscore convention elsewhere in this directory).
 M._summary_for = summary_for
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+M._show_popup = show_popup
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+function M._popup_winid()
+  return state.popup_winid
+end
 
 return M

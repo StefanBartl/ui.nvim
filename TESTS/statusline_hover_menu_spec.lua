@@ -317,6 +317,31 @@ describe("ui.statusline.hover", function()
       assert.equals("[repos] cloning 3/10", text)
     end)
   end)
+
+  describe("_show_popup() (themed via ui.kit, not a raw hardcoded float)", function()
+    after_each(function()
+      hover._show_popup("", 0, 0) -- closes any popup left open by a test; empty text opens nothing new
+    end)
+
+    it("opens a window whose border/colors come from ui.kit.theme's Kit* groups", function()
+      hover._show_popup("hello", 10, 5)
+      local winid = hover._popup_winid()
+      assert.is_not_nil(winid)
+      assert.is_true(vim.api.nvim_win_is_valid(winid))
+
+      local winhl = vim.api.nvim_get_option_value("winhighlight", { win = winid })
+      -- Regression: this used to be the literal, un-themed
+      -- "Normal:NormalFloat,FloatBorder:FloatBorder" -- a preset switch
+      -- (:UI theme ascii, say) silently skipped this one tooltip while
+      -- recoloring every other surface in the fleet.
+      assert.is_true(winhl:find("Kit", 1, true) ~= nil, "winhighlight references a Kit* group")
+    end)
+
+    it("an empty text produces no popup (nothing left to wrap)", function()
+      hover._show_popup("", 10, 5)
+      assert.is_nil(hover._popup_winid())
+    end)
+  end)
 end)
 
 describe("ui.statusline.menu", function()
