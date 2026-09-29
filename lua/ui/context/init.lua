@@ -326,12 +326,16 @@ local function mix(fg, bg, amount)
 end
 
 ---@internal
----The background a chip is tinted against: the overlay's own (`UiContext`,
----which by default links to `NormalFloat`), falling back the same way the
----overlay's own colours do.
+---The background a chip is tinted against: the overlay's own (`UiContext`),
+---falling back the same way the overlay's own colours do. `"mimic"` reads as
+---real buffer rows, so it falls back to `Normal` (the buffer background)
+---before `NormalFloat`; `"chips"` is meant to stand off the buffer, so the
+---order is reversed.
 ---@return integer
 local function window_bg()
-  for _, name in ipairs({ "UiContext", "NormalFloat", "Normal" }) do
+  local fallbacks = cfg.style == "chips" and { "NormalFloat", "Normal" }
+    or { "Normal", "NormalFloat" }
+  for _, name in ipairs({ "UiContext", fallbacks[1], fallbacks[2] }) do
     local bg = resolve(name).bg
     if bg then
       return bg
@@ -347,7 +351,10 @@ end
 ---@return table<string, table>
 local function groups_spec()
   local spec = {
-    UiContext = { link = "NormalFloat", default = true },
+    -- `"mimic"` (default) reads as real buffer rows, so it links to `Normal`
+    -- rather than `NormalFloat`, which many themes deliberately shade darker
+    -- to set floats apart from the buffer. `"chips"` keeps that float look.
+    UiContext = { link = cfg.style == "chips" and "NormalFloat" or "Normal", default = true },
     UiContextLineNr = { link = "LineNr", default = true },
     UiContextBottom = { underline = true, sp = "#555555", default = true },
     -- `style = "chips"`: the separator between chips, and the generic role
@@ -397,6 +404,27 @@ end
 ---@type Lib.UI.HL.PersistHandle|nil
 local hl_handle = nil
 
+---Whether the groups have been applied at least once. `nvim_set_hl`'s
+---`default = true` only takes effect the first time a group is defined (or
+---right after `:highlight clear`, which a real `:colorscheme` does); a bare
+---re-application with a different value is a no-op (plain `nvim_set_hl(0,
+---group, {})` does NOT reset that, only the `:highlight clear` command
+---does), so `cfg.style` changing at runtime needs `reapply_groups()` below
+---rather than just calling `groups_spec()` again.
+---@type boolean
+local groups_ready = false
+
+---@internal
+---Force every group back to whatever `groups_spec()` says now, even if it
+---was already defined with a different value. See `groups_ready` above for
+---why the clear is required.
+local function reapply_groups()
+  for group, opts in pairs(groups_spec()) do
+    vim.cmd("highlight clear " .. group)
+    vim.api.nvim_set_hl(0, group, opts)
+  end
+end
+
 ---@internal
 local function ensure_groups()
   if hl_handle then
@@ -406,10 +434,9 @@ local function ensure_groups()
   if ok and type(hl.persist) == "function" then
     hl_handle = hl.persist(groups_spec, { name = "ui_context" })
   else
-    for group, opts in pairs(groups_spec()) do
-      vim.api.nvim_set_hl(0, group, opts)
-    end
+    reapply_groups()
   end
+  groups_ready = true
 end
 
 -- ---------------------------------------------------------------- scope detection
@@ -1585,7 +1612,15 @@ local function apply(opts)
     end
   end
   if opts.style == "mimic" or opts.style == "chips" then
+    local style_changed = opts.style ~= cfg.style
     cfg.style = opts.style
+    -- The groups already applied (if any) were computed under the old
+    -- style -- `UiContext`'s link target and the chip-tint colours both
+    -- read `cfg.style`, but nothing re-triggers `groups_spec()` on a bare
+    -- setup() call, so force it here.
+    if style_changed and groups_ready then
+      reapply_groups()
+    end
   end
   if type(opts.chips) == "table" then
     local c = opts.chips
