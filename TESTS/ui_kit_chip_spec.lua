@@ -604,15 +604,63 @@ describe("ui.kit.chip", function()
   end)
 
   it("col_offset = 0 explicitly clears a previously set offset", function()
-    -- `0` is truthy in Lua -- confirms the mount() field isn't accidentally
-    -- using the `dock`/`visible`-style `opts.x ~= nil` guard AND the plain
-    -- `or` idiom in a way that makes an explicit 0 fall through to the old
-    -- value instead of overwriting it.
+    -- `0` is truthy in Lua, and `sanitize_offset(0)` returns `0` unchanged
+    -- -- confirms the `opts.col_offset ~= nil` guard still lets an honest,
+    -- explicit `0` overwrite a previous nonzero value rather than being
+    -- mistaken for "not passed this call".
     chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", col_offset = 5 })
     chip.mount({ id = "spec_a", text = "x", col_offset = 0 })
     local win = assert(chip_window(), "chip window found")
     local cfg = vim.api.nvim_win_get_config(win)
     assert.equals(0, cfg.col, "col_offset = 0 overwrites the earlier 5, not kept")
+  end)
+
+  it("a non-numeric row_offset/col_offset sanitizes to 0 instead of crashing mount()", function()
+    -- Regression, found by adversarial review, medium severity, live-
+    -- reproduced: row_offset/col_offset had no type check at all. A
+    -- non-number reaching reflow()'s `row = row + entry.row_offset`
+    -- throws there (arithmetic on e.g. a table), OUTSIDE the one pcall
+    -- that only wraps the later nvim_win_set_config call -- aborting that
+    -- whole reflow() pass for every anchor group, not just this chip.
+    -- ui.kit.chip is a shared primitive ~20 sibling plugins mount chips
+    -- through, so a malformed value from any one caller's own (possibly
+    -- unvalidated) config must never be able to take the others down too.
+    assert.has_no.errors(function()
+      chip.mount({
+        id = "spec_a",
+        text = "x",
+        anchor = "bottom-left",
+        row_offset = true,
+        col_offset = {},
+      })
+    end)
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(0, cfg.col, "a non-numeric offset sanitizes to 0, not left as garbage")
+  end)
+
+  it("NaN/Infinity row_offset/col_offset sanitize to 0 instead of stranding the chip", function()
+    -- Same finding, the other half: NaN and +-Infinity both satisfy
+    -- Lua's `type(v) == \"number\"`, so a bare type check alone would not
+    -- have caught them -- and nvim_win_set_config accepts and silently
+    -- STORES either with no validation or clamping (confirmed live via
+    -- the review's own headless reproduction), which would otherwise
+    -- strand the chip at an undiagnosable screen position with nothing
+    -- to point at why.
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      anchor = "bottom-left",
+      row_offset = 0 / 0, -- NaN
+      col_offset = math.huge,
+    })
+    local win = assert(chip_window(), "chip window found")
+    local cfg = vim.api.nvim_win_get_config(win)
+    assert.equals(0, cfg.col, "col_offset = math.huge sanitizes to 0")
+    assert.is_true(
+      cfg.row == cfg.row,
+      "row_offset = NaN sanitizes to 0, not left as NaN (NaN ~= NaN)"
+    )
   end)
 
   it("a bottom-anchored chip leaves the statusline row free", function()
