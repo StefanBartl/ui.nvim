@@ -853,6 +853,48 @@ describe("ui.kit.chip", function()
     vim.o.laststatus = saved
   end)
 
+  it(
+    "cmdheight/laststatus changing after mount repositions the chip without an explicit refresh",
+    function()
+      -- Regression, found live: a docked chip's row (`vim.o.lines -
+      -- vim.o.cmdheight - 1`) is computed once at mount/last-reflow time and
+      -- never re-read on its own -- nothing previously re-ran reflow() when
+      -- cmdheight/laststatus change afterwards (VimResized/TabEnter/
+      -- ColorScheme/ModeChanged don't fire for a bare option change). A
+      -- plugin that changes cmdheight well after this chip already mounted
+      -- (e.g. a message-UI plugin's `vim.ui_attach` flipping it as a side
+      -- effect of UI-capability negotiation, not a literal `vim.o.cmdheight
+      -- = 0` line a source grep would catch) left the chip sitting at its
+      -- stale row until some unrelated later event happened to trigger a
+      -- reflow -- read live as an unexplained "jump" once that finally
+      -- fired. `OptionSet` itself does not fire in this headless test
+      -- environment at all (confirmed live: not for ANY option, not just
+      -- cmdheight/laststatus -- the same class of headless limitation this
+      -- file's own `UIEnter`-avoidance elsewhere is about), so this
+      -- exercises the registered handler directly via
+      -- `nvim_exec_autocmds`, same as the `VimEnter`/`ColorScheme`/
+      -- `ModeChanged` tests above -- a real interactive session (confirmed
+      -- live via a debug log capturing real OptionSet stack traces) does
+      -- not have this limitation.
+      local saved_ch = vim.o.cmdheight
+      local saved_ls = vim.o.laststatus
+      vim.o.laststatus = 2
+      vim.o.cmdheight = 1
+
+      chip.mount({ id = "spec_a", text = "x", anchor = "bottom-left", dock = true })
+      local win = assert(chip_window(), "chip window found")
+      local before = vim.api.nvim_win_get_config(win).row
+
+      vim.o.cmdheight = 0
+      vim.api.nvim_exec_autocmds("OptionSet", { pattern = "cmdheight" })
+      local after = vim.api.nvim_win_get_config(win).row
+      assert.equals(before + 1, after, "row follows cmdheight without an explicit refresh() call")
+
+      vim.o.cmdheight = saved_ch
+      vim.o.laststatus = saved_ls
+    end
+  )
+
   it("a function-valued colour resolves fresh on every refresh", function()
     local current = "#ffffff"
     chip.mount({
