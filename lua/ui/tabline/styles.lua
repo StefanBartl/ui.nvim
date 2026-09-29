@@ -70,6 +70,11 @@ _registry.rounded = rounded
 -- above stay registered as deprecated aliases, never removed.
 _registry.chip = square
 _registry.rounded_chip = rounded
+-- Matches `ui.kit.theme`'s "hacker" preset by name, so `:UI kit-preset
+-- hacker` switches this too (see that command's own "combined look" doc
+-- comment). Flush/square, not rounded -- the same look "square" already is,
+-- reused rather than duplicated.
+_registry.hacker = square
 
 ---Register a chip-boundary decorator under `name` -- a host's own tabline
 ---look, typically. `fn` mutates `chips` in place given the parallel
