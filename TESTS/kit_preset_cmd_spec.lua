@@ -1,0 +1,133 @@
+-- See TESTS/config_spec.lua for what these suppressions cover and why.
+---@diagnostic disable: need-check-nil, undefined-field, discard-returns
+
+--- `:UI kit-preset`/`:UI kit-presets` -- the interactive front end for
+--- `ui.kit.theme`'s active default (border/colors every `ui.kit` surface
+--- resolves through), which previously had no `:UI` command at all, unlike
+--- its siblings `:UI theme` (colorscheme) and `:UI tabline-style` (chip
+--- boundary shape). Also covers the "combined look" cross-switch: a kit
+--- preset name that is ALSO a registered `ui.tabline.styles` name (true for
+--- "rounded" -- see that registry's own aliases) switches the tabline style
+--- too, in the same command.
+
+describe(":UI kit-preset / :UI kit-presets", function()
+  pcall(function()
+    require("ui.bindings.usrcmds").setup()
+  end)
+
+  local theme = require("ui.kit.theme")
+  local original_default = theme.default()
+
+  after_each(function()
+    theme.setup({ default = original_default })
+  end)
+
+  it(":UI kit-preset <name> switches the active preset", function()
+    vim.cmd("UI kit-preset ascii")
+    assert.equals("ascii", theme.default())
+  end)
+
+  it(":UI kit-preset with no argument does not throw", function()
+    assert.has_no.errors(function()
+      vim.cmd("UI kit-preset")
+    end)
+  end)
+
+  it(":UI kit-preset <unknown> leaves the active preset unchanged", function()
+    vim.cmd("UI kit-preset solid")
+    -- notify.error() surfaces as a thrown error under the test harness's
+    -- notify backend -- the point of this test is the state afterward, not
+    -- whether that particular call raises (same reasoning as the sibling
+    -- tabline-style spec).
+    pcall(vim.cmd, "UI kit-preset no_such_preset")
+    assert.equals("solid", theme.default())
+  end)
+
+  it(":UI kit-presets does not throw", function()
+    assert.has_no.errors(function()
+      vim.cmd("UI kit-presets")
+    end)
+  end)
+
+  it(
+    "switching to a preset name that is also a registered tabline style "
+      .. "switches the tabline style too",
+    function()
+      require("ui").setup({ all = true })
+      local assembled = require("ui.config").setup()
+      require("ui.tabline.render").enable(assembled.ui.tabline)
+
+      -- "rounded" is both a kit preset (ui.kit.theme's BUILTIN.rounded) and a
+      -- registered tabline style (ui.tabline.styles' pre-canonical alias) --
+      -- exercises the cross-switch without needing a fixture registration.
+      vim.cmd("UI kit-preset rounded")
+
+      assert.equals("rounded", theme.default())
+      assert.equals("rounded", require("ui.tabline.render").current().style)
+
+      require("ui.tabline.render").disable()
+    end
+  )
+
+  it("a kit-only preset (no matching tabline style) switches without error", function()
+    assert.has_no.errors(function()
+      vim.cmd("UI kit-preset minimal")
+    end)
+    assert.equals("minimal", theme.default())
+  end)
+
+  it("hacker is listed among the available presets", function()
+    assert.is_true(vim.tbl_contains(theme.presets(), "hacker"))
+  end)
+
+  it("hacker also switches the tabline style (registered under the same name)", function()
+    require("ui").setup({ all = true })
+    local assembled = require("ui.config").setup()
+    require("ui.tabline.render").enable(assembled.ui.tabline)
+
+    vim.cmd("UI kit-preset hacker")
+
+    assert.equals("hacker", theme.default())
+    assert.equals("hacker", require("ui.tabline.render").current().style)
+
+    require("ui.tabline.render").disable()
+  end)
+end)
+
+describe("ui.kit.theme's hacker preset", function()
+  local theme = require("ui.kit.theme")
+
+  it("resolves an ASCII border, distinct from the plain ascii preset's colors", function()
+    local resolved = theme.resolve("hacker")
+    assert.is_true(resolved.ascii_border)
+    assert.same({ "+", "-", "+", "|", "+", "-", "+", "|" }, resolved.border)
+  end)
+
+  it("carries a fixed green-on-black palette, not a colorscheme link", function()
+    local resolved = theme.resolve("hacker")
+    assert.equals("table", type(resolved.hl.normal))
+    assert.equals("#33ff66", resolved.hl.normal.fg)
+    assert.equals("#060a06", resolved.hl.normal.bg)
+    assert.equals("#16c60c", resolved.hl.border.fg)
+  end)
+
+  it("materializes without error (apply() on a real window)", function()
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, false, {
+      relative = "editor",
+      row = 0,
+      col = 0,
+      width = 10,
+      height = 1,
+      style = "minimal",
+    })
+    local resolved = theme.resolve("hacker")
+    assert.has_no.errors(function()
+      theme.apply(win, resolved)
+    end)
+    local winhl = vim.api.nvim_get_option_value("winhighlight", { win = win })
+    assert.is_true(winhl:find("Kit", 1, true) ~= nil)
+    pcall(vim.api.nvim_win_close, win, true)
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end)
+end)
