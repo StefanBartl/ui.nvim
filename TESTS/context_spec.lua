@@ -1877,6 +1877,31 @@ describe("ui.context", function()
       assert.truthy(lines[1]:find(vim.fn.nr2char(0xE0B4), 1, true), "chip right cap: " .. lines[1])
     end)
 
+    it("under a right anchor, the last chip's right cap is squared instead of rounded", function()
+      -- Regression: a rounded cap glyph sitting flush against the box's own
+      -- right edge (screen/window border) reads as cut off. `squared_left`
+      -- already does this for the box's left edge under a "left"/"full"
+      -- anchor; a "right"/"full" anchor needs the same on the right.
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({ style = "chips", position = { anchor = "top-right" } })
+      context.enable()
+      scroll_to(win, 7)
+      local shown = context.refresh(win)
+      assert.equals(3, shown)
+      local lines = overlay_lines(win)
+      assert.equals(1, #lines)
+      local n = vim.fn.strchars(lines[1])
+      assert.equals(
+        " ",
+        vim.fn.strcharpart(lines[1], n - 1, 1),
+        "the row's last chip must not have a rounded cap on the box's own right edge: " .. lines[1]
+      )
+    end)
+
     it("sizes a compact anchor's box to the chip line's own width", function()
       if not has_lua_parser then
         pending("no Lua parser available")
@@ -2104,6 +2129,36 @@ describe("ui.context", function()
       assert.truthy(lines[3]:find("for", 1, true))
       for _, l in ipairs(lines) do
         assert.is_true(vim.fn.strwidth(l) <= wcfg.width)
+      end
+    end)
+
+    it("layout = 'stack' under a right anchor squares every line's right cap", function()
+      -- Same edge case as the 'row' layout regression above, but here every
+      -- stacked line sits flush against the box's own right edge, so every
+      -- one of them (not just the last) needs its right cap squared.
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      local win = open_source()
+      context.setup({
+        style = "chips",
+        chips = { layout = "stack" },
+        position = { anchor = "top-right" },
+      })
+      context.enable()
+      scroll_to(win, 7)
+      local shown = context.refresh(win)
+      assert.equals(3, shown)
+      local lines = overlay_lines(win)
+      assert.equals(3, #lines)
+      for _, l in ipairs(lines) do
+        local n = vim.fn.strchars(l)
+        assert.equals(
+          " ",
+          vim.fn.strcharpart(l, n - 1, 1),
+          "every stacked chip must not have a rounded cap on the box's own right edge: " .. l
+        )
       end
     end)
 
