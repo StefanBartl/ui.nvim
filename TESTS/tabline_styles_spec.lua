@@ -28,6 +28,10 @@ describe("ui.tabline.styles", function()
     assert.is_false(styles.exists("no_such_style"))
   end)
 
+  it("hacker resolves to the same decorator as square (flush, no boundary)", function()
+    assert.equals(styles.resolve("square"), styles.resolve("hacker"))
+  end)
+
   it("returns nil for a nil or empty name instead of throwing", function()
     assert.has_no.errors(function()
       assert.is_nil(styles.resolve(nil))
