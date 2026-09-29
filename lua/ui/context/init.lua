@@ -404,6 +404,27 @@ end
 ---@type Lib.UI.HL.PersistHandle|nil
 local hl_handle = nil
 
+---Whether the groups have been applied at least once. `nvim_set_hl`'s
+---`default = true` only takes effect the first time a group is defined (or
+---right after `:highlight clear`, which a real `:colorscheme` does); a bare
+---re-application with a different value is a no-op (plain `nvim_set_hl(0,
+---group, {})` does NOT reset that, only the `:highlight clear` command
+---does), so `cfg.style` changing at runtime needs `reapply_groups()` below
+---rather than just calling `groups_spec()` again.
+---@type boolean
+local groups_ready = false
+
+---@internal
+---Force every group back to whatever `groups_spec()` says now, even if it
+---was already defined with a different value. See `groups_ready` above for
+---why the clear is required.
+local function reapply_groups()
+  for group, opts in pairs(groups_spec()) do
+    vim.cmd("highlight clear " .. group)
+    vim.api.nvim_set_hl(0, group, opts)
+  end
+end
+
 ---@internal
 local function ensure_groups()
   if hl_handle then
@@ -413,10 +434,9 @@ local function ensure_groups()
   if ok and type(hl.persist) == "function" then
     hl_handle = hl.persist(groups_spec, { name = "ui_context" })
   else
-    for group, opts in pairs(groups_spec()) do
-      vim.api.nvim_set_hl(0, group, opts)
-    end
+    reapply_groups()
   end
+  groups_ready = true
 end
 
 -- ---------------------------------------------------------------- scope detection
@@ -1592,7 +1612,15 @@ local function apply(opts)
     end
   end
   if opts.style == "mimic" or opts.style == "chips" then
+    local style_changed = opts.style ~= cfg.style
     cfg.style = opts.style
+    -- The groups already applied (if any) were computed under the old
+    -- style -- `UiContext`'s link target and the chip-tint colours both
+    -- read `cfg.style`, but nothing re-triggers `groups_spec()` on a bare
+    -- setup() call, so force it here.
+    if style_changed and groups_ready then
+      reapply_groups()
+    end
   end
   if type(opts.chips) == "table" then
     local c = opts.chips
