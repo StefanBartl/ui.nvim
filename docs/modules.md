@@ -276,12 +276,17 @@ in `order`/`modules`:
 
 - **Hover.** Rest the mouse on any module and a small float appears after a
   moment, showing that module's `ui.statusline.catalog` `summary` (the same
-  English one-liner `:UI modules` prints). The module's own text also
-  recolors for as long as it stays hovered — its foreground swapped to a
-  single accent color (an amber/orange in most colorschemes, read from
-  `DiagnosticWarn`), background and everything else about it left alone.
-  Needs `'mousemoveevent'` (Neovim 0.10+); degrades to "no hover" silently on
-  an older Neovim, same as `ui.kit.chooser`'s own `hover` option.
+  English one-liner `:UI modules` prints) — or, for an entry that declares a
+  `live` reader (currently just `plugin_progress`) and it returns something,
+  that instead: what the module is doing *right now* rather than its static
+  description. `summary` is still the fallback once `live` has nothing to
+  report (nothing running). The module's own text also recolors for as long
+  as it stays hovered — its foreground swapped to a single accent color (an
+  amber/orange in most colorschemes, read from `DiagnosticWarn`), background
+  and everything else about it left alone. Needs `'mousemoveevent'` (Neovim
+  0.10+); degrades to "no hover" silently on an older Neovim, same as
+  `ui.kit.chooser`'s own `hover` option. `:UI progress` shows the same
+  `live` state as a popup, without needing the mouse over the module at all.
 - **Right/double click → manage modules.** Right-clicking (or double-clicking,
   on a plain module) opens a context menu whose heading names the clicked
   module plus a short (catalog-summary-derived) description of what it does,

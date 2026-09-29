@@ -17,24 +17,41 @@
 
 local layout = require("ui.statusline.layout")
 local catalog = require("ui.statusline.catalog")
+local surface = require("ui.kit.surface")
 
 local api = vim.api
 
 local M = {}
 
----@type table<string, string>|nil
-local summaries = nil
+---@type table<string, Ui.Statusline.CatalogEntry>|nil
+local entries_by_key = nil
 
+--- The catalog's static `summary`, or -- when the entry declares a `live`
+--- reader and it currently returns something -- that instead. A hover on a
+--- module whose whole point is to change from moment to moment (the one
+--- progress module today) would otherwise only ever show the same
+--- description text `:UI modules` already prints, never what it is actually
+--- doing right now.
 ---@param key string
 ---@return string|nil
 local function summary_for(key)
-  if not summaries then
-    summaries = {}
+  if not entries_by_key then
+    entries_by_key = {}
     for _, entry in ipairs(catalog) do
-      summaries[entry.key] = entry.summary
+      entries_by_key[entry.key] = entry
     end
   end
-  return summaries[key]
+  local entry = entries_by_key[key]
+  if not entry then
+    return nil
+  end
+  if entry.live then
+    local ok, live_text = pcall(entry.live)
+    if ok and type(live_text) == "string" and live_text ~= "" then
+      return live_text
+    end
+  end
+  return entry.summary
 end
 
 local state = {
@@ -42,7 +59,26 @@ local state = {
   saved_mousemoveevent = nil, ---@type boolean|nil
   current_key = nil, ---@type string|nil
   popup_winid = nil, ---@type integer|nil
+  live_timer = nil, ---@type uv.uv_timer_t|nil
 }
+
+-- How often the popup re-renders while the pointer rests on a `live`-bearing
+-- module. `<MouseMove>` only fires on actual pointer movement, so without
+-- this a progress percentage captured the instant hover began (e.g.
+-- "cloning 1/10") would sit frozen on screen even after the real operation
+-- moves on or finishes, until the user moves the pointer off and back.
+local LIVE_REFRESH_MS = 1000
+
+---@return nil
+local function stop_live_refresh()
+  local timer = state.live_timer
+  if not timer then
+    return
+  end
+  state.live_timer = nil
+  pcall(timer.stop, timer)
+  pcall(timer.close, timer)
+end
 
 --- The key `ui.statusline.render` should recolor on this redraw, or nil.
 ---@return string|nil
@@ -58,16 +94,14 @@ local function close_popup()
   state.popup_winid = nil
 end
 
---- Break `text` into lines no wider than `max_width` display cells, on word
---- boundaries -- a catalog summary is one long sentence, and a tooltip as
---- wide as the sentence would frequently run off the edge of the screen.
----@param text string
+--- Break one already-newline-free `segment` into lines no wider than
+--- `max_width` display cells, on word boundaries.
+---@param segment string
 ---@param max_width integer
----@return string[]
-local function wrap_text(text, max_width)
-  local lines = {}
+---@param lines string[] appended to in place
+local function wrap_segment(segment, max_width, lines)
   local line = ""
-  for word in text:gmatch("%S+") do
+  for word in segment:gmatch("%S+") do
     local candidate = (line == "") and word or (line .. " " .. word)
     if vim.fn.strdisplaywidth(candidate) > max_width and line ~= "" then
       lines[#lines + 1] = line
@@ -78,6 +112,26 @@ local function wrap_text(text, max_width)
   end
   if line ~= "" then
     lines[#lines + 1] = line
+  end
+end
+
+--- Break `text` into lines no wider than `max_width` display cells, on word
+--- boundaries -- a catalog summary is one long sentence, and a tooltip as
+--- wide as the sentence would frequently run off the edge of the screen.
+---
+--- Splits on `\n` FIRST, then word-wraps each resulting segment on its own:
+--- a `live` reader (`plugin_progress`'s, e.g.) joins several concurrent
+--- operations with real newlines specifically so each renders as its own
+--- line -- word-wrapping the whole string in one pass (the previous
+--- `text:gmatch("%S+")`, which treats `\n` as just another space, same as
+--- Lua's `%s` class always has) merged them into one indistinguishable blob.
+---@param text string
+---@param max_width integer
+---@return string[]
+local function wrap_text(text, max_width)
+  local lines = {}
+  for _, segment in ipairs(vim.split(text, "\n", { plain = true })) do
+    wrap_segment(segment, max_width, lines)
   end
   return lines
 end
@@ -104,39 +158,94 @@ local function show_popup(text, screenrow, screencol)
     width = math.max(width, vim.fn.strdisplaywidth(l))
   end
 
-  local buf = api.nvim_create_buf(false, true)
-  vim.bo[buf].bufhidden = "wipe"
-  api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-
   local row = math.max(0, screenrow - 1 - (#lines + 2))
   local col = math.max(0, math.min(screencol - 1, vim.o.columns - width - 2))
 
-  local ok, winid = pcall(api.nvim_open_win, buf, false, {
+  -- `ui.kit.surface` (not a raw `nvim_open_win`) so this tooltip's border and
+  -- colors come from the active `ui.kit.theme` preset like every other
+  -- surface in the fleet does -- a stray "always rounded, always
+  -- NormalFloat/FloatBorder" float here used to be the one popup a preset
+  -- switch (`:UI theme ascii`, or a future one) silently skipped.
+  local opened = surface.open({
+    lines = lines,
     relative = "editor",
     row = row,
     col = col,
     width = width,
     height = #lines,
-    style = "minimal",
-    border = "rounded",
     focusable = false,
-    noautocmd = true,
-    -- Below every `ui.kit` surface (`base`/`popup` 50, `menu` 60, `toast`
-    -- 70 -- see ui.kit.theme's own BASE.zindex) on purpose: a right-click
-    -- opens the "manage this module" menu at the exact spot this tooltip is
-    -- already showing (the pointer has not moved between hover and click),
-    -- and an ambient hint has no business rendering on top of something the
-    -- user just asked for. It stays open underneath, harmlessly invisible,
-    -- until the next real mouse move clears or replaces it.
+    -- `focusable = false` alone does NOT stop the window from becoming
+    -- current on creation -- that is `enter`'s job, a separate
+    -- `nvim_open_win` parameter (`ui.kit.surface`/`lib.nvim.window
+    -- .make_scratch` default it to true when omitted). Without this, an
+    -- ordinary hover briefly yanked focus into the tooltip -- including
+    -- mid-insert, since `<MouseMove>` is bound in insert mode too -- the
+    -- exact regression `ui.kit.toast`/`ui.screenkey` already avoid by
+    -- passing this same flag for the same reason.
+    enter = false,
+    -- Below every other `ui.kit` surface (`base`/`popup` 50, `menu` 60,
+    -- `toast` 70) on purpose: a right-click opens the "manage this module"
+    -- menu at the exact spot this tooltip is already showing (the pointer
+    -- has not moved between hover and click), and an ambient hint has no
+    -- business rendering on top of something the user just asked for. It
+    -- stays open underneath, harmlessly invisible, until the next real
+    -- mouse move clears or replaces it.
     zindex = 40,
   })
-  if not ok then
-    pcall(api.nvim_buf_delete, buf, { force = true })
+  if not opened then
     return
   end
 
-  vim.wo[winid].winhighlight = "Normal:NormalFloat,FloatBorder:FloatBorder"
-  state.popup_winid = winid
+  state.popup_winid = opened.winid
+end
+
+--- Start (replacing any previous) periodic re-render of the popup for `key`
+--- while it stays hovered, so a `live` reader's text keeps advancing instead
+--- of freezing at whatever it said the moment hover began. Self-stops once
+--- `key` is no longer the hovered one -- a belt-and-suspenders check
+--- alongside the explicit `stop_live_refresh()` calls in `clear_hover()`/
+--- the key-change branch of `on_mouse_move()`, in case a tick is already
+--- queued when either of those runs.
+---@param key string
+---@param screenrow integer
+---@param screencol integer
+---@return nil
+local function start_live_refresh(key, screenrow, screencol)
+  stop_live_refresh()
+  local uv = vim.uv or vim.loop
+  local ok, timer = pcall(uv.new_timer)
+  if not ok or not timer then
+    return
+  end
+  state.live_timer = timer
+  timer:start(
+    LIVE_REFRESH_MS,
+    LIVE_REFRESH_MS,
+    vim.schedule_wrap(function()
+      -- This tick was already queued (libuv fired it, vim.schedule_wrap is
+      -- waiting for the main loop) by the moment a NEWER timer replaced
+      -- `timer` in `state.live_timer` -- belonging to a hover that has
+      -- since moved on to a different key. Comparing the captured `timer`
+      -- upvalue against the CURRENT `state.live_timer` (not just
+      -- `state.current_key`) catches that: without it, this stale tick's
+      -- own `stop_live_refresh()` call below would stop whatever timer
+      -- happens to be current -- the newer one, not this already-
+      -- superseded one -- freezing the popup it just started refreshing.
+      if state.live_timer ~= timer then
+        return
+      end
+      if state.current_key ~= key then
+        stop_live_refresh()
+        return
+      end
+      local summary = summary_for(key)
+      if summary then
+        show_popup(summary, screenrow, screencol)
+      else
+        close_popup()
+      end
+    end)
+  )
 end
 
 ---@return nil
@@ -145,6 +254,7 @@ local function clear_hover()
     return
   end
   state.current_key = nil
+  stop_live_refresh()
   close_popup()
   pcall(vim.cmd, "redrawstatus!")
 end
@@ -265,9 +375,14 @@ local function on_mouse_move()
   end
 
   state.current_key = key
+  stop_live_refresh()
   local summary = summary_for(key)
   if summary then
     show_popup(summary, target.screenrow, target.screencol)
+    local entry = entries_by_key and entries_by_key[key]
+    if entry and entry.live then
+      start_live_refresh(key, target.screenrow, target.screencol)
+    end
   else
     -- A host's own custom module (not in the catalog): still recolored by
     -- `render.lua` for consistency, but there is no summary to show.
@@ -340,5 +455,24 @@ end
 --- the same way it already does for `ui.tabline.menu.pointer_on_tabline()`.
 ---@return Ui.Statusline.PointerTarget|nil
 M.pointer_target = pointer_target
+
+---@internal Exposed for tests only (see `ui.statusline.utils.clickable._dispatch`
+---for the same leading-underscore convention elsewhere in this directory).
+M._summary_for = summary_for
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+M._show_popup = show_popup
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+M._wrap_text = wrap_text
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+M._on_mouse_move = on_mouse_move
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+function M._popup_winid()
+  return state.popup_winid
+end
+---@internal Exposed for tests only -- see `M._summary_for`'s own note.
+---@return boolean
+function M._live_refresh_active()
+  return state.live_timer ~= nil
+end
 
 return M

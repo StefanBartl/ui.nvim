@@ -39,6 +39,50 @@ describe("ui.statusline.catalog", function()
       end
     end
   end)
+
+  it("every entry's optional `live` reader, if present, is a function", function()
+    for _, entry in ipairs(catalog) do
+      if entry.live ~= nil then
+        assert.equals("function", type(entry.live), entry.key .. "'s live is not a function")
+      end
+    end
+  end)
+
+  describe("plugin_progress's live reader", function()
+    local sl = require("lib.nvim.progress.styles.statusline")
+    local entry
+    for _, e in ipairs(catalog) do
+      if e.key == "plugin_progress" then
+        entry = e
+      end
+    end
+
+    local original_active
+
+    before_each(function()
+      original_active = sl.active
+    end)
+
+    after_each(function()
+      sl.active = original_active
+    end)
+
+    it("is nil when nothing is running", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return {}
+      end
+      assert.is_nil(entry.live())
+    end)
+
+    it("joins every active operation's text, oldest first", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return { "[repos] cloning 3/10", "[replace] applying" }
+      end
+      assert.equals("[repos] cloning 3/10\n[replace] applying", entry.live())
+    end)
+  end)
 end)
 
 describe(":UI modules", function()
@@ -52,5 +96,32 @@ describe(":UI modules", function()
     assert.has_no.errors(function()
       vim.cmd("UI modules")
     end)
+  end)
+end)
+
+describe(":UI progress", function()
+  pcall(function()
+    require("ui.bindings.usrcmds").setup()
+  end)
+
+  it("does not throw with nothing running", function()
+    assert.has_no.errors(function()
+      vim.cmd("UI progress")
+    end)
+  end)
+
+  it("does not throw with an operation active", function()
+    local sl = require("lib.nvim.progress.styles.statusline")
+    local original_active = sl.active
+    ---@diagnostic disable-next-line: duplicate-set-field
+    sl.active = function()
+      return { "[repos] cloning 3/10" }
+    end
+
+    assert.has_no.errors(function()
+      vim.cmd("UI progress")
+    end)
+
+    sl.active = original_active
   end)
 end)

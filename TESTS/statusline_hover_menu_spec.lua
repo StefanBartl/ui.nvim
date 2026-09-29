@@ -276,6 +276,179 @@ describe("ui.statusline.hover", function()
       assert.is_nil(target)
     end
   )
+
+  describe("_summary_for() (live state over the static catalog summary)", function()
+    it("returns nil for a key with no catalog entry", function()
+      assert.is_nil(hover._summary_for("no_such_key"))
+    end)
+
+    it("returns the plain catalog summary for a key with no `live` reader", function()
+      assert.equals("Current Vim mode, as a filled colour chip.", hover._summary_for("mode"))
+    end)
+
+    it("falls back to the catalog summary when `live` has nothing to report", function()
+      local sl = require("lib.nvim.progress.styles.statusline")
+      local original_active = sl.active
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return {}
+      end
+
+      local text = hover._summary_for("plugin_progress")
+
+      sl.active = original_active
+      assert.equals(
+        "Whichever plugin is currently running a long operation (lib.nvim.progress).",
+        text
+      )
+    end)
+
+    it("prefers the live text over the static summary while something is running", function()
+      local sl = require("lib.nvim.progress.styles.statusline")
+      local original_active = sl.active
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return { "[repos] cloning 3/10" }
+      end
+
+      local text = hover._summary_for("plugin_progress")
+
+      sl.active = original_active
+      assert.equals("[repos] cloning 3/10", text)
+    end)
+  end)
+
+  describe("_show_popup() (themed via ui.kit, not a raw hardcoded float)", function()
+    after_each(function()
+      hover._show_popup("", 0, 0) -- closes any popup left open by a test; empty text opens nothing new
+    end)
+
+    it("opens a window whose border/colors come from ui.kit.theme's Kit* groups", function()
+      hover._show_popup("hello", 10, 5)
+      local winid = hover._popup_winid()
+      assert.is_not_nil(winid)
+      assert.is_true(vim.api.nvim_win_is_valid(winid))
+
+      local winhl = vim.api.nvim_get_option_value("winhighlight", { win = winid })
+      -- Regression: this used to be the literal, un-themed
+      -- "Normal:NormalFloat,FloatBorder:FloatBorder" -- a preset switch
+      -- (:UI theme ascii, say) silently skipped this one tooltip while
+      -- recoloring every other surface in the fleet.
+      assert.is_true(winhl:find("Kit", 1, true) ~= nil, "winhighlight references a Kit* group")
+    end)
+
+    it("an empty text produces no popup (nothing left to wrap)", function()
+      hover._show_popup("", 10, 5)
+      assert.is_nil(hover._popup_winid())
+    end)
+
+    it("does not steal focus -- the current window is unchanged after opening", function()
+      local before = vim.api.nvim_get_current_win()
+      hover._show_popup("hello", 10, 5)
+      -- Regression: the migration to ui.kit.surface.open() used to omit
+      -- `enter = false`, and surface.open()/make_scratch default `enter` to
+      -- true when it is not passed -- `focusable = false` alone does NOT
+      -- stop the window from becoming current on creation, so every hover
+      -- (including mid-insert, since <MouseMove> is bound in insert mode
+      -- too) yanked focus into the tooltip.
+      assert.equals(before, vim.api.nvim_get_current_win())
+    end)
+  end)
+
+  describe("_wrap_text() (newline-aware wrapping)", function()
+    it("keeps single-line text on one line, word-wrapped as before", function()
+      local lines = hover._wrap_text("a short sentence", 50)
+      assert.same({ "a short sentence" }, lines)
+    end)
+
+    it(
+      "splits on explicit newlines instead of merging them into one word-wrapped blob "
+        .. "-- regression: plugin_progress's live() joins concurrent operations with "
+        .. "'\\n' specifically so each is its own line",
+      function()
+        local lines = hover._wrap_text("[repos] cloning 3/10\n[replace] applying", 50)
+        assert.same({ "[repos] cloning 3/10", "[replace] applying" }, lines)
+      end
+    )
+
+    it("still word-wraps a single segment that is itself too wide", function()
+      local lines = hover._wrap_text("one\n" .. ("word "):rep(20):gsub("%s+$", ""), 20)
+      assert.equals("one", lines[1])
+      assert.is_true(#lines > 2, "the long second segment wrapped onto more than one line")
+      for i = 2, #lines do
+        assert.is_true(vim.fn.strdisplaywidth(lines[i]) <= 20, "wrapped lines fit max_width")
+      end
+    end)
+  end)
+
+  describe("live refresh (periodic re-render while hovering a `live`-bearing module)", function()
+    local layout = require("ui.statusline.layout")
+    local original_key_at = layout.key_at
+    local original_getmousepos = vim.fn.getmousepos
+    local original_laststatus = vim.o.laststatus
+
+    ---@param key string|nil
+    local function stub_hover_target(key)
+      layout.key_at = function()
+        return key
+      end
+      vim.o.laststatus = 3
+      local current_win = vim.api.nvim_get_current_win()
+      local target_row = vim.o.lines - vim.o.cmdheight
+      vim.fn.getmousepos = function()
+        return {
+          winid = current_win,
+          line = 1,
+          wincol = 5,
+          winrow = 5,
+          screenrow = target_row,
+          screencol = 30,
+        }
+      end
+    end
+
+    after_each(function()
+      layout.key_at = original_key_at
+      vim.fn.getmousepos = original_getmousepos
+      vim.o.laststatus = original_laststatus
+      hover.disable() -- also stops any timer left running by a failed assertion
+    end)
+
+    it("starts while hovering plugin_progress (a `live`-bearing catalog entry)", function()
+      assert.is_false(hover._live_refresh_active())
+      stub_hover_target("plugin_progress")
+      hover._on_mouse_move()
+      assert.is_true(hover._live_refresh_active())
+    end)
+
+    it('does not start for a key with no `live` reader (e.g. "mode")', function()
+      stub_hover_target("mode")
+      hover._on_mouse_move()
+      assert.is_false(hover._live_refresh_active())
+    end)
+
+    it("stops once the pointer moves off the statusline entirely", function()
+      stub_hover_target("plugin_progress")
+      hover._on_mouse_move()
+      assert.is_true(hover._live_refresh_active())
+
+      vim.fn.getmousepos = function()
+        return { winid = 0, line = 5, wincol = 1, winrow = 1, screenrow = 1, screencol = 1 }
+      end
+      hover._on_mouse_move()
+      assert.is_false(hover._live_refresh_active())
+    end)
+
+    it("stops when hover moves to a different key, even a non-live one", function()
+      stub_hover_target("plugin_progress")
+      hover._on_mouse_move()
+      assert.is_true(hover._live_refresh_active())
+
+      stub_hover_target("mode")
+      hover._on_mouse_move()
+      assert.is_false(hover._live_refresh_active())
+    end)
+  end)
 end)
 
 describe("ui.statusline.menu", function()
