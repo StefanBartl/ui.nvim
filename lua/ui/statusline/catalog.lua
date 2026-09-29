@@ -14,6 +14,7 @@
 ---@field requires string|nil # a soft dependency this segment renders empty without; nil if it has none
 ---@field used_by string[] # shipped preset names that include this key by default; empty means opt-in only
 ---@field essential boolean|nil # true = kept by `ui.statusline.render`'s `responsive` mode even in a narrow window; unset/false = dropped there. Only meaningful with `Ui.Statusline.Config.responsive = true` -- see docs/modules.md's "Responsive mode" section
+---@field live? fun(): string|nil # optional: current runtime state, e.g. what a progress module is doing right now. `ui.statusline.hover` shows this INSTEAD of `summary` while it returns a non-empty string, falling back to `summary` when it returns nil (nothing currently running) -- a static one-line description is otherwise all a hover ever gets, even for a module whose whole point is to change from moment to moment
 
 ---@type Ui.Statusline.CatalogEntry[]
 return {
@@ -82,6 +83,17 @@ return {
     builtin = false,
     source = "ui.statusline.modules.plugin_progress",
     used_by = { "default" },
+    live = function()
+      local ok, sl = pcall(require, "lib.nvim.progress.styles.statusline")
+      if not ok then
+        return nil
+      end
+      local active = sl.active() -- string[], oldest first
+      if #active == 0 then
+        return nil
+      end
+      return table.concat(active, "\n")
+    end,
   },
   {
     -- Intentionally host-specific: compute_text() splits the count via this

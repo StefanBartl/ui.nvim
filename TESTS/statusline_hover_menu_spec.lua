@@ -276,6 +276,47 @@ describe("ui.statusline.hover", function()
       assert.is_nil(target)
     end
   )
+
+  describe("_summary_for() (live state over the static catalog summary)", function()
+    it("returns nil for a key with no catalog entry", function()
+      assert.is_nil(hover._summary_for("no_such_key"))
+    end)
+
+    it("returns the plain catalog summary for a key with no `live` reader", function()
+      assert.equals("Current Vim mode, as a filled colour chip.", hover._summary_for("mode"))
+    end)
+
+    it("falls back to the catalog summary when `live` has nothing to report", function()
+      local sl = require("lib.nvim.progress.styles.statusline")
+      local original_active = sl.active
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return {}
+      end
+
+      local text = hover._summary_for("plugin_progress")
+
+      sl.active = original_active
+      assert.equals(
+        "Whichever plugin is currently running a long operation (lib.nvim.progress).",
+        text
+      )
+    end)
+
+    it("prefers the live text over the static summary while something is running", function()
+      local sl = require("lib.nvim.progress.styles.statusline")
+      local original_active = sl.active
+      ---@diagnostic disable-next-line: duplicate-set-field
+      sl.active = function()
+        return { "[repos] cloning 3/10" }
+      end
+
+      local text = hover._summary_for("plugin_progress")
+
+      sl.active = original_active
+      assert.equals("[repos] cloning 3/10", text)
+    end)
+  end)
 end)
 
 describe("ui.statusline.menu", function()

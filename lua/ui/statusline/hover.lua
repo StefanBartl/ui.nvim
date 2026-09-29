@@ -22,19 +22,35 @@ local api = vim.api
 
 local M = {}
 
----@type table<string, string>|nil
-local summaries = nil
+---@type table<string, Ui.Statusline.CatalogEntry>|nil
+local entries_by_key = nil
 
+--- The catalog's static `summary`, or -- when the entry declares a `live`
+--- reader and it currently returns something -- that instead. A hover on a
+--- module whose whole point is to change from moment to moment (the one
+--- progress module today) would otherwise only ever show the same
+--- description text `:UI modules` already prints, never what it is actually
+--- doing right now.
 ---@param key string
 ---@return string|nil
 local function summary_for(key)
-  if not summaries then
-    summaries = {}
+  if not entries_by_key then
+    entries_by_key = {}
     for _, entry in ipairs(catalog) do
-      summaries[entry.key] = entry.summary
+      entries_by_key[entry.key] = entry
     end
   end
-  return summaries[key]
+  local entry = entries_by_key[key]
+  if not entry then
+    return nil
+  end
+  if entry.live then
+    local ok, live_text = pcall(entry.live)
+    if ok and type(live_text) == "string" and live_text ~= "" then
+      return live_text
+    end
+  end
+  return entry.summary
 end
 
 local state = {
@@ -340,5 +356,9 @@ end
 --- the same way it already does for `ui.tabline.menu.pointer_on_tabline()`.
 ---@return Ui.Statusline.PointerTarget|nil
 M.pointer_target = pointer_target
+
+---@internal Exposed for tests only (see `ui.statusline.utils.clickable._dispatch`
+---for the same leading-underscore convention elsewhere in this directory).
+M._summary_for = summary_for
 
 return M
