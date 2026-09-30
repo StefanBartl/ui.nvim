@@ -36,6 +36,11 @@ require("ui").setup({
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
+  toast = {        -- size of the corner toasts (notify and every other ui.kit.toast user)
+    width = "40%", -- widest a toast may get: columns or "NN%" of the editor width
+    min_width = 40, -- narrowest: a short message still gets a chip about this wide
+    padding = 1,   -- blank columns left and right of the text
+  },
 })
 ```
 
@@ -257,6 +262,13 @@ that to `all = true`. `true` installs `ui.notify` with the shipped tunables;
 a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 { [vim.log.levels.ERROR] = 8000 }, titles = { ... } }`) overrides them.
 `:UI notify off` puts the previous handler back.
+
+`toast` only tunes the look of the top-right corner toasts and replaces
+nothing, so it is applied whenever given. A toast is as wide as its text plus
+`padding`, at least `min_width` and at most `width`; both take a column count
+or a percentage string of the editor width and follow a resize. Text that would
+exceed the maximum is wrapped, not cut. `require("ui.kit.toast").setup({...})`
+does the same without going through `ui.setup`.
 
 Nothing here is on by default, with one deliberate exception: `menu` is
 opt-**out**, not opt-in. `ui.contextmenu`'s `open`/`bind_buffer` already work
