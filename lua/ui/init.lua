@@ -88,6 +88,18 @@ function M.setup(opts)
     end
   end
 
+  -- Size of the corner toasts (every `ui.kit.toast`, so `ui.notify` and any
+  -- consumer such as lib.nvim.notify.popup): unlike `notify` this only
+  -- tunes the look, it replaces nothing, so it is applied whenever given.
+  if type(opts.toast) == "table" then
+    local ok, err = pcall(function()
+      require("ui.kit.toast").setup(opts.toast)
+    end)
+    if not ok then
+      notify.error("toast setup failed: " .. tostring(err))
+    end
+  end
+
   if opts.notify then
     local ok, err = pcall(function()
       local ui_notify = require("ui.notify")
