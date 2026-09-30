@@ -122,6 +122,15 @@ describe("ui.kit.toast", function()
       assert.equals(60, width_of(long))
     end)
 
+    it("sits above picker-class floats (theme zindex.toast), not at the popup level", function()
+      local s = toast.open({ message = "hi", timeout = 0 })
+      local z = vim.api.nvim_win_get_config(s.winid).zindex
+      -- snacks' picker layout is 52 and its windows 54; the popup default was 50,
+      -- which hid every toast behind an open picker.
+      assert.is_true(z > 54, "toast zindex " .. tostring(z) .. " is not above a snacks picker")
+      assert.equals(require("ui.kit.theme").resolve().zindex.toast, z)
+    end)
+
     it("right-aligns each toast to its own width", function()
       local narrow = toast.open({ message = "a", timeout = 0 })
       local wide = toast.open({ message = string.rep("x", 70), timeout = 0 })
