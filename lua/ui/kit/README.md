@@ -88,6 +88,7 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | -------- | ---------- |
 | `note`   | centered title + message float; optional `timeout` (ms) auto-dismiss |
 | `viewer` | read-only info panel; auto-sized to content; closes on q/`<Esc>` OR the moment focus leaves it — the "show some info, dismiss it" float duplicated 6+ times across consumer plugins before this existed |
+| `message_log` | scrollable, time-ordered, paginated, collapsible entry list — see [Message log](#message-log-paginated-time-ordered-entry-list) below |
 | `toast`  | ephemeral top-right message; stacks; never steals focus; auto-dismiss |
 | `input`  | single-line insert-mode prompt; `<CR>` submits, `<Esc>` cancels; `secret = true` masks it as you type; `completion = "file"` (or any `getcompletion()` type) wires `<Tab>` to the native completion popup |
 | `live_input` | like `input`, but also debounces keystrokes into `on_change(query)` as you type — for filter/search boxes |
@@ -287,6 +288,56 @@ created under a group named after the window id, so `lib.nvim`'s autocmd records
 would keep one entry per popup for good. They pass `record = false` too, and
 `lib.nvim`'s own `close_on_focus_lost` helper does the same. Groups with a fixed
 name are cleared on every open and stay recorded.
+
+### Message log (paginated, time-ordered entry list)
+
+`kit.message_log(opts)` is a scrollable, time-ordered, paginated, collapsible
+entry list — "show a recent, growing, time-stamped list" (first consumer:
+debugging.nvim's recent-messages view, backed by `lib.nvim.messages`). It
+knows nothing about where entries come from: plain tables in, callbacks for
+pagination and live updates.
+
+```lua
+local handle = kit.message_log({
+  title = "Recent messages",
+  entries = lib_messages.snapshot({ since_ms = now - 10000 }),  -- oldest first
+  order = "newest_last",            -- or "newest_first"
+  collapsed_default = false,
+  load_more = function(direction)   -- "older" | "newer"; omit to disable pagination
+    return lib_messages.snapshot({ until_ms = oldest_loaded_ms, levels = {...} })
+  end,
+})
+
+-- Live feed: the caller owns its own subscription and decides what belongs here.
+lib_messages.on_message(function(entry)
+  handle:append({ entry })
+end)
+```
+
+An `entry` is `{ time_ms, level?, content }` — `time_ms` just needs to share a
+clock with `opts.now_ms` (default `vim.uv.hrtime()/1e6`, monotonic) and the
+other entries; this module only ever subtracts two of the caller's own
+values, so an epoch clock works equally well.
+
+| Key | Does |
+| --- | --- |
+| `q`, `<Esc>` | close |
+| `<C-j>` | load older entries (`opts.load_more("older")`) |
+| `<C-k>` | load newer entries (`opts.load_more("newer")`) |
+| `<C-l>` | expand (un-collapse) |
+| `<C-h>` | collapse (first content line per entry only, with a "+N more lines" marker) |
+| `<C-e>` | toggle collapsed mode |
+| `?` | cheatsheet (this table, plus `opts.extra_cheatsheet_lines`) |
+
+Pagination hints render as virtual text at the top/bottom edge (`󰁝 more
+above`/`󰁅 more below`) only while `opts.load_more` is set and hasn't yet
+reported "nothing left" in that direction — a `load_more` call returning an
+empty list hides that arrow for the rest of the popup's life, it is not
+re-offered. Plain `j`/`k`/arrows always just scroll; pagination is `<C-j>`/
+`<C-k>` only, on purpose (a held `j`/`↓` must never accidentally page).
+
+`handle:append(entries)`, `handle:load_more(direction)`,
+`handle:set_collapsed(value?)`, `handle:on_close(cb)`, `handle:close()`.
 
 ### Compare (pick two, view side by side)
 
