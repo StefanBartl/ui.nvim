@@ -40,6 +40,7 @@ require("ui").setup({
     width = "40%", -- widest a toast may get: columns or "NN%" of the editor width
     min_width = 40, -- narrowest: a short message still gets a chip about this wide
     padding = 1,   -- blank columns left and right of the text
+    max_lines = 20, -- most text rows; the rest becomes an ellipsis row
   },
 })
 ```
@@ -267,7 +268,7 @@ a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 nothing, so it is applied whenever given. A toast is as wide as its text plus
 `padding`, at least `min_width` and at most `width`; both take a column count
 or a percentage string of the editor width and follow a resize. Text that would
-exceed the maximum is wrapped, not cut. `require("ui.kit.toast").setup({...})`
+exceed the maximum is wrapped, not cut; a message is looked at up to 8 KB and shown in at most `max_lines` rows (the last one an ellipsis). `require("ui.kit.toast").setup({...})`
 does the same without going through `ui.setup`.
 
 Nothing here is on by default, with one deliberate exception: `menu` is

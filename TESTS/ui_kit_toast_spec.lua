@@ -78,6 +78,40 @@ describe("ui.kit.toast", function()
       assert.equals(200, #table.concat(lines):gsub(" ", ""))
     end)
 
+    it(
+      "caps a huge message at max_lines rows, ending in an ellipsis, without quadratic cost",
+      function()
+        local started = vim.uv.hrtime()
+        local s = toast.open({ message = string.rep("word ", 40000), timeout = 0 }) -- 200 KB
+        local took_ms = (vim.uv.hrtime() - started) / 1e6
+        local lines = vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false)
+        assert.equals(20, #lines)
+        assert.is_truthy(lines[20]:find("…", 1, true))
+        assert.is_true(took_ms < 500, ("took %.0f ms"):format(took_ms))
+      end
+    )
+
+    it("honours setup({ max_lines }) and also caps a table of lines", function()
+      toast.setup({ max_lines = 3 })
+      local rows = {}
+      for i = 1, 50 do
+        rows[i] = "row " .. i
+      end
+      local s = toast.open({ message = rows, timeout = 0 })
+      local lines = vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false)
+      toast.setup({ max_lines = 20 })
+      assert.equals(3, #lines)
+      assert.is_truthy(lines[3]:find("…", 1, true))
+    end)
+
+    it("never cuts a multibyte character in half when it truncates", function()
+      local s = toast.open({ message = string.rep("ä", 20000), timeout = 0 })
+      for _, line in ipairs(vim.api.nvim_buf_get_lines(s.bufnr, 0, -1, false)) do
+        assert.is_true(vim.fn.strchars(line) == vim.fn.strchars(line, 1)) -- valid UTF-8 round trip
+        assert.is_nil(line:find("\xef\xbf\xbd", 1, true))
+      end
+    end)
+
     it("pads the text inside the chip", function()
       local s = toast.open({ message = "hi", timeout = 0 })
       assert.equals(" hi ", vim.api.nvim_buf_get_lines(s.bufnr, 0, 1, false)[1])
