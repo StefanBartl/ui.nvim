@@ -124,6 +124,78 @@ describe("ui.kit.message_log", function()
     assert.same({ "older", "older" }, calls)
   end)
 
+  it("max_entries caps growth, dropping the oldest entries on append()", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      max_entries = 2,
+      entries = { { time_ms = 0, content = "one" } },
+    })
+    handle:append({ { time_ms = 0, content = "two" } })
+    handle:append({ { time_ms = 0, content = "three" } })
+    local got = lines(handle)
+    assert.equals(2, #got, "capped at max_entries")
+    assert.truthy(got[1]:match("two$"), "oldest entry was dropped")
+    assert.truthy(got[2]:match("three$"), "newest entry kept")
+  end)
+
+  it(
+    "max_entries does not apply to load_more('older') -- paging into history is never trimmed back out",
+    function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        max_entries = 2,
+        entries = { { time_ms = 0, content = "b" }, { time_ms = 0, content = "c" } },
+        load_more = function()
+          return { { time_ms = 0, content = "a" } }
+        end,
+      })
+      handle:load_more("older")
+      local got = lines(handle)
+      assert.equals(3, #got, "pagination is exempt from max_entries")
+      assert.truthy(got[1]:match("a$"))
+      assert.truthy(got[2]:match("b$"))
+      assert.truthy(got[3]:match("c$"))
+    end
+  )
+
+  it(
+    "two concurrently-open instances share a module-level namespace without cross-interference",
+    function()
+      local a = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, level = vim.log.levels.ERROR, content = "err" } },
+      })
+      local b = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "plain" } },
+      })
+      assert.equals(a._hl_ns, b._hl_ns, "namespace is shared across instances, not per-bufnr")
+
+      local marks_a =
+        vim.api.nvim_buf_get_extmarks(a.surf.bufnr, a._hl_ns, 0, -1, { details = true })
+      assert.equals(1, #marks_a, "the error highlight landed on a's own buffer")
+
+      local marks_b =
+        vim.api.nvim_buf_get_extmarks(b.surf.bufnr, b._hl_ns, 0, -1, { details = true })
+      assert.equals(
+        0,
+        #marks_b,
+        "b has no highlight and is unaffected by a's, despite the shared namespace"
+      )
+
+      pcall(a.close, a)
+      pcall(b.close, b)
+    end
+  )
+
   it("on_close fires when the window is closed", function()
     local closed = false
     handle = message_log.open({ entries = {} })
