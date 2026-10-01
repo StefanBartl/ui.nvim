@@ -201,6 +201,49 @@ describe("ui.kit.message_log", function()
     )
   end)
 
+  it("reserves an extra row for the pagination hint so it isn't scrolled out of view", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      entries = { { time_ms = 0, content = "one" }, { time_ms = 0, content = "two" } },
+      load_more = function()
+        return {}
+      end,
+    })
+    -- has_more_older starts true whenever load_more is configured -- the
+    -- "more above" virt_line is a real rendered row, so the window must be
+    -- content (2) + 1 for the hint, not just content.
+    assert.equals(
+      3,
+      vim.api.nvim_win_get_config(handle.surf.winid).height,
+      "height includes the 'more above' hint row, not just the buffer's own 2 lines"
+    )
+    -- The extra row alone isn't enough -- Neovim's default viewport does
+    -- NOT reveal virt_lines_above on line 1 on its own (discovered live-
+    -- testing this exact popup: the row rendered blank until manually
+    -- scrolled with <C-k>). `topfill` is the view field that actually
+    -- reveals it.
+    vim.api.nvim_win_call(handle.surf.winid, function()
+      assert.equals(
+        1,
+        vim.fn.winsaveview().topfill,
+        "topfill reveals the hint instead of leaving it scrolled out"
+      )
+    end)
+
+    -- Once load_more reports nothing left, the hint (and its row) go away.
+    handle:load_more("older")
+    assert.equals(
+      2,
+      vim.api.nvim_win_get_config(handle.surf.winid).height,
+      "height shrinks back once the pagination hint is gone"
+    )
+    vim.api.nvim_win_call(handle.surf.winid, function()
+      assert.equals(0, vim.fn.winsaveview().topfill, "topfill resets once the hint is gone")
+    end)
+  end)
+
   it("does not auto-resize when the caller passed an explicit height", function()
     handle = message_log.open({
       now_ms = function()
