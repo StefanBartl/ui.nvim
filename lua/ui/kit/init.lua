@@ -21,6 +21,7 @@ local menu = require("ui.kit.menu")
 local preview = require("ui.kit.preview")
 local note = require("ui.kit.note")
 local viewer = require("ui.kit.viewer")
+local message_log = require("ui.kit.message_log")
 local toast = require("ui.kit.toast")
 local chip = require("ui.kit.chip")
 local input = require("ui.kit.input")
@@ -72,6 +73,16 @@ end
 ---@return Ui.Kit.Surface|nil
 function M.viewer(opts)
   return viewer.open(opts)
+end
+
+--- Open a scrollable, time-ordered, paginated, collapsible entry list popup
+--- -- <C-j>/<C-k> load older/newer, <C-l>/<C-h>/<C-e> collapse mode, `?` a
+--- cheatsheet. Knows nothing about where entries come from (plain tables in,
+--- callbacks for more/live updates) -- see ui.kit.message_log's module doc.
+---@param opts Ui.Kit.MessageLog.Opts
+---@return Ui.Kit.MessageLog.Handle|nil
+function M.message_log(opts)
+  return message_log.open(opts)
 end
 
 --- Show an ephemeral corner toast.
@@ -191,6 +202,7 @@ end
 local COMPONENTS = {
   note = note.open,
   viewer = viewer.open,
+  message_log = message_log.open,
   toast = toast.open,
   input = input.open,
   live_input = live_input.open,
@@ -208,8 +220,8 @@ local COMPONENTS = {
 }
 
 --- Friendly front door: dispatch on `opts.type` (default "note"). Supported
---- types: note, viewer, toast, input, live_input, form, select, prompt, picker,
---- confirm, menu, compare, shortlist, progress.
+--- types: note, viewer, message_log, toast, input, live_input, form, select,
+--- prompt, picker, confirm, menu, compare, shortlist, progress.
 ---@param opts table
 ---@return any
 function M.popup(opts)
