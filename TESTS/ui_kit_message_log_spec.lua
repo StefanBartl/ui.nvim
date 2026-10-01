@@ -140,6 +140,87 @@ describe("ui.kit.message_log", function()
     assert.truthy(got[2]:match("three$"), "newest entry kept")
   end)
 
+  it("max_entries trimming never sets has_more_older on its own", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      max_entries = 1,
+      entries = { { time_ms = 0, content = "one" } },
+    })
+    assert.is_false(handle.has_more_older, "no load_more configured -- never true to begin with")
+    handle:append({ { time_ms = 0, content = "two" } }) -- triggers _trim()
+    assert.is_false(
+      handle.has_more_older,
+      "trimming must not invent a 'more above' hint load_more() can never satisfy"
+    )
+
+    pcall(handle.close, handle)
+    local calls = {}
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      max_entries = 1,
+      entries = { { time_ms = 0, content = "a" }, { time_ms = 0, content = "b" } },
+      load_more = function(direction)
+        calls[#calls + 1] = direction
+        return {} -- immediately exhausted
+      end,
+    })
+    handle:load_more("older")
+    assert.is_false(handle.has_more_older, "load_more('older') reported nothing left")
+    handle:append({ { time_ms = 0, content = "c" } }) -- triggers _trim() again
+    assert.is_false(
+      handle.has_more_older,
+      "a later cap-triggered trim must not resurrect a hint load_more already exhausted"
+    )
+  end)
+
+  it("auto-resizes the window to its content height, floored at 2 rows", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      entries = { { time_ms = 0, content = "only one line" } },
+    })
+    assert.equals(
+      2,
+      vim.api.nvim_win_get_config(handle.surf.winid).height,
+      "one content line still floors at 2 rows (lib.nvim.window.tag.find()'s own height > 1 requirement)"
+    )
+    handle:append({
+      { time_ms = 0, content = "two" },
+      { time_ms = 0, content = "three" },
+      { time_ms = 0, content = "four" },
+    })
+    assert.equals(
+      4,
+      vim.api.nvim_win_get_config(handle.surf.winid).height,
+      "grows with real content once past the 2-row floor"
+    )
+  end)
+
+  it("does not auto-resize when the caller passed an explicit height", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      height = 5,
+      entries = { { time_ms = 0, content = "one" } },
+    })
+    assert.equals(5, vim.api.nvim_win_get_config(handle.surf.winid).height)
+    handle:append({
+      { time_ms = 0, content = "two" },
+      { time_ms = 0, content = "three" },
+    })
+    assert.equals(
+      5,
+      vim.api.nvim_win_get_config(handle.surf.winid).height,
+      "explicit height is never overridden"
+    )
+  end)
+
   it(
     "max_entries does not apply to load_more('older') -- paging into history is never trimmed back out",
     function()
