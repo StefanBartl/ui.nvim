@@ -54,7 +54,7 @@ debounce_ms = 30, line_numbers = true, node_types = {...},
 exclude_node_types = {...}, exclude_filetypes = {...}, zindex = 20,
 headings = { enable = true, max_level = 6, icons = {...} },
 persist = false, state_file = nil, style = "mimic",
-chips = { layout = "row", shape = "rounded" }, position = { anchor = "top" } }`)
+chips = { layout = "row", shape = "rounded_chip" }, position = { anchor = "top" } }`)
 to override them; `:UI sticky` (`:UI context` is the older spelling) toggles
 it for the session either way.
 
@@ -69,7 +69,8 @@ context = {
   chips = {                       -- only read when style = "chips"
     layout = "row",               -- "row" (default): every entry joined into one breadcrumb line
                                    -- "stack": one chip per line
-    shape = "rounded",            -- "rounded" (default): lsp.nvim's cap-body-cap look | "rect": a flat block, no caps
+    shape = "rounded_chip",       -- "rounded_chip" (default): lsp.nvim's cap-body-cap look | "chip": a flat block, no caps
+                                   -- | "classic": no coloured background at all (old names "rounded"/"rect"/"text" still work)
   },
 }
 ```
@@ -96,8 +97,9 @@ window's own gutter.
 before this option existed) or `"stack"` (one chip per line, like `"mimic"`'s
 one-row-per-entry -- a long entry's own truncation then never eats into a
 shorter entry sharing the same line the way `"row"`'s single shared line
-would). `chips.shape` is `"rounded"` (default) or `"rect"` (a flat coloured
-block, no caps). Both apply to either anchor style; `"stack"` with a compact
+would). `chips.shape` is `"rounded_chip"` (default), `"chip"` (a flat coloured
+block, no caps) or `"classic"` (no coloured background; the old names
+`"rounded"`/`"rect"`/`"text"` are still accepted). Both apply to either anchor style; `"stack"` with a compact
 anchor sizes the box to its widest chip, same as `"row"` sizes to its one
 line's width -- and a `"top-right"`/`"bottom-right"`/`"*-center"` anchor then
 right-aligns (respectively centres) each shorter chip under the widest one,
@@ -105,7 +107,7 @@ instead of leaving it hugging the box's left edge.
 
 A heading's chip colour comes from its own `@markup.heading.N.markdown`
 group (`UiContextChipH1`..`6`, plus a `...Cap` variant for the rounded caps,
-unused by `shape = "rect"`); every non-heading (code) scope shares one
+unused by `shape = "chip"`); every non-heading (code) scope shares one
 generic `UiContextChipScope` / `UiContextChipScopeCap` pair -- override any
 of them with `:hi` the same way as the `UiContextH*` groups the `"mimic"`
 style uses.
