@@ -338,6 +338,24 @@ local function check_segments()
     end
   end
 
+  -- `tasks_counter` depends on a folder, not a plugin: report what it would
+  -- read for this cwd, so an empty segment is explained rather than mysterious.
+  local tc_ok, tc_config = pcall(require, "ui.statusline.modules.tasks_counter.config")
+  if tc_ok then
+    local cfg = tc_config.get()
+    local vault = tc_config.resolve_vault(cfg)
+    if not vault then
+      health.info(
+        "task vault not found (opts.tasks.vault / $TASKS_VAULT / $REPOS_DIR) -- tasks_counter stays empty"
+      )
+    else
+      local area = tc_config.resolve_area(cfg)
+      health.ok(
+        ("task vault %s, area for this cwd: %s (tasks_counter)"):format(vault, area or "none")
+      )
+    end
+  end
+
   health.info("These are soft: a missing one blanks its segment, nothing else.")
 end
 

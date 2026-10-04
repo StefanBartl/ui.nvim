@@ -49,6 +49,7 @@ local filetree_cwd_mode = lazy.require("ui.statusline.modules.filetree_cwd_mode"
 local casedesk = lazy.require("ui.statusline.modules.casedesk")
 local undo_depth = lazy.require("ui.statusline.modules.undo_depth")
 local search_count = lazy.require("ui.statusline.modules.search_count")
+local tasks_counter = lazy.require("ui.statusline.modules.tasks_counter")
 
 -- ============================================================================
 -- Modules
@@ -73,6 +74,7 @@ return {
         "lsp",
         "search_count",
         "undo_depth",
+        "tasks_counter",
         "plugin_progress",
         "plugin_summary",
         "casedesk",
@@ -90,6 +92,12 @@ return {
         -- has actually branched (an edit after an undo).
         undo_depth = function()
           return undo_depth()
+        end,
+
+        -- "T:7" open tasks of the project in the cwd (wkdbook task vault),
+        -- empty without a vault. Options: require("ui").setup({ tasks = {...} }).
+        tasks_counter = function()
+          return tasks_counter()
         end,
 
         plugin_progress = function()

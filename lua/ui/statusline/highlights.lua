@@ -134,6 +134,14 @@ function M.apply()
   set(0, "St_Pos_txt", { fg = pos_contrast, bg = pos_accent })
   set(0, "St_Pos_sep", { fg = pos_accent, bg = empty_bg })
 
+  -- `tasks_counter` (opt-in segment): the count in the plain statusline
+  -- colour, its urgent/blocked breakdown in the two diagnostic anchors. Made
+  -- here, up front, rather than on first render -- every `nvim_set_hl` call
+  -- forces a full redraw, which must not happen from inside a redraw.
+  set(0, "St_TasksCounter", { fg = fg, bg = "NONE" })
+  set(0, "St_TasksUrgent", { fg = read("DiagnosticWarn", "fg") or "#e0af68", bg = "NONE" })
+  set(0, "St_TasksBlocked", { fg = read("DiagnosticError", "fg") or "#e06c75", bg = "NONE" })
+
   -- `plugin_progress`'s transient status line (used by the "default" preset).
   set(0, "St_LspProgress", { fg = fg, bg = "NONE" })
 

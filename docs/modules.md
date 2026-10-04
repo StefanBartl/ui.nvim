@@ -78,6 +78,7 @@ modules = {
 | `filetree_cwd_mode` | filetree.nvim's cwd-mode badge (`PROJECT`/`LOCK`/`MANUAL`/…), as a filled capsule; `opts.history = true` adds a 3-dot mode/root trail | filetree.nvim | `ui.statusline.modules.filetree_cwd_mode` |
 | `undo_depth` | Undo steps available on the current branch, plus a glyph if the undo tree has branched | — | `ui.statusline.modules.undo_depth` |
 | `search_count` | `[current/total]` match position while `hlsearch` is active | — | `ui.statusline.modules.search_count` |
+| `tasks_counter` | Open tasks of the project in the cwd, read from the wkdbook task vault, e.g. `"T:7"` (`breakdown = true`: `"T:7 P1:2 B:1"`) | a task vault (optional) | `ui.statusline.modules.tasks_counter` |
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
@@ -104,6 +105,30 @@ land in that slice (relative to the busiest one), colour by the worst
 severity present there. An empty slice renders in the same neutral colour
 `lsp_msg` uses, not a severity one — "nothing here" is not "low severity of
 something".
+
+`tasks_counter` counts the open tasks of the project in the cwd and shows
+them as `T:7`. The data is the wkdbook task vault -- one Markdown file per
+task under `<area>/ROADMAP/tasks/`, plus a generated `<area>/ROADMAP/TASKS.md`
+overview -- read directly as files, so it needs neither the nvim-config task
+engine nor any other plugin. Without a vault, or without an area folder for
+the cwd, the segment is empty and nothing errors. "Open" means the statuses
+`open`, `doing`, `blocked` and `decision` (not `parked`; `statuses` changes
+that); with `breakdown = true` it adds `P1:n` (prio 1, yellow) and `B:n`
+(blocked, red) when they are non-zero. Where it looks: the vault is
+`opts.vault`, else `$TASKS_VAULT`, else
+`$REPOS_DIR/WKDBooks/Development/wkdbook-myplugins`; the area is the folder
+name of the git root above the cwd (`areas = { nvim = "nvim-config" }` maps a
+folder name to a different area, `area` fixes it or computes it). It never
+blocks a redraw: the files are read asynchronously (`vim.uv`), the result is
+reused for `ttl_ms` (30 s) and dropped on `DirChanged`; a redraw only reads
+that cache, and a saved Markdown file inside the vault refreshes it at once
+(`watch_writes`). The source is pluggable (`source = "index"`, `"tasks_dir"`
+or a `function(ctx, done)` handing `done({ { status = "open", prio = 1 }, ...
+})`). Options: `require("ui").setup({ tasks = {...} })` or
+`require("ui.statusline.modules.tasks_counter.config").setup({...})`; every
+option with its default is listed in that file's `DEFAULTS`. Wire it like any
+opt-in module: `"tasks_counter"` in `order`, and
+`tasks_counter = function() return tasks_counter() end` in `modules`.
 
 `macro_counter` shows `vim.fn.reg_recording()`'s register plus a live
 keystroke count while it records — Neovim has no API to read a register's

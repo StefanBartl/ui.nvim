@@ -35,7 +35,24 @@
 ---@field toast? Ui.Kit.ToastConfig # size of the corner toasts: `width` (max, default "40%"), `min_width` (default 40), `padding` (default 1), `max_lines` (default 20); columns or "NN%" of the editor width -- see `ui.kit.toast`
 ---@field context? boolean|Ui.Context.Opts # explicit-only (not under `all`): the sticky code-context overlay (`ui.context`); `true` for the shipped tunables, a table to override them
 ---@field sticky? boolean|Ui.Context.Opts # the same switch as `context` under the name `:UI sticky` uses; wins when both are given. `false` leaves it off
+---@field tasks? Ui.Tasks.Opts # explicit-only (not under `all`): options of the opt-in `tasks_counter` statusline segment (vault, area, source, ttl, ...); see `ui.statusline.modules.tasks_counter.config`
 ---@field menu? boolean|Ui.Menu.Opts # `false` disables `ui.contextmenu`'s renderer/trigger (opt-OUT); omitted or `true` leaves it at its already-working default; a TABLE configures and binds `ui.menu`, the right-click menu with the sister plugins' entries (explicit-only)
+
+--- Options of the `tasks_counter` statusline segment. Every field is optional;
+--- the shipped values are `ui.statusline.modules.tasks_counter.config.DEFAULTS`.
+---@class Ui.Tasks.Opts
+---@field vault? string # vault root (the folder holding `<area>/ROADMAP/`); unset: `$TASKS_VAULT`, then `$REPOS_DIR/WKDBooks/Development/wkdbook-myplugins`. No vault found -> the segment is empty
+---@field area? string|fun(root: string, cwd: string): string|nil # the area of the current project; unset: folder name of the git root above the cwd (else of the cwd)
+---@field areas? table<string, string> # folder name -> area alias, e.g. `{ nvim = "nvim-config" }`; default `{}`
+---@field source? "auto"|"index"|"tasks_dir"|fun(ctx: Ui.Tasks.SourceCtx, done: fun(tasks: Ui.Tasks.Entry[]|nil)) # default "auto": the generated `ROADMAP/TASKS.md`, else the `tasks/*.md` files; a function is a pluggable source that calls `done` once
+---@field statuses? string[] # statuses that count as open; default `{ "open", "doing", "blocked", "decision" }` (not "parked")
+---@field ttl_ms? integer # how long a read result is reused; default 30000
+---@field prefix? string # text before the number; default "T:"
+---@field hide_zero? boolean # render nothing at 0 open tasks; default true
+---@field breakdown? boolean # append "P1:n" (urgent) and "B:n" (blocked) when non-zero; default false
+---@field urgent_prio? integer # prio <= this counts as urgent (1 = highest); default 1
+---@field watch_writes? boolean # re-read right after a Markdown file in the vault is saved; default true
+---@field max_files? integer # cap for the "tasks_dir" source; default 500
 
 --- One keymap action's left-hand side, or `false` to not bind it at all.
 ---@alias Ui.Keymaps.Lhs string|false
