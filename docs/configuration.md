@@ -36,6 +36,10 @@ require("ui").setup({
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
+  tasks = {        -- options of the opt-in tasks_counter statusline segment (explicit-only;
+                   -- see docs/modules.md): vault, area, areas, source, statuses, ttl_ms,
+                   -- prefix, hide_zero, breakdown, urgent_prio, watch_writes, max_files
+  },
   toast = {        -- size of the corner toasts (notify and every other ui.kit.toast user)
     width = "40%", -- widest a toast may get: columns or "NN%" of the editor width
     min_width = 40, -- narrowest: a short message still gets a chip about this wide

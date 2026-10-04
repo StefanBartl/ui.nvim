@@ -107,6 +107,11 @@ left click switches branches via gitsuite.nvim's own picker
 (pickers.nvim-aware, fires `GitsuiteBranchSwitched`) when present, and falls
 back to a bare `vim.ui.select` over the local branch list otherwise.
 
+One more line is about a folder, not a plugin: `task vault <path>, area for
+this cwd: <name> (tasks_counter)` (ok) or `task vault not found ...` (info)
+reports what the opt-in `tasks_counter` segment would read for the current
+directory, so an empty segment is explained.
+
 An `ℹ️ not installed` line here is never a problem — it is the report saying
 which part of the statusline will be empty and why.
 

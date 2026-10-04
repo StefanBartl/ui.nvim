@@ -138,6 +138,13 @@ return {
     used_by = {},
   },
   {
+    key = "tasks_counter",
+    summary = 'Open tasks of the project in the cwd, read from the wkdbook task vault, e.g. "T:7" (optionally "T:7 P1:2 B:1").',
+    builtin = false,
+    source = "ui.statusline.modules.tasks_counter",
+    used_by = {},
+  },
+  {
     key = "diagnostics_sparkline",
     summary = "A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many.",
     builtin = false,

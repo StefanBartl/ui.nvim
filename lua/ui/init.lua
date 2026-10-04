@@ -113,6 +113,17 @@ function M.setup(opts)
     end
   end
 
+  -- Options of the opt-in `tasks_counter` segment. Only stored: the segment
+  -- itself exists only once a host puts it in its statusline `order`.
+  if type(opts.tasks) == "table" then
+    local ok, err = pcall(function()
+      require("ui.statusline.modules.tasks_counter.config").setup(opts.tasks)
+    end)
+    if not ok then
+      notify.error("tasks setup failed: " .. tostring(err))
+    end
+  end
+
   -- Opt-OUT, unlike keymaps/usrcmds above: the context-menu renderer/trigger
   -- already work today with no setup call at all, so there is nothing for
   -- `opts.all`/an absent `opts.menu` to turn on here -- only an explicit
