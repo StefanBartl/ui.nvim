@@ -411,6 +411,9 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
           seen_frag, seen_col = nil, nil
           vim.api.nvim_buf_set_lines(comp.bufnr, 0, -1, false, { line })
           vim.api.nvim_win_set_cursor(comp.winid, { 1, col })
+          -- Past the last byte only sticks while the input is in (restart-)Insert
+          -- mode; if that ever changes, fail here rather than on a wrong fragment.
+          eq(vim.api.nvim_win_get_cursor(comp.winid)[2], col, "the cursor is where the test put it")
           tab()
           return seen_frag, seen_col
         end
