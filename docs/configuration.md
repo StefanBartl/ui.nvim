@@ -197,9 +197,8 @@ names exactly that type, and the excludes cannot veto it. That is how Rust's
 `^prefix` or `suffix$` entry is a family and is still subject to the excludes.
 
 A scope whose first line is nothing but an opening bracket (`{`, `(`, `[`) is
-skipped. Body nodes (`switch_body`, `class_body`, `function_body`, Kotlin's
-`control_structure_body`, ...) start at their brace, so with the brace on a line
-of its own (Allman style, common in C# and Java) they would pin a row that says
+skipped. Body nodes (`switch_body`, `class_body`, `function_body`, ...) start at
+their brace, so with the brace on a line of its own (Allman style, common in C# and Java) they would pin a row that says
 nothing; the scope they belong to starts on the line above and is pinned by the
 node that owns it.
 

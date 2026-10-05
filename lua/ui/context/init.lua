@@ -201,6 +201,7 @@ local cfg = {
     "^loop_expression$", -- rust
     "^match_expression$", -- rust
     "^when_expression$", -- kotlin
+    "^when_entry$", -- kotlin: `1 -> {`; its body node (`control_structure_body`) is not a scope, it starts at the brace
     "^function_expression$", -- javascript, typescript: `describe("x", function () {`
     "^func_literal$", -- go: `t.Run("x", func(t *testing.T) {`
     "^type_declaration$", -- go: `type T struct {`
@@ -519,10 +520,9 @@ end
 
 ---@internal
 ---Whether the source line at `row` is nothing but an opening bracket. A body
----node (`switch_body`, `class_body`, `function_body`, Kotlin's
----`control_structure_body`, ...) starts at its `{`; with the brace on a line of
----its own (Allman style) that line would be pinned as a context row saying
----nothing. The scope it belongs to starts on the line above and is pinned by the
+---node (`switch_body`, `class_body`, `function_body`, ...) starts at its `{`;
+---with the brace on a line of its own (Allman style) that line would be pinned
+---as a context row saying nothing. The scope it belongs to starts on the line above and is pinned by the
 ---node that owns it, so the lone bracket is skipped.
 ---@param buf integer
 ---@param row integer  0-based

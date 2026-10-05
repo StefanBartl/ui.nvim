@@ -1290,7 +1290,13 @@ describe("ui.context", function()
       },
       javascript = { "function_expression", "arrow_function", "method_definition", "switch_case" },
       typescript = { "internal_module", "interface_declaration", "enum_declaration" },
-      kotlin = { "if_expression", "when_expression", "do_while_statement", "function_declaration" },
+      kotlin = {
+        "if_expression",
+        "when_expression",
+        "when_entry",
+        "do_while_statement",
+        "function_declaration",
+      },
       bash = { "function_definition", "elif_clause", "c_style_for_statement", "case_item" },
       yaml = { "block_mapping_pair" },
     }
@@ -1303,7 +1309,10 @@ describe("ui.context", function()
       java = { "method_invocation", "lambda_expression" },
       javascript = { "call_expression" },
       c_sharp = { "invocation_expression", "lambda_expression" },
-      kotlin = { "call_expression", "constructor_invocation" },
+      -- `control_structure_body` held a `struct` and was pinned by the old bare
+      -- `struct` pattern, by accident; the owner (`when_entry`, `if_expression`,
+      -- ...) is the scope, the body starts at the brace.
+      kotlin = { "call_expression", "constructor_invocation", "control_structure_body" },
       json = { "object", "array", "pair" },
       markdown = { "atx_heading", "fenced_code_block", "list_item" },
     }
