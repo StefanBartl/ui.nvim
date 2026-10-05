@@ -1278,9 +1278,12 @@ describe("ui.context", function()
         "default_case",
         "type_declaration",
       },
+      -- `struct` once matched every `*_constructor*` by accident; they are named now.
       java = {
         "class_declaration",
         "method_declaration",
+        "constructor_declaration",
+        "compact_constructor_declaration",
         "enhanced_for_statement",
         "switch_expression",
         "try_statement",
@@ -1296,7 +1299,9 @@ describe("ui.context", function()
         "when_entry",
         "do_while_statement",
         "function_declaration",
+        "secondary_constructor",
       },
+      c_sharp = { "constructor_declaration", "destructor_declaration" },
       bash = { "function_definition", "elif_clause", "c_style_for_statement", "case_item" },
       yaml = { "block_mapping_pair" },
     }

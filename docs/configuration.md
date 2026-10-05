@@ -198,8 +198,8 @@ names exactly that type, and the excludes cannot veto it. That is how Rust's
 
 A scope whose first line is nothing but an opening bracket (`{`, `(`, `[`) is
 skipped. Body nodes (`switch_body`, `class_body`, `function_body`, ...) start at
-their brace, so with the brace on a line of its own (Allman style, common in C# and Java) they would pin a row that says
-nothing; the scope they belong to starts on the line above and is pinned by the
+their brace, so with the brace on a line of its own (Allman style, common in C#
+and Java) they would pin a row that says nothing; the scope they belong to starts on the line above and is pinned by the
 node that owns it.
 
 What the shipped lists pin per language (`:lua =vim.treesitter.get_node():type()`
@@ -214,9 +214,9 @@ answers for one name):
 | Python | `function_definition`, `class_definition`, `if`/`elif`/`else`, `for`, `while`, `with`, `try`/`except`/`finally`, `match`/`case` | decorators, comprehensions, lambdas | parser (spec) |
 | Go | `function_declaration`, `method_declaration`, `func_literal`, `if`, `for`, `switch`/`select` and their `case`s, `type_declaration` | calls, composite literals | grammar (spec) |
 | Java | `class`/`interface`/`enum`/`record`, `method_declaration`, `constructor_declaration`, `if`, `for`/enhanced `for`, `while`, `do`, `switch`, `try`/`catch`/`finally` | `method_invocation`, lambdas; no `else` node exists, so inside an `else { }` the `if` line stays pinned | grammar (spec) |
-| C# | `class`/`struct`/`interface`/`enum`/`record`, `namespace`, `method`, constructor, `if`, `for`/`foreach`, `while`, `switch` and its sections, `try`/`catch`/`finally` | invocations, lambdas, properties; the `else` limit as in Java | grammar (spec) |
+| C# | `class`/`struct`/`interface`/`enum`/`record`, `namespace`, `method`, constructor/destructor, `if`, `for`/`foreach`, `while`, `switch` and its sections, `try`/`catch`/`finally` | invocations, lambdas, properties; the `else` limit as in Java | grammar (spec) |
 | JavaScript, TypeScript | `function`/`method`/`class` declarations, `arrow_function`, `function_expression`, `if`, `for`, `while`, `switch`/`case`, `try`/`catch`/`finally`; TypeScript also `interface`, `enum`, `namespace` | `call_expression`; the `else` limit as in Java | grammar (spec) |
-| Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions and the `when` branches, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` (so a `try {` line is not pinned, its `catch` is) | grammar (spec) |
+| Kotlin | `function_declaration`, `class_declaration`, `secondary_constructor`, `if`/`when` expressions and the `when` branches, `for`, `while`, `do_while_statement`, `catch_block` | lambdas, calls, `try_expression` (so a `try {` line is not pinned, its `catch` is); the `else` limit as in Java | grammar (spec) |
 | Bash | `function_definition`, `if`, `elif`, `else`, `for`, `c_style_for_statement`, `while`, `case` and its items | subshells, `{ ...; }` groups | grammar (spec) |
 | Zsh | not checked against a parser: none is installed here, and Neovim does not resolve `zsh` to `bash`, so a Zsh file pins nothing until a Zsh parser is installed; nvim-treesitter's Zsh queries do not name `elif_clause` | | queries |
 | C | `function_definition`, `struct`/`union`/`enum` specifiers, `if`, `for`, `while`, `do`, `switch`, `case`, `else` | | parser (spec) |
