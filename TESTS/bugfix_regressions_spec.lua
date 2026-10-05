@@ -605,3 +605,34 @@ describe(
     end)
   end
 )
+
+describe(
+  "bug: path_relative('repo') stalled on a worktree `.git` file with a long whitespace run",
+  function()
+    local paths = require("ui.statusline.modules.lsp.helpers.paths")
+
+    it("finds the root of a worktree-style repo without reading its `.git` file", function()
+      -- A cloned repository ships its own `.git` file. The old worktree check
+      -- matched `gitdir:%s*(.-)%s*$` on it, which retries a whitespace run from
+      -- every byte inside it (quadratic): 50 000 spaces cost seconds, per
+      -- uncached directory, on the statusline's redraw path.
+      local root = vim.fn.tempname()
+      vim.fn.mkdir(root .. "/sub", "p")
+      local f = assert(io.open(root .. "/.git", "w"))
+      f:write("gitdir: x" .. string.rep(" ", 50000) .. "y")
+      f:close()
+      local file = root .. "/sub/file.lua"
+      local h = assert(io.open(file, "w"))
+      h:write("")
+      h:close()
+
+      local t0 = vim.uv.hrtime()
+      local rel = paths.path_relative("repo", file)
+      local ms = (vim.uv.hrtime() - t0) / 1e6
+
+      vim.fn.delete(root, "rf")
+      assert.equals("sub/file.lua", rel)
+      assert.is_true(ms < 500, ("path_relative took %.0f ms"):format(ms))
+    end)
+  end
+)
