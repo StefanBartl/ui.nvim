@@ -131,11 +131,16 @@ local SAMPLES = {
       "            }",
       "        }",
       "        return total;",
+      "    }", -- 28
+      "    public Demo(int x) {", -- 29
+      "        this.x = x;",
+      "        init(x);",
       "    }",
       "}",
     },
     cases = {
       { top = 4, rows = { 0, 1, 3 }, why = "class, method, if" },
+      { top = 31, rows = { 0, 29 }, why = "class and constructor" },
       { top = 7, rows = { 0, 1, 3, 4, 5, 6 }, why = "class, method, if, for-each, switch, case" },
       { top = 20, rows = { 0, 1, 3, 16, 19 }, why = "try and its catch" },
       { top = 23, rows = { 0, 1, 3, 16, 22 }, why = "try and its finally" },
@@ -169,12 +174,18 @@ local SAMPLES = {
       "                }",
       "            }",
       "            return total;",
+      "        }", -- 24
+      "        public Service(int x)", -- 25
+      "        {",
+      "            this.x = x;",
+      "            Init(x);",
       "        }",
       "    }",
       "}",
     },
     cases = {
       { top = 6, rows = { 0, 2, 4 }, why = "namespace, class, method" },
+      { top = 28, rows = { 0, 2, 25 }, why = "namespace, class, constructor, not its lone `{`" },
       {
         top = 14,
         rows = { 0, 2, 4, 7, 9, 11, 13 },
@@ -274,10 +285,15 @@ local SAMPLES = {
       "            total = 1",
       "        }",
       "        return total",
+      "    }", -- 26
+      "    constructor(x: Int) : this() {", -- 27
+      "        total = x",
+      "        total += 1",
       "    }",
       "}",
     },
     cases = {
+      { top = 29, rows = { 0, 27 }, why = "class and the secondary constructor" },
       {
         top = 7,
         rows = { 0, 1, 3, 4, 5, 6 },

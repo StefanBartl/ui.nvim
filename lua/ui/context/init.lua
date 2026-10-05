@@ -88,6 +88,7 @@
 
 local state = require("ui.context.state")
 local presets = require("ui.kit.presets")
+local strings = require("lib.lua.strings.core")
 
 local M = {}
 
@@ -202,6 +203,10 @@ local cfg = {
     "^match_expression$", -- rust
     "^when_expression$", -- kotlin
     "^when_entry$", -- kotlin: `1 -> {` (not its `control_structure_body`, which starts at the brace)
+    "^constructor_declaration$", -- java, c#
+    "^compact_constructor_declaration$", -- java: a record's `Name {`
+    "^secondary_constructor$", -- kotlin
+    "^destructor_declaration$", -- c#: `~Name()`
     "^function_expression$", -- javascript, typescript: `describe("x", function () {`
     "^func_literal$", -- go: `t.Run("x", func(t *testing.T) {`
     "^type_declaration$", -- go: `type T struct {`
@@ -1014,7 +1019,9 @@ local function draw_mimic(win, buf, entries)
   local raw, gutters, levels, indents = {}, {}, {}, {}
   for i, e in ipairs(entries) do
     local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
-    text = text:gsub("%s+$", "")
+    -- `strings.rtrim`, not `gsub("%s+$", "")`: that retries a whitespace run
+    -- from every byte inside it, and this is someone else's source line.
+    text = strings.rtrim(text)
     levels[i], indents[i] = heading_level(buf, text)
     local g = gutter(win, e.row, textoff)
     gutters[i] = #g
@@ -1096,7 +1103,7 @@ local CHIP_SEP = " " .. vim.fn.nr2char(0x203A) .. " "
 ---@return string text, integer|nil level
 local function chip_entry(buf, e)
   local text = vim.api.nvim_buf_get_lines(buf, e.row, e.row + 1, false)[1] or ""
-  text = text:gsub("^%s+", ""):gsub("%s+$", "")
+  text = strings.trim(text)
   local level = heading_level(buf, text)
   if level then
     text = text:gsub("^#+%s*", "")
