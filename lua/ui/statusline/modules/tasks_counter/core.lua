@@ -81,16 +81,26 @@ function M.refresh()
     return finish(nil, nil)
   end
 
-  source.load(cfg.source, { vault = vault, area = area, max_files = cfg.max_files }, function(tasks)
-    -- luv callback (fast context): hop back before touching any state.
-    vim.schedule(function()
-      local counts = nil
-      if type(tasks) == "table" then
-        counts = source.tally(tasks, cfg.statuses, cfg.urgent_prio)
-      end
-      finish(counts, vault)
-    end)
-  end)
+  local started = pcall(
+    source.load,
+    cfg.source,
+    { vault = vault, area = area, max_files = cfg.max_files },
+    function(tasks)
+      -- luv callback (fast context): hop back before touching any state.
+      vim.schedule(function()
+        local counts = nil
+        if type(tasks) == "table" then
+          counts = source.tally(tasks, cfg.statuses, cfg.urgent_prio)
+        end
+        finish(counts, vault)
+      end)
+    end
+  )
+  if not started then
+    -- A read that cannot even start (libuv refuses the path) never calls back: without this the
+    -- refresh would stay "scheduled" for good and the segment would stop updating.
+    finish(nil, vault)
+  end
 end
 
 --- Queue a refresh unless one is already queued. Idempotent, cheap.

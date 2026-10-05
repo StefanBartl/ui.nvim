@@ -80,6 +80,64 @@ describe("ui.statusline.modules.tasks_counter.source", function()
     assert.is_nil(source.parse_task("---\ntitle: x\n---\nstatus: open\n"))
   end)
 
+  it("parse_task reads quotes, comments, a BOM and CRLF like the engine", function()
+    local function fm(...)
+      return "---\n" .. table.concat({ ... }, "\n") .. "\n---\nbody\n"
+    end
+    assert.same({ status = "open" }, source.parse_task(fm('status: "open"')))
+    assert.same({ status = "doing" }, source.parse_task(fm("status: 'doing'")))
+    assert.same(
+      { status = "open", prio = 2 },
+      source.parse_task(fm("status: open # why", "prio: 2 # urgent"))
+    )
+    assert.same({ status = "blocked" }, source.parse_task(fm("status: blocked   ")))
+    -- a quoted value keeps its `#`: it is not a comment, and no status is called that
+    assert.is_nil(source.parse_task(fm('status: "open #1"')))
+    -- an empty value (only a comment) is no status
+    assert.is_nil(source.parse_task(fm("status: # none")))
+    assert.same(
+      { status = "open", prio = 1 },
+      source.parse_task("\239\187\191" .. fm("status: open", "prio: 1"))
+    )
+    assert.same(
+      { status = "open", prio = 1 },
+      source.parse_task((fm("status: open", "prio: 1"):gsub("\n", "\r\n")))
+    )
+  end)
+
+  it("reads a line with a huge whitespace run in linear time (SEC-32)", function()
+    -- `(.-)%s*$` and `([^|]-)%s*|` retry the rest of a run from every byte inside it: a 40 000
+    -- space run inside one value cost seconds, on the main thread, at every refresh.
+    local run = (" "):rep(60000)
+    local function ms(fn)
+      local t0 = vim.uv.hrtime()
+      fn()
+      return (vim.uv.hrtime() - t0) / 1e6
+    end
+    local t_task = ms(function()
+      assert.is_nil(source.parse_task("---\nstatus: open" .. run .. "x\n---\n"))
+      -- (a comment that holds the run: the value is still `open`)
+      assert.same(
+        { status = "open" },
+        source.parse_task("---\nstatus: open # a" .. run .. "b\n---\n")
+      )
+      assert.same(
+        { status = "open" },
+        source.parse_task("---\ntitle: a" .. run .. "b\nstatus: open\n---\n")
+      )
+    end)
+    local t_index = ms(function()
+      assert.same(
+        { { status = "open", prio = nil } },
+        source.parse_index("| open | 1" .. run .. "2 | x |\n")
+      )
+      assert.same({}, source.parse_index("| open" .. run .. "x | 1 | x |\n"))
+      assert.same({}, source.parse_index("|" .. run .. "|" .. run .. "|\n"))
+    end)
+    assert.is_true(t_task < 500, ("parse_task took %.0f ms"):format(t_task))
+    assert.is_true(t_index < 500, ("parse_index took %.0f ms"):format(t_index))
+  end)
+
   it("tally counts only the configured statuses", function()
     local tasks = source.parse_index(INDEX)
     local counts = source.tally(tasks, { "open", "doing", "blocked", "decision" }, 1)
@@ -268,6 +326,20 @@ describe("ui.statusline.modules.tasks_counter (render)", function()
     render()
     settle()
     assert.equals(1, core.snapshot().counts.total)
+  end)
+
+  it("tasks_dir counts folder tasks (tasks/<slug>/<slug>.md) as well as plain files", function()
+    local dir = vault .. "/demo.nvim/ROADMAP/tasks/"
+    write(dir .. "plain.md", task_file("open", "1"))
+    write(dir .. "with-shot/with-shot.md", task_file("blocked", "2"))
+    write(dir .. "with-shot/assets/trace.txt", "not a task")
+    write(dir .. "other-folder/other-folder.md", task_file("doing"))
+    write(dir .. "empty-folder/readme.txt", "no task file in here")
+
+    config.setup({ vault = vault, area = "demo.nvim", source = "tasks_dir", breakdown = true })
+    render()
+    settle()
+    assert.same({ total = 3, urgent = 1, blocked = 1 }, core.snapshot().counts)
   end)
 
   it("hides zero by default and shows it with hide_zero = false", function()
