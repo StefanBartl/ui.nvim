@@ -149,6 +149,18 @@ describe("ui.kit.toast", function()
       assert.equals(80 - 2, toast.inner_width()) -- the 40% is still in force
     end)
 
+    it("rejects a long digit run without stalling", function()
+      -- `%d+%.?%d*` backtracks quadratically on 50 000 digits and a stray char;
+      -- a size spec is capped at 32 characters instead.
+      toast.setup({ width = "40%" })
+      local t0 = vim.uv.hrtime()
+      toast.setup({ width = string.rep("1", 50000) .. "x" })
+      toast.setup({ width = string.rep("1", 50000) })
+      local ms = (vim.uv.hrtime() - t0) / 1e6
+      assert.is_true(ms < 500, ("took %.0f ms"):format(ms))
+      assert.equals(80 - 2, toast.inner_width()) -- the 40% is still in force
+    end)
+
     it("follows a resize", function()
       local s = toast.open({ message = string.rep("x", 500), timeout = 0 })
       assert.equals(80, width_of(s))
