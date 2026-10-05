@@ -124,7 +124,11 @@ reused for `ttl_ms` (30 s) and dropped on `DirChanged`; a redraw only reads
 that cache, and a saved Markdown file inside the vault refreshes it at once
 (`watch_writes`). The source is pluggable (`source = "index"`, `"tasks_dir"`
 or a `function(ctx, done)` handing `done({ { status = "open", prio = 1 }, ...
-})`). Options: `require("ui").setup({ tasks = {...} })` or
+})`); `"tasks_dir"` reads `tasks/*.md` and the folder tasks
+`tasks/<slug>/<slug>.md`, understands a quoted value, a trailing `# comment`
+and a BOM like the task engine does, and parses each line in linear time (a
+file with a huge whitespace run cannot stall the editor). Options:
+`require("ui").setup({ tasks = {...} })` or
 `require("ui.statusline.modules.tasks_counter.config").setup({...})`; every
 option with its default is listed in that file's `DEFAULTS`. Wire it like any
 opt-in module: `"tasks_counter"` in `order`, and

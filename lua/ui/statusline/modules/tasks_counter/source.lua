@@ -6,8 +6,9 @@
 ---   * `<area>/ROADMAP/TASKS.md` -- the generated overview, one table row per
 ---     open task (`| status | prio | effort | [title](...) | summary |`).
 ---     One small file, so it is the default.
----   * `<area>/ROADMAP/tasks/*.md` -- one file per task, frontmatter carrying
----     `status:` and `prio:`. Authoritative, but one read per task.
+---   * `<area>/ROADMAP/tasks/*.md` (and `tasks/<slug>/<slug>.md` for a folder
+---     task) -- one file per task, frontmatter carrying `status:` and `prio:`.
+---     Authoritative, but one read per task.
 --- The generated overview is absent when an area has no open task at all
 --- (the engine deletes it), which is why `"auto"` falls back to the folder.
 ---
@@ -30,6 +31,14 @@ local MAX_BYTES = 1024 * 1024
 
 local STATUSES = require("ui.statusline.modules.tasks_counter.config").KNOWN_STATUSES
 
+-- Linear in the length of a value. A file in the vault is data (a `git pull`, a
+-- hand edit): the patterns `(.-)%s*$` and `([^|]-)%s*|` retry the rest of a
+-- whitespace run from every byte inside it, so one line with 60 000 spaces
+-- froze the editor for seconds -- on the main thread, at every refresh (SEC-32).
+local trim = require("lib.lua.strings.core").trim
+
+local BOM = "\239\187\191"
+
 --- Rows of the generated `TASKS.md`. The header row ("Status") and the
 --- separator row never match a known status, so they drop out by themselves.
 ---@param text string
@@ -37,12 +46,37 @@ local STATUSES = require("ui.statusline.modules.tasks_counter.config").KNOWN_STA
 function M.parse_index(text)
   local out = {}
   for line in (text:gsub("\r", "") .. "\n"):gmatch("(.-)\n") do
-    local status, prio = line:match("^|%s*(%a+)%s*|%s*([^|]-)%s*|")
-    if status and STATUSES[status] then
-      out[#out + 1] = { status = status, prio = tonumber(prio) }
+    if line:sub(1, 1) == "|" then
+      local second = line:find("|", 2, true)
+      local third = second and line:find("|", second + 1, true)
+      local status = third and trim(line:sub(2, second - 1))
+      if status and STATUSES[status] then
+        out[#out + 1] = { status = status, prio = tonumber(trim(line:sub(second + 1, third - 1))) }
+      end
     end
   end
   return out
+end
+
+--- One scalar of a frontmatter line, the way the task engine reads it: quotes
+--- removed (a quoted value is taken as written, `#` included), else a trailing
+--- ` # comment` dropped.
+---@param raw string
+---@return string
+local function scalar(raw)
+  local v = trim(raw)
+  local quote = v:sub(1, 1)
+  if quote == '"' or quote == "'" then
+    local close = v:find(quote, 2, true)
+    if close then
+      return v:sub(2, close - 1)
+    end
+  end
+  if quote == "#" then
+    return ""
+  end
+  local hash = v:find("%s#")
+  return hash and trim(v:sub(1, hash - 1)) or v
 end
 
 --- The frontmatter of one task file: `status:` and `prio:` only.
@@ -50,6 +84,9 @@ end
 ---@param text string
 ---@return Ui.Tasks.Entry|nil
 function M.parse_task(text)
+  if text:sub(1, #BOM) == BOM then
+    text = text:sub(#BOM + 1)
+  end
   text = text:gsub("\r", "")
   if text:sub(1, 4) ~= "---\n" then
     return nil
@@ -59,11 +96,12 @@ function M.parse_task(text)
     if line == "---" then
       break
     end
-    local key, value = line:match("^(%a+):%s*(.-)%s*$")
+    local colon = line:find(":", 1, true)
+    local key = colon and line:sub(1, colon - 1)
     if key == "status" then
-      status = value
+      status = scalar(line:sub(colon + 1))
     elseif key == "prio" then
-      prio = tonumber(value)
+      prio = tonumber(scalar(line:sub(colon + 1)))
     end
   end
   if status and STATUSES[status] then
@@ -119,7 +157,11 @@ local function load_tasks_dir(ctx, done)
       if not name then
         break
       end
-      if name:sub(-3) == ".md" and (kind == "file" or kind == nil) then
+      if kind == "directory" then
+        -- A folder task: `tasks/<slug>/<slug>.md`, next to its `assets/`. A folder with no such
+        -- file simply reads as "no data".
+        files[#files + 1] = name .. "/" .. name .. ".md"
+      elseif name:sub(-3) == ".md" and (kind == "file" or kind == nil) then
         files[#files + 1] = name
       end
     end
