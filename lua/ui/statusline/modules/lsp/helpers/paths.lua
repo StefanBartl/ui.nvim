@@ -132,24 +132,11 @@ local function find_git_root(path)
     return nil
   end
 
-  -- Worktree check
-  local git_path = norm_sep(froot .. "/.git")
-  local stat = uv.fs_stat(git_path)
-
-  if stat and stat.type == "file" then
-    local fd = uv.fs_open(git_path, "r", 438)
-    if fd then
-      local content = uv.fs_read(fd, stat.size or 4096, 0) or ""
-      uv.fs_close(fd)
-      local gitdir = content:match("gitdir:%s*(.-)%s*$")
-      if gitdir and #gitdir > 0 then
-        local result = norm_sep(froot)
-        path_cache:put(cache_key, result)
-        return result
-      end
-    end
-  end
-
+  -- A worktree's `.git` is a file, not a directory, but its root is `froot`
+  -- all the same. This used to read that file and match `gitdir:%s*(.-)%s*$`
+  -- on it, then return `norm_sep(froot)` on either outcome: the read changed
+  -- nothing, and the pattern is quadratic on a long whitespace run -- in a
+  -- file a cloned repository ships.
   local result = norm_sep(froot)
   path_cache:put(cache_key, result)
   return result
