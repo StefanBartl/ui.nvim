@@ -214,7 +214,10 @@ M.separators = {
 M.file = function()
   local icon = "󰈚"
   local path = vim.api.nvim_buf_get_name(M.stbufnr())
-  local name = (path == "" and "Empty") or path:match("([^/\\]+)[/\\]*$")
+  -- Read from the end, not `([^/\\]+)[/\\]*$`, which is quadratic on a long
+  -- last component (a buffer name can be a URL).
+  local last = path:reverse():match("^[/\\]*([^/\\]+)")
+  local name = (path == "" and "Empty") or (last and last:reverse())
 
   if name ~= "Empty" then
     local devicons = require("ui.util.soft_require").try("nvim-web-devicons")

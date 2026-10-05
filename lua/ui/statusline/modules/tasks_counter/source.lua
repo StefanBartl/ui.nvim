@@ -92,7 +92,10 @@ function M.parse_task(text)
     return nil
   end
   local status, prio
-  for line in text:sub(5):gmatch("(.-)\n") do
+  -- A "\n" is appended, as in parse_index: `(.-)\n` retries the rest of the text
+  -- from every byte of a last line that has none (a long unterminated one cost
+  -- seconds), and the extra terminator also lets that last line be read.
+  for line in (text:sub(5) .. "\n"):gmatch("(.-)\n") do
     if line == "---" then
       break
     end
