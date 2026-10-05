@@ -12,6 +12,12 @@
 --- javascript typescript kotlin bash`) and are skipped, not failed, where it is
 --- not -- which is the ordinary case on CI. Rows are 0-based; each case lists
 --- the rows pinned when the window's top line is `top`.
+---
+--- Because CI skips them, run this file locally with the parsers installed after
+--- touching `node_types`/`exclude_node_types`: a pattern change that drops a
+--- node here is invisible on CI. (`struct` -> `^struct` once took Kotlin's
+--- `control_structure_body` with it, and so the `when` branch; the node-name
+--- checks in TESTS/context_spec.lua are what CI sees of that.)
 
 local context = require("ui.context")
 
@@ -275,7 +281,7 @@ local SAMPLES = {
       {
         top = 7,
         rows = { 0, 1, 3, 4, 5, 6 },
-        why = "class, fun, if, for, when, the `1 -> {` branch",
+        why = "class, fun, if, for, when, the `1 -> {` branch (`when_entry`)",
       },
       { top = 16, rows = { 0, 1, 14 }, why = "the while" },
       { top = 22, rows = { 0, 1, 21 }, why = "the catch block; Kotlin's `try` is not pinned" },
