@@ -154,6 +154,35 @@ describe("ui.context", function()
     assert.is_false(wcfg.focusable)
   end)
 
+  for _, style in ipairs({ "mimic", "chips" }) do
+    it("draws a scope line with a long whitespace run in linear time (" .. style .. ")", function()
+      if not has_lua_parser then
+        pending("no Lua parser available")
+        return
+      end
+      -- The overlay used to trim the line with gsub("%s+$", ""): a whitespace
+      -- run followed by a trailing comment cost ~0.6 s per refresh at 20 000
+      -- spaces, and the cost is quadratic (SEC-32).
+      local lines = { "local function outer()" .. string.rep(" ", 50000) .. "-- trailing comment" }
+      for i = 1, 30 do
+        lines[#lines + 1] = ("  local v%d = %d"):format(i, i)
+      end
+      lines[#lines + 1] = "end"
+      local win, buf = open_source()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      context.setup({ style = style })
+      context.enable()
+      scroll_to(win, 10)
+
+      local t0 = vim.uv.hrtime()
+      local shown = context.refresh(win)
+      local ms = (vim.uv.hrtime() - t0) / 1e6
+
+      assert.equals(1, shown)
+      assert.is_true(ms < 500, ("refresh took %.0f ms"):format(ms))
+    end)
+  end
+
   it(
     "caps at max_lines, dropping the outer contexts by default and the inner ones on request",
     function()
