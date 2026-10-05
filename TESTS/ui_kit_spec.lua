@@ -393,6 +393,50 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
       local stab_map = vim.fn.maparg("<S-Tab>", "i", false, true)
       eq(stab_map.buffer, 1, "opts.completion registers a buffer-local <S-Tab> mapping")
 
+      -- What <Tab> hands to getcompletion(): the whitespace-delimited run that
+      -- ends at the cursor. The popup itself needs Insert mode, so the two vim.fn
+      -- calls are stubbed and only the fragment and the start column are read.
+      do
+        local real_getcompletion, real_complete = vim.fn.getcompletion, vim.fn.complete
+        local seen_frag, seen_col
+        vim.fn.getcompletion = function(frag)
+          seen_frag = frag
+          return { "x" }
+        end
+        vim.fn.complete = function(col)
+          seen_col = col
+        end
+        local tab = tab_map.callback
+        local function press_tab(line, col)
+          seen_frag, seen_col = nil, nil
+          vim.api.nvim_buf_set_lines(comp.bufnr, 0, -1, false, { line })
+          vim.api.nvim_win_set_cursor(comp.winid, { 1, col })
+          tab()
+          return seen_frag, seen_col
+        end
+        local ok_run, err = pcall(function()
+          local frag, col = press_tab("cd /etc/pas", 11)
+          eq(frag, "/etc/pas", "the fragment is the run before the cursor")
+          eq(col, 4, "complete() starts where the fragment began")
+          eq((press_tab("foo bar baz", 7)), "bar", "text after the cursor is not part of it")
+          eq((press_tab("abc", 3)), "abc", "a single word is the whole fragment")
+          eq((press_tab("abc ", 4)), "", "right after a space the fragment is empty")
+          eq((press_tab("", 0)), "", "an empty line gives an empty fragment")
+          eq((press_tab("a\tb", 3)), "b", "a tab delimits like a space")
+
+          -- One long word followed by more text used to cost seconds (SEC-32):
+          -- the old `%S*$` retried the rest of the word from every byte.
+          local long = ("a"):rep(50000) .. " x y"
+          local t0 = vim.uv.hrtime()
+          eq((press_tab(long, #long)), "y", "a long word before the fragment is not scanned")
+          local ms = (vim.uv.hrtime() - t0) / 1e6
+          ok(ms < 500, ("fragment of a 50 000 character line took %.0f ms"):format(ms))
+          eq(#(press_tab("x " .. ("b"):rep(50000), 50002)), 50000, "a long fragment is kept whole")
+        end)
+        vim.fn.getcompletion, vim.fn.complete = real_getcompletion, real_complete
+        assert(ok_run, err)
+      end
+
       -- <CR>/<Esc> still submit/cancel normally (pum never opens here, so this
       -- exercises the same finish() path as plain kit.input).
       local comp_submitted
