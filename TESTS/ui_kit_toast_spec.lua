@@ -134,6 +134,21 @@ describe("ui.kit.toast", function()
       assert.equals(80 - 2, toast.inner_width())
     end)
 
+    it("reads size strings padded with spaces", function()
+      toast.setup({ width = " 25 % " })
+      assert.equals(50 - 2, toast.inner_width()) -- 25% of 200
+    end)
+
+    it("rejects a number, a long whitespace run and junk without stalling", function()
+      -- The old pattern retried the whitespace run from every byte (quadratic).
+      toast.setup({ width = "40%" })
+      local t0 = vim.uv.hrtime()
+      toast.setup({ width = "1" .. string.rep(" ", 50000) .. "x" })
+      local ms = (vim.uv.hrtime() - t0) / 1e6
+      assert.is_true(ms < 500, ("took %.0f ms"):format(ms))
+      assert.equals(80 - 2, toast.inner_width()) -- the 40% is still in force
+    end)
+
     it("follows a resize", function()
       local s = toast.open({ message = string.rep("x", 500), timeout = 0 })
       assert.equals(80, width_of(s))
