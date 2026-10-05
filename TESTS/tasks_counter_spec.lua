@@ -125,6 +125,16 @@ describe("ui.statusline.modules.tasks_counter.source", function()
         { status = "open" },
         source.parse_task("---\ntitle: a" .. run .. "b\nstatus: open\n---\n")
       )
+      -- A frontmatter that never closes and ends in a long line without "\n":
+      -- `(.-)\n` retried the whole rest from every byte of that last line.
+      assert.same(
+        { status = "open" },
+        source.parse_task("---\nstatus: open\nnote: " .. string.rep("a", 60000))
+      )
+      assert.same(
+        { status = "open" },
+        source.parse_task("---\nnote: " .. string.rep("a", 60000) .. "\nstatus: open")
+      )
     end)
     local t_index = ms(function()
       assert.same(

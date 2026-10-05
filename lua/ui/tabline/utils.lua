@@ -375,7 +375,10 @@ end
 ---@param path string
 ---@return string name
 local function filename(path)
-  return path:match("([^/\\]+)[/\\]*$") or path
+  -- Read from the end: `([^/\\]+)[/\\]*$` retries a long last component from
+  -- every start byte, and a buffer name can be a URL (`term://...`), not a path.
+  local last = path:reverse():match("^[/\\]*([^/\\]+)")
+  return last and last:reverse() or path
 end
 
 --- Escape a literal `%` so embedding this string into `'tabline'` cannot be
