@@ -1,7 +1,8 @@
 # Tests
 
-Headless spec suite for ui.nvim, written against plenary.nvim's
-busted-compatible harness (`describe`/`it`, luassert `assert.*`).
+Headless spec suite for ui.nvim, written in the busted style
+(`describe`/`it`, luassert `assert.*`) and run by
+[testing.nvim](https://github.com/StefanBartl/testing.nvim).
 
 ## Run
 
@@ -9,20 +10,24 @@ From the repo root:
 
 ```sh
 scripts/test.sh                    # every spec under TESTS/
-scripts/test.sh TESTS/foo_spec.lua # a single spec file
+scripts/test.sh --file config      # only spec files whose name contains "config"
+scripts/test.sh --json ir.json     # also write the machine-readable result
 ```
 
-That wraps `nvim --clean --headless -u scripts/minimal_init.lua -c
-"PlenaryBustedDirectory TESTS/ { minimal_init = 'scripts/minimal_init.lua',
-sequential = true }"`. `scripts/minimal_init.lua` needs `lib.nvim` (a hard
-runtime dependency — lazy, memo, notify, bindings.\*, debounce, fs.\*) and
-`plenary.nvim` (the test harness itself) on the runtimepath; see that file's
-own doc comment for the four ways each is found (`$LIB_NVIM_DIR`/
-`$PLENARY_DIR`, a `.deps/<name>` checkout, a sibling checkout next to this
-repo, or the plugin manager's own `lazy/<name>` directory) — on a machine
-that already runs this plugin, no environment variable is needed at all.
-CI (`.github/workflows/ci.yml`) checks out `lib.nvim` at its `ci-verified`
-ref and `plenary.nvim` at latest into `.deps/`.
+`scripts/test.sh` hands everything after its name to `testing run .`
+(`nvim -n -i NONE --headless -u NONE -l <testing.nvim>/scripts/testing.lua`),
+configured by `.testing.lua`: one child Neovim per spec file, the same
+isolation the old runner gave. `TESTS/minimal_init.lua` runs in every child
+and puts this repo and its dependencies on the runtimepath. `testing.nvim`
+(the runner) and `lib.nvim` (a hard runtime dependency — lazy, memo, notify,
+bindings.\*, debounce, fs.\*) are each looked up in four places: `$TESTING_NVIM_DIR`/
+`$LIB_NVIM_DIR`, a `.deps/<name>` checkout, a sibling checkout next to this
+repo, or the plugin manager's own `lazy/<name>` directory — on a machine that
+already runs this plugin, no environment variable is needed at all. A
+dependency that is not found is an error naming all four places, exit code 1.
+CI (`.github/workflows/ci.yml`) checks out `testing.nvim` and `lib.nvim` at
+their `ci-verified` ref into `.deps/` and uploads the JSON result as an
+artifact when the tests fail.
 
 The same workflow also runs `stylua --check .` (v2.5.2) and `luacheck .`
 (1.2.0, `std = "luajit"`) as two more independent jobs — run those locally
@@ -170,5 +175,4 @@ Match the existing style: a `describe("ui.module.path", function() … end)`
 per module (or `describe("bug: <what was broken>", …)` in
 `bugfix_regressions_spec.lua` for a regression), `it("does the specific
 thing", function() … end)` per case, luassert `assert.*` calls. No file list
-to register — `scripts/test.sh`'s `PlenaryBustedDirectory` picks up every
-`*_spec.lua` under `TESTS/` automatically.
+to register — `testing run` picks up every `*_spec.lua` under `TESTS/` automatically.
