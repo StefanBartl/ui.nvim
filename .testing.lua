@@ -20,4 +20,25 @@ return {
   assertions = "warn",
   -- Limits per case in milliseconds (the old runner had none).
   timeouts = { case_ms = 30000 },
+  -- Guards (docs/GUARDS.md of testing.nvim). The suite passes fs, scheduled_error, prompt and
+  -- deprecation without a single finding, so they are hard errors; a regression fails the run.
+  guards = {
+    fs = "error",
+    scheduled_error = "error",
+    prompt = "error",
+    deprecation = "error",
+    -- Real processes are started on purpose (see guard_allow.spawn); anything else is an error.
+    process_net = "error",
+    -- Off on purpose: this is a UI plugin, so its specs create windows, buffers, highlight groups,
+    -- autocmds and keymaps by design (setup() and every picker/menu/float), about 1800 findings
+    -- across 49 files. `isolated = "file"` contains all of it per spec file; the guard has nothing
+    -- left to tell between cases of one file.
+    state = "off",
+  },
+  guard_allow = {
+    -- `git init` / `rev-parse` / `for-each-ref` in a throwaway repo: the git_clickable spec checks the
+    -- 'no commits yet' and 'git itself fails' messages against real git.
+    -- `nvim --version` is the cheap long-lived terminal job of the tabline specs that open a terminal buffer.
+    spawn = { "git", "nvim" },
+  },
 }
