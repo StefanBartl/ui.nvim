@@ -1,0 +1,83 @@
+---@meta
+---@module 'ui.slots.@types'
+
+--- One numbered slot: a configurable action. `kind` names the behaviour; every
+--- other field is the kind's own payload (`path`, `url`, `text`, `cmd`, `fn`,
+--- `index`, ...). The number is the slot's identity, there is no upper bound.
+---@class Ui.Slots.Slot
+---@field n integer             # positive whole number, assigned by the store
+---@field kind string           # "file" | "url" | "yank" | "cmd" | "lua" | "mark" | a registered kind
+---@field label? string         # shown text; the kind supplies a default
+---@field icon? string          # the kind supplies a default
+---@field style? string|table   # preset name or override table for this slot's chip
+---@field fixed? boolean        # set by the store for slots that come from `setup({ slots })`
+---@field [string] any          # payload of the kind
+
+--- Where `preview` finds its limits and when it opens.
+---@class Ui.Slots.PreviewConfig
+---@field mode "key"|"auto"|"off"
+---@field delay integer         # ms before `auto` opens the preview
+---@field max_kb integer        # a larger file is cut here and says so
+---@field max_lines integer
+
+--- Resolved configuration (`ui.slots.config.get()`).
+---@class Ui.Slots.Config
+---@field enabled boolean
+---@field layout "chips"|"panel"
+---@field side "left"|"right"
+---@field width number          # fraction of the editor width (<= 1) or columns (> 1)
+---@field style string|table
+---@field scope "project"|"global"
+---@field persist boolean
+---@field target "current"|"split"|"vsplit"|"tab"
+---@field clipboard string[]    # registers a `yank` slot writes
+---@field preview Ui.Slots.PreviewConfig
+---@field overflow "accordion"
+---@field keys table<string, string|false>
+---@field slots table<integer, table>   # fixed slots: [n] = { kind = ..., ... }
+---@field kinds table<string, table>    # kinds to register at setup
+---@field persistable_kinds string[]    # kinds a data file may contain
+---@field save_delay_ms integer         # writes are batched over this long
+---@field max_file_kb integer           # a larger data file is not read
+---@field max_string_len integer        # a longer string in a data file is dropped
+---@field data_dir? string              # where the data files live; default stdpath("data")/ui/slots
+
+--- What `setup()` accepts: every field optional.
+---@class Ui.Slots.Opts
+---@field enabled? boolean
+---@field layout? "chips"|"panel"
+---@field side? "left"|"right"
+---@field width? number
+---@field style? string|table
+---@field scope? "project"|"global"
+---@field persist? boolean
+---@field target? "current"|"split"|"vsplit"|"tab"
+---@field clipboard? string[]
+---@field preview? { mode?: "key"|"auto"|"off", delay?: integer, max_kb?: integer, max_lines?: integer }
+---@field overflow? "accordion"
+---@field keys? table<string, string|false>
+---@field slots? table<integer, table>
+---@field kinds? table<string, table>
+---@field persistable_kinds? string[]
+---@field save_delay_ms? integer
+---@field max_file_kb? integer
+---@field max_string_len? integer
+---@field data_dir? string
+
+--- The values a placeholder can stand for. Each may be a plain value or a
+--- function that is only called when the placeholder is used.
+---@class Ui.Slots.Ctx
+---@field file? string|fun():string
+---@field dir? string|fun():string
+---@field root? string|fun():string
+---@field cwd? string|fun():string
+---@field line? integer|fun():integer
+---@field col? integer|fun():integer
+---@field word? string|fun():string
+---@field sel? string|fun():string
+---@field clip? string|fun():string
+---@field count? integer|fun():integer
+
+--- What `resolve.resolve()` can be told.
+---@class Ui.Slots.ResolveOpts
+---@field escape? fun(value: string, name: string): string  # applied to every substituted value
