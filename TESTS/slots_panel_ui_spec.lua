@@ -56,6 +56,7 @@ local function state()
       chooser = require("ui.kit.chooser").is_open(),
       reg = vim.fn.getreg("a"),
       slots = #require("ui.slots").list(),
+      preview = require("ui.slots.view.preview").is_open() and require("ui.slots.view.preview").lines() or nil,
       floats = #vim.tbl_filter(function(w)
         return vim.api.nvim_win_get_config(w).relative ~= ""
       end, vim.api.nvim_list_wins()),
@@ -222,6 +223,43 @@ describe("the slot panel in a real Neovim", function()
     expect(function()
       return not state().open
     end, "the panel closed when the focus left")
+  end)
+
+  it("K shows the file in a pane beside the panel, it follows the cursor, q closes both", function()
+    open_panel(2)
+    input("K")
+    expect(function()
+      return state().preview ~= nil
+    end, "the preview opens")
+    assert.same({ "one", "two" }, state().preview)
+    assert.equals(2, state().floats, "the panel and the preview")
+    input("j")
+    expect(function()
+      local p = state().preview
+      return p ~= nil and p[1] == "yank 1"
+    end, "the preview followed the cursor to the next slot")
+    input("q")
+    expect(function()
+      return not state().open and state().preview == nil
+    end, "both are gone")
+    assert.equals(0, state().floats)
+  end)
+
+  it("the preview is not focusable: a click on it does not take the focus", function()
+    open_panel(1)
+    input("K")
+    expect(function()
+      return state().preview ~= nil
+    end, "the preview opens")
+    local cfg =
+      lua([[return vim.api.nvim_win_get_config(require("ui.slots.view.preview").winid())]])
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "press", "", 0, cfg.row + 1, cfg.col + 3)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "release", "", 0, cfg.row + 1, cfg.col + 3)
+    vim.wait(200)
+    -- the click fell through to the editor below, which is not the panel: it closed
+    expect(function()
+      return not state().open
+    end, "the panel closed because the focus left it")
   end)
 
   it("q closes it", function()

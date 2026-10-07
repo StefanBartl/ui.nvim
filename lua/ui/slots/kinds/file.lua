@@ -133,6 +133,83 @@ function M.render(slot)
   }
 end
 
+--- A file read for the preview: at most `preview.max_kb` bytes and `max_lines`
+--- lines, every line one the buffer accepts (a NUL byte shows as `^@`, a `\r` is
+--- dropped, a very long line is cut), and a last line that says where it was cut.
+---@param path string
+---@param st table  # fs_stat of `path`
+---@return string[] lines
+---@return boolean cut
+function M._read(path, st)
+  local pv = config.get().preview
+  local limit = pv.max_kb * 1024
+  local fd = io.open(path, "rb")
+  if not fd then
+    return { "cannot read: " .. path }, false
+  end
+  local data = fd:read(limit) or ""
+  fd:close()
+  local cut_bytes = st.size > limit
+  local lines = vim.split(data, "\n", { plain = true })
+  if cut_bytes then
+    table.remove(lines) -- the last line stops mid-way
+  elseif lines[#lines] == "" then
+    table.remove(lines) -- the newline that ends the file
+  end
+  local cut_lines = #lines > pv.max_lines
+  if cut_lines then
+    lines = vim.list_slice(lines, 1, pv.max_lines)
+  end
+  for i, line in ipairs(lines) do
+    line = line:gsub("\r$", ""):gsub("%z", "^@")
+    if #line > 2000 then
+      line = line:sub(1, 2000) .. "…"
+    end
+    lines[i] = line
+  end
+  local cut = cut_bytes or cut_lines
+  if cut then
+    lines[#lines + 1] = ("… cut here (limit %d KB, %d lines)"):format(pv.max_kb, pv.max_lines)
+  end
+  return lines, cut
+end
+
+--- What the preview pane shows for this slot: the file, at the position it was
+--- last left at.
+---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }
+---@return Ui.Slots.Preview
+function M.preview(slot, ctx)
+  local path = target_path(slot, ctx.resolve)
+  if path == "" then
+    return { lines = { "(the path is empty)" } }
+  end
+  local st = uv.fs_stat(path)
+  if not st then
+    return { lines = { "file does not exist: " .. path } }
+  end
+  if st.type == "directory" then
+    local entries = vim.fn.readdir(path)
+    local max = config.get().preview.max_lines
+    if #entries > max then
+      entries = vim.list_slice(entries, 1, max)
+      entries[#entries + 1] = "… cut here"
+    end
+    return { lines = entries }
+  end
+  if st.type ~= "file" then
+    return { lines = { "not a regular file: " .. path } }
+  end
+  local lines = M._read(path, st)
+  local at = slot.line and { slot.line, slot.col or 1 } or nil
+  if not at then
+    local seen = positions[key(path)]
+    at = seen and { seen.line, seen.col } or nil
+  end
+  local ft = vim.filetype.match({ filename = path })
+  return { lines = lines, ft = ft, pos = at }
+end
+
 --- Remember where the cursor is in the current buffer, for the file slot(s)
 --- that point at it. Slots in the data file keep it across restarts; fixed
 --- slots (which cannot be changed) and every other file keep it for the
