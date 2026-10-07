@@ -515,6 +515,20 @@ describe("path completion in a big directory", function()
     assert(ok, err)
   end)
 
+  it("leaves a fragment with a NUL byte to getcompletion() instead of raising", function()
+    -- No file name holds a NUL. The fold of a non-ASCII name goes through `toupper()`, and a
+    -- NUL in a Lua string reaches `vim.fn` as a Blob: E976 out of the <Tab> mapping, where
+    -- getcompletion() refuses such a fragment itself, under its pcall.
+    dir = make_dir(MAX + 10, 0)
+    with_case_options(true, false, function()
+      for _, line in ipairs({ "\195\164\0x", "ab\0x", dir .. "/\195\164\0x", dir .. "/item_\0" }) do
+        local ok, err = pcall(press_tab, line)
+        assert.is_true(ok, "<Tab> on " .. vim.inspect(line) .. ": " .. tostring(err))
+        assert.equals(1, getcompletion_calls, "getcompletion() has it: " .. vim.inspect(line))
+      end
+    end)
+  end)
+
   it("lists a dot file only when asked for it by name", function()
     dir = make_dir(MAX + 100, 0)
     press_tab(dir .. "/.")
