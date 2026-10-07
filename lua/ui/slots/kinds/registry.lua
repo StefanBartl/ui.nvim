@@ -12,8 +12,11 @@
 ---     from `setup()` (a `fixed` slot), or nil. A slot from a data file, the
 ---     editor or the API is untrusted input: this is where a kind says what it
 ---     will not take from there (a network path, a `file:` address);
----   * `render(slot)` -- optional; `{ label?, icon?, hl?, missing? }` for the
----     views (the slot's own `label`/`icon` always win);
+---   * `render(slot, opts)` -- optional; `{ label?, icon?, hl?, missing? }` for
+---     the views (the slot's own `label`/`icon` always win). With
+---     `opts.cheap` it must not touch the file system or run anything: a list
+---     of ten thousand slots is drawn that way, and only the rows in view are
+---     asked again without it;
 ---   * `preview(slot, ctx)` -- optional, used by the preview pane;
 ---   * `persist` -- optional boolean; `true` lets a data file hold slots of
 ---     this kind, in addition to the config's `persistable_kinds`. Leave it
@@ -213,11 +216,11 @@ end
 --- `icon` on top, and a fallback for a kind that is not registered.
 ---@param slot table
 ---@return { label: string, icon: string, hl: string, missing: boolean }
-function M.render(slot)
+function M.render(slot, opts)
   local kind = M.get(slot.kind)
   local r = {}
   if kind and kind.render then
-    local ok, res = pcall(kind.render, slot)
+    local ok, res = pcall(kind.render, slot, opts)
     if ok and type(res) == "table" then
       r = res
     end

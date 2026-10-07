@@ -37,6 +37,10 @@ local NS = api.nvim_create_namespace("ui_slots_panel")
 ---@class Ui.Slots.Panel.State
 ---@field surf Ui.Kit.Surface|nil
 ---@field numbers integer[]        # line -> slot number
+---@field list Ui.Slots.Slot[]      # line -> the slot (a copy), for the rows that are looked at closely
+---@field refined table<integer, boolean>  # lines that have their full render (stat, current file)
+---@field hl table<integer, string>        # line -> highlight group of a refined row
+---@field rev integer               # moves with every redraw: a scheduled one of an older state is dropped
 ---@field from integer|nil         # the window the panel was opened from
 ---@field from_path string|nil     # its file, the default of `a`
 ---@field listener integer|nil
@@ -49,6 +53,10 @@ local NS = api.nvim_create_namespace("ui_slots_panel")
 local S = {
   surf = nil,
   numbers = {},
+  list = {},
+  refined = {},
+  hl = {},
+  rev = 0,
   from = nil,
   from_path = nil,
   listener = nil,
@@ -99,64 +107,117 @@ end
 ---@type fun()
 local update_preview
 
---- One line per slot.
+--- The text of one row.
+---@param slot Ui.Slots.Slot
+---@param r { label: any, icon: any, missing: boolean|nil }
+---@param current_file boolean  # the file you came from
+---@return string
+local function row_text(slot, r, current_file)
+  local label = tostring(r.label):gsub("%c", " ")
+  local icon = tostring(r.icon):gsub("%c", " ")
+  local flags = (slot.fixed and " fixed" or "") .. (r.missing and " ✗" or "")
+  return ("%s%3d %s %s%s"):format(current_file and "•" or " ", slot.n, icon, label, flags)
+end
+
+--- One line per slot, made without asking the file system anything: the list
+--- may hold ten thousand slots, and building it is paid on every open and every
+--- change. The rows in view are looked at closely afterwards (`refine`).
 ---@return string[] lines
----@return { row: integer, hl: string }[] marks
 ---@return integer[] numbers
+---@return Ui.Slots.Slot[] list
 local function build()
-  local lines, marks, numbers = {}, {}, {}
-  local here = vim.api.nvim_buf_get_name(
-    S.from and api.nvim_win_is_valid(S.from) and api.nvim_win_get_buf(S.from) or 0
-  )
-  local normkey = require("lib.nvim.fs.normkey")
-  local here_key = here ~= "" and normkey(here) or nil
-  for _, slot in ipairs(store.list()) do
-    local r = registry.render(slot)
-    -- Only a file slot is compared with the file you came from (and asking any
-    -- other kind for its text, or the file system for a real path, is for nothing).
-    local current_file = false
-    if here_key and slot.kind == "file" then
-      local text = registry.text(slot)
-      current_file = text ~= nil and text ~= "" and normkey(text) == here_key
-    end
-    local label = tostring(r.label):gsub("%c", " ")
-    local icon = tostring(r.icon):gsub("%c", " ")
-    local flags = (slot.fixed and " fixed" or "") .. (r.missing and " ✗" or "")
-    lines[#lines + 1] = ("%s%3d %s %s%s"):format(
-      current_file and "•" or " ",
-      slot.n,
-      icon,
-      label,
-      flags
-    )
-    marks[#marks + 1] = { row = #lines - 1, hl = r.hl }
-    numbers[#numbers + 1] = slot.n
+  local lines, numbers = {}, {}
+  local list = store.list()
+  for i, slot in ipairs(list) do
+    lines[i] = row_text(slot, registry.render(slot, { cheap = true }), false)
+    numbers[i] = slot.n
   end
   if #lines == 0 then
     lines[1] = " no slots yet -- press a to add one"
-    marks[1] = { row = 0, hl = "KitMuted" }
   end
-  return lines, marks, numbers
+  return lines, numbers, list
 end
 
---- Redraw the list; the cursor stays on the same slot.
----@param keep integer|nil  # slot number to put the cursor on
-local function redraw(keep)
+--- Give the rows in and around the window their full render: whether the file
+--- is there, which one is the file you came from, the colour. A row that was
+--- done stays done until the list is built again.
+local function refine()
   if not M.is_open() then
     return
   end
-  local want = keep or current()
-  local lines, marks, numbers = build()
-  S.numbers = numbers
-  S.surf:set_lines(lines)
-  api.nvim_buf_clear_namespace(S.surf.bufnr, NS, 0, -1)
-  for _, m in ipairs(marks) do
-    api.nvim_buf_set_extmark(S.surf.bufnr, NS, m.row, 0, {
-      end_row = m.row,
-      end_col = #lines[m.row + 1],
-      hl_group = m.hl,
-    })
+  local buf, win = S.surf.bufnr, S.surf.winid
+  local total = #S.list
+  if total == 0 then
+    api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+    local text = api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
+    api.nvim_buf_set_extmark(buf, NS, 0, 0, { end_row = 0, end_col = #text, hl_group = "KitMuted" })
+    return
   end
+  local height = api.nvim_win_get_height(win)
+  local cursor = api.nvim_win_get_cursor(win)[1]
+  local top = vim.fn.getwininfo(win)[1].topline
+  local first = math.max(1, math.min(cursor, top) - height)
+  local last = math.min(total, math.max(cursor, top + height) + height)
+
+  local todo = false
+  for i = first, last do
+    if not S.refined[i] then
+      todo = true
+      break
+    end
+  end
+  if not todo then
+    return
+  end
+
+  local normkey = require("lib.nvim.fs.normkey")
+  local here_key
+  local from = S.from
+  if from and api.nvim_win_is_valid(from) then
+    local name = api.nvim_buf_get_name(api.nvim_win_get_buf(from))
+    here_key = name ~= "" and normkey(name) or nil
+  end
+
+  local rows = api.nvim_buf_get_lines(buf, first - 1, last, false)
+  for i = first, last do
+    if not S.refined[i] then
+      local slot = S.list[i]
+      local r = registry.render(slot)
+      local current_file = false
+      if here_key and slot.kind == "file" then
+        local text = registry.text(slot)
+        current_file = text ~= nil and text ~= "" and normkey(text) == here_key
+      end
+      rows[i - first + 1] = row_text(slot, r, current_file)
+      S.hl[i] = r.hl
+      S.refined[i] = true
+    end
+  end
+
+  local was = api.nvim_get_option_value("modifiable", { buf = buf })
+  api.nvim_set_option_value("modifiable", true, { buf = buf })
+  local ok, err = pcall(api.nvim_buf_set_lines, buf, first - 1, last, false, rows)
+  api.nvim_set_option_value("modifiable", was, { buf = buf })
+  if not ok then
+    error(err, 0)
+  end
+  api.nvim_buf_clear_namespace(buf, NS, first - 1, last)
+  for i = first, last do
+    local group = S.hl[i]
+    if group then
+      api.nvim_buf_set_extmark(buf, NS, i - 1, 0, {
+        end_row = i - 1,
+        end_col = #rows[i - first + 1],
+        hl_group = group,
+      })
+    end
+  end
+end
+
+--- Put the cursor on slot `want`, or the nearest one before it.
+---@param want integer|nil
+local function place(want)
+  local numbers = S.numbers
   local line = 1
   for i, n in ipairs(numbers) do
     if n == want then
@@ -167,7 +228,63 @@ local function redraw(keep)
       line = i
     end
   end
-  pcall(api.nvim_win_set_cursor, S.surf.winid, { math.min(line, #lines), 0 })
+  pcall(api.nvim_win_set_cursor, S.surf.winid, { math.min(line, math.max(#numbers, 1)), 0 })
+end
+
+--- A path in a spelling that compares without asking the file system.
+---@param path string
+---@return string
+local function cheap_key(path)
+  local k = vim.fs.normalize(path)
+  if vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1 then
+    k = k:lower()
+  end
+  return k
+end
+
+--- Up to this many slots, the slot of the file you came from is found exactly
+--- (a real path for each); with more it is found by the path as written.
+local EXACT_MAX = 200
+
+--- The number of the file slot that points at the file the panel came from.
+---@return integer|nil
+local function find_current_slot()
+  local from = S.from_path
+  if not from then
+    return nil
+  end
+  local exact = #S.list <= EXACT_MAX
+  local normkey = require("lib.nvim.fs.normkey")
+  local here = exact and normkey(from) or cheap_key(from)
+  for _, slot in ipairs(S.list) do
+    if slot.kind == "file" and type(slot.path) == "string" then
+      if exact then
+        local text = registry.text(slot)
+        if text and normkey(text) == here then
+          return slot.n
+        end
+      elseif not slot.path:find("{", 1, true) and cheap_key(slot.path) == here then
+        return slot.n
+      end
+    end
+  end
+  return nil
+end
+
+--- Redraw the list; the cursor stays on the same slot.
+---@param keep integer|nil  # slot number to put the cursor on
+local function redraw(keep)
+  if not M.is_open() then
+    return
+  end
+  S.rev = S.rev + 1
+  local want = keep or current()
+  local lines, numbers, list = build()
+  S.numbers, S.list, S.refined, S.hl = numbers, list, {}, {}
+  S.surf:set_lines(lines)
+  api.nvim_buf_clear_namespace(S.surf.bufnr, NS, 0, -1)
+  place(want)
+  refine()
   update_preview()
 end
 
@@ -520,7 +637,7 @@ function M.open(opts)
     or nil
 
   local cfg = config.get()
-  local lines, marks, numbers = build()
+  local lines, numbers, list = build()
   local width = cfg.width
   if width <= 1 then
     width = math.floor(vim.o.columns * width)
@@ -550,7 +667,7 @@ function M.open(opts)
     return
   end
   S.surf = surf
-  S.numbers = numbers
+  S.numbers, S.list, S.refined, S.hl = numbers, list, {}, {}
   S.typed = ""
   S.geom = {
     row = row0,
@@ -582,36 +699,34 @@ function M.open(opts)
   end)
   attach_keys()
 
-  for _, m in ipairs(marks) do
-    api.nvim_buf_set_extmark(surf.bufnr, NS, m.row, 0, {
-      end_row = m.row,
-      end_col = #lines[m.row + 1],
-      hl_group = m.hl,
-    })
-  end
-
   -- Where to start: asked for, else the file you are in, else the last run.
-  local want = opts.focus
-  if not want then
-    local here = S.from_path and require("lib.nvim.fs.normkey")(S.from_path)
-    for _, slot in ipairs(store.list()) do
-      if here and slot.kind == "file" then
-        local text = registry.text(slot)
-        if text and require("lib.nvim.fs.normkey")(text) == here then
-          want = slot.n
-          break
-        end
-      end
-    end
-  end
-  want = want or require("ui.slots").last_applied()
-  redraw(want)
+  local want = opts.focus or find_current_slot() or require("ui.slots").last_applied()
+  place(want)
+  refine()
+  update_preview()
 
+  -- A change is redrawn once, and not at all when the panel redrew itself after
+  -- making it (`dd`, move): that redraw already shows the final state.
   S.listener = store.on_change(function()
+    local rev = S.rev
     vim.schedule(function()
-      redraw()
+      if S.rev == rev then
+        redraw()
+      end
     end)
   end)
+
+  -- The rows in view are looked at closely as they come into view.
+  require("lib.nvim.bindings.autocmd").create("CursorMoved", refine, {
+    buffer = surf.bufnr,
+    record = false,
+    desc = "ui.slots panel: full render of the rows in view",
+  })
+  require("lib.nvim.bindings.autocmd").create("WinScrolled", refine, {
+    pattern = tostring(surf.winid),
+    record = false,
+    desc = "ui.slots panel: full render of the rows in view",
+  })
 
   -- The preview follows the cursor: at once with `K`, after `preview.delay` in
   -- `auto` mode (a cursor held down a list does not read a file per row).

@@ -1019,18 +1019,28 @@ describe("ui.slots preview", function()
     end)
 
     it("a cursor moved at once does not read a file per row in key mode with a delay", function()
-      start({ preview = { mode = "key", delay = 80 } })
+      start({ preview = { mode = "key", delay = 400 } })
       add_files()
       panel.open()
       press("K")
       assert.same({ "content of file 1" }, preview.lines())
+      -- the timer that the K press itself started has run out
+      vim.wait(500)
+      local shown = {}
+      local original = preview.show
+      preview.show = function(n, ...)
+        shown[#shown + 1] = n
+        return original(n, ...)
+      end
       press("j")
       press("j")
-      assert.same({ "content of file 1" }, preview.lines())
-      vim.wait(1000, function()
+      vim.wait(2000, function()
         return preview.lines()[1] == "content of file 3"
       end, 10)
+      preview.show = original
       assert.same({ "content of file 3" }, preview.lines())
+      -- only where the cursor came to rest, not on the row passed
+      assert.same({ 3 }, shown)
     end)
 
     it("steps aside with the panel when the editor opens, and is not left over", function()
