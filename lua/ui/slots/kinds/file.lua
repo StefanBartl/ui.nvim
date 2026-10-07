@@ -152,7 +152,11 @@ function M._read(path, st)
   local cut_bytes = st.size > limit
   local lines = vim.split(data, "\n", { plain = true })
   if cut_bytes then
-    table.remove(lines) -- the last line stops mid-way
+    -- The last line stops mid-way -- unless it is the only one (a minified file
+    -- on one line): then a piece of it is all there is to show.
+    if #lines > 1 then
+      table.remove(lines)
+    end
   elseif lines[#lines] == "" then
     table.remove(lines) -- the newline that ends the file
   end
@@ -189,10 +193,24 @@ function M.preview(slot, ctx)
     return { lines = { "file does not exist: " .. path } }
   end
   if st.type == "directory" then
-    local entries = vim.fn.readdir(path)
+    -- Only as many entries as will be shown are read: a directory with a hundred
+    -- thousand files must not stall the editor on a cursor move.
     local max = config.get().preview.max_lines
-    if #entries > max then
-      entries = vim.list_slice(entries, 1, max)
+    local entries, cut = {}, false
+    local handle = uv.fs_scandir(path)
+    while handle do
+      local name = uv.fs_scandir_next(handle)
+      if not name then
+        break
+      end
+      if #entries >= max then
+        cut = true
+        break
+      end
+      entries[#entries + 1] = name
+    end
+    table.sort(entries)
+    if cut then
       entries[#entries + 1] = "… cut here"
     end
     return { lines = entries }

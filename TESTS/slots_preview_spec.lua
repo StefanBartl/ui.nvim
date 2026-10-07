@@ -37,9 +37,11 @@ describe("ui.slots preview", function()
     slots.reset()
     store.reset()
     registry.reset()
-    slots.setup(
-      vim.tbl_extend("force", { data_dir = dir .. "/data", save_delay_ms = 0 }, opts or {})
-    )
+    slots.setup(vim.tbl_extend("force", {
+      data_dir = dir .. "/data",
+      save_delay_ms = 0,
+      preview = { mode = "key", delay = 0 },
+    }, opts or {}))
     slots.enable()
   end
 
@@ -169,6 +171,24 @@ describe("ui.slots preview", function()
       assert.equals(11, #pv.lines)
       assert.equals("l10", pv.lines[10])
       assert.is_truthy(pv.lines[11]:find("cut here", 1, true))
+    end)
+
+    it("shows the start of a big file that is one single line", function()
+      config.get().preview.max_kb = 1
+      local pv = preview_of({ kind = "file", path = write("oneline.js", string.rep("a", 5000)) })
+      assert.equals(2, #pv.lines)
+      assert.equals(1024, #pv.lines[1])
+      assert.is_truthy(pv.lines[2]:find("cut here", 1, true))
+    end)
+
+    it("lists only as many entries of a directory as will be shown", function()
+      config.get().preview.max_lines = 5
+      for i = 1, 30 do
+        write(string.format("e%02d.txt", i), "x")
+      end
+      local pv = preview_of({ kind = "file", path = dir })
+      assert.equals(6, #pv.lines)
+      assert.is_truthy(pv.lines[6]:find("cut here", 1, true))
     end)
 
     it("says nothing about a cut when the file fits", function()
@@ -342,6 +362,45 @@ describe("ui.slots preview", function()
     end)
   end)
 
+  describe("which window the placeholders belong to", function()
+    it(
+      "a path with {dir} previews the file <CR> will open, not one relative to the panel",
+      function()
+        local path = write("TODO.md", "the todo\n")
+        slots.add({ kind = "file", path = "{dir}/TODO.md" })
+        vim.cmd.edit(path)
+        panel.open()
+        press("K")
+        assert.same({ "the todo" }, preview.lines())
+      end
+    )
+
+    it("{file} resolves to the file you came from", function()
+      local path = write("self.txt", "i am the file\n")
+      slots.add({ kind = "file", path = "{file}" })
+      vim.cmd.edit(path)
+      panel.open()
+      press("K")
+      assert.same({ "i am the file" }, preview.lines())
+    end)
+
+    it("the preview and the run agree", function()
+      local path = write("same.txt", "same content\n")
+      slots.add({ kind = "file", path = "{dir}/same.txt" })
+      local other = write("other.txt", "elsewhere\n")
+      vim.cmd.edit(other)
+      panel.open()
+      press("K")
+      local shown = preview.lines()[1]
+      press("<CR>")
+      assert.equals("same content", shown)
+      assert.equals(
+        require("lib.nvim.fs.normkey")(path),
+        require("lib.nvim.fs.normkey")(vim.api.nvim_buf_get_name(0))
+      )
+    end)
+  end)
+
   describe("the pane", function()
     local geom = { row = 0, col = 100, width = 30, height = 12, side = "right" }
 
@@ -405,6 +464,44 @@ describe("ui.slots preview", function()
       store.add({ kind = "file", path = path })
       preview.show(1, geom)
       assert.equals("lua", vim.bo[vim.api.nvim_win_get_buf(preview.winid())].filetype)
+    end)
+
+    it("sets the filetype once, not on every move", function()
+      local a = write("one.lua", "local a = 1\n")
+      local b = write("two.lua", "local b = 2\n")
+      store.add({ kind = "file", path = a })
+      store.add({ kind = "file", path = b })
+      local fired = 0
+      local id = vim.api.nvim_create_autocmd("FileType", {
+        pattern = "lua",
+        callback = function()
+          fired = fired + 1
+        end,
+      })
+      preview.show(1, geom)
+      preview.show(2, geom)
+      preview.show(1, geom)
+      vim.api.nvim_del_autocmd(id)
+      assert.equals(1, fired)
+    end)
+
+    it("clears a draw preview first: lines and filetype of the slot before are gone", function()
+      registry.register("lazy", {
+        apply = function() end,
+        preview = function()
+          return {
+            draw = function() end,
+          }
+        end,
+      })
+      local path = write("before.lua", "local before = true\n")
+      store.add({ kind = "file", path = path })
+      store.set(2, { kind = "lazy" })
+      preview.show(1, geom)
+      assert.same({ "local before = true" }, preview.lines())
+      preview.show(2, geom)
+      assert.same({ "" }, preview.lines())
+      assert.equals("", vim.bo[vim.api.nvim_win_get_buf(preview.winid())].filetype)
     end)
 
     it("leaves no window and no buffer behind", function()
@@ -512,6 +609,64 @@ describe("ui.slots preview", function()
       vim.api.nvim_set_current_win(other)
       flush()
       assert.is_false(preview.is_open())
+    end)
+
+    it("goes with the panel when its window is closed directly", function()
+      add_files()
+      panel.open()
+      press("K")
+      assert.is_true(preview.is_open())
+      vim.cmd("close")
+      flush()
+      assert.is_false(preview.is_open())
+    end)
+
+    it("says when there is no room, and stays off", function()
+      add_files()
+      vim.o.columns = 80
+      config.get().width = 0.8
+      panel.open()
+      press("K")
+      assert.is_false(preview.is_open())
+      assert.is_truthy(table.concat(messages, "\n"):find("no room", 1, true))
+    end)
+
+    it("is wanted again when the panel comes back from the editor", function()
+      add_files()
+      panel.open()
+      press("K")
+      local sheet = require("ui.kit.sheet")
+      local original = sheet.open
+      local opts
+      sheet.open = function(o)
+        opts = o
+        return {
+          is_valid = function()
+            return true
+          end,
+        }
+      end
+      press("e")
+      sheet.open = original
+      opts.on_cancel()
+      flush()
+      assert.is_true(panel.is_open())
+      assert.is_true(preview.is_open())
+    end)
+
+    it("a cursor moved at once does not read a file per row in key mode with a delay", function()
+      start({ preview = { mode = "key", delay = 80 } })
+      add_files()
+      panel.open()
+      press("K")
+      assert.same({ "content of file 1" }, preview.lines())
+      press("j")
+      press("j")
+      assert.same({ "content of file 1" }, preview.lines())
+      vim.wait(1000, function()
+        return preview.lines()[1] == "content of file 3"
+      end, 10)
+      assert.same({ "content of file 3" }, preview.lines())
     end)
 
     it("steps aside with the panel when the editor opens, and is not left over", function()

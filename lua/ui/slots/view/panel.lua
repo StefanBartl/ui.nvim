@@ -75,6 +75,26 @@ local function current()
   return S.numbers[line]
 end
 
+--- The placeholders as the window the panel came from sees them: `{dir}` of its
+--- buffer, `{word}` under its cursor -- what <CR> will run with, not what the
+--- (unnamed) panel buffer would give.
+---@return { resolve: Ui.Slots.Ctx }
+local function origin_context()
+  local base = require("ui.slots.resolve").context()
+  local from = S.from
+  if not (from and api.nvim_win_is_valid(from)) then
+    return { resolve = base }
+  end
+  local wrapped = {}
+  for name, fn in pairs(base) do
+    wrapped[name] = function()
+      local ok, res = pcall(api.nvim_win_call, from, fn)
+      return ok and res or nil
+    end
+  end
+  return { resolve = wrapped }
+end
+
 --- Show, move or close the preview pane to follow the cursor (defined below).
 ---@type fun()
 local update_preview
@@ -158,7 +178,7 @@ update_preview = function()
     preview.close()
     return
   end
-  preview.show(n, S.geom)
+  preview.show(n, S.geom, origin_context())
 end
 
 function M.close()
@@ -182,6 +202,7 @@ end
 ---@param keep integer|nil
 local function away(fn, keep)
   local from = S.from
+  local preview_wanted = S.preview_on
   S.suspended = true
   local surf = S.surf
   S.surf = nil
@@ -193,7 +214,7 @@ local function away(fn, keep)
   end
   S.suspended = false
   fn(function(n)
-    M.open({ from = from, focus = n or keep })
+    M.open({ from = from, focus = n or keep, preview = preview_wanted })
   end)
 end
 
@@ -452,6 +473,10 @@ local function attach_keys()
     end
     S.preview_on = not S.preview_on
     update_preview()
+    if S.preview_on and current() and not require("ui.slots.view.preview").is_open() then
+      S.preview_on = false
+      require("ui.slots.util").notify("no room beside the panel for a preview")
+    end
   end, "show / hide the preview")
 
   map("q", M.close, "close")
@@ -460,7 +485,7 @@ end
 
 --- Open the panel. The cursor goes to `opts.focus`, else to the slot of the file
 --- you are in, else to the one run last, else to the first.
----@param opts { from?: integer, focus?: integer }|nil
+---@param opts { from?: integer, focus?: integer, preview?: boolean }|nil
 function M.open(opts)
   opts = opts or {}
   if M.is_open() then
@@ -515,8 +540,19 @@ function M.open(opts)
     height = height,
     side = cfg.side,
   }
-  S.preview_on = cfg.preview.mode == "auto"
+  if opts.preview ~= nil then
+    S.preview_on = opts.preview and cfg.preview.mode ~= "off"
+  else
+    S.preview_on = cfg.preview.mode == "auto"
+  end
   surf:on_close(function()
+    if S.deb then
+      S.deb.cancel()
+      S.deb = nil
+    end
+    if package.loaded["ui.slots.view.preview"] then
+      package.loaded["ui.slots.view.preview"].close()
+    end
     if S.surf == surf then
       S.surf = nil
     end
@@ -561,7 +597,7 @@ function M.open(opts)
   -- The preview follows the cursor: at once with `K`, after `preview.delay` in
   -- `auto` mode (a cursor held down a list does not read a file per row).
   local pv = cfg.preview
-  if pv.mode == "auto" and pv.delay > 0 then
+  if pv.mode ~= "off" and pv.delay > 0 then
     S.deb = require("lib.nvim.debounce").new(update_preview, pv.delay)
   end
   require("lib.nvim.bindings.autocmd").create("CursorMoved", function()

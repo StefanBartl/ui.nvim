@@ -36,8 +36,9 @@ end
 
 --- The shape a slot's kind answers with, or a note.
 ---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }|nil  # where the placeholders are read (the editor, not the panel)
 ---@return table
-function M.render(slot)
+function M.render(slot, ctx)
   local kind = registry.get(slot.kind)
   if not kind then
     return { lines = { ("unknown kind '%s'"):format(tostring(slot.kind)) } }
@@ -45,7 +46,7 @@ function M.render(slot)
   if not kind.preview then
     return { lines = { ("(no preview for a '%s' slot)"):format(slot.kind) } }
   end
-  local ok, res = pcall(registry.preview, slot, {})
+  local ok, res = pcall(registry.preview, slot, ctx)
   if not ok or type(res) ~= "table" then
     return { lines = { "(the preview could not be made)" } }
   end
@@ -79,6 +80,15 @@ local function fill(res)
   end
   api.nvim_buf_clear_namespace(surf.bufnr, NS, 0, -1)
   if res.draw then
+    -- A clean pane first: a draw that does not touch every line must not show
+    -- the lines (and the filetype) of the slot before.
+    pcall(function()
+      surf:set_lines({ "" })
+    end)
+    if vim.bo[surf.bufnr].filetype ~= "" then
+      vim.bo[surf.bufnr].filetype = ""
+    end
+    pcall(api.nvim_win_set_cursor, surf.winid, { 1, 0 })
     local ok = pcall(res.draw, surf)
     if not ok then
       surf:set_lines({ "(the preview could not be drawn)" })
@@ -100,7 +110,12 @@ local function fill(res)
     end)
     return
   end
-  vim.bo[surf.bufnr].filetype = type(res.ft) == "string" and res.ft or ""
+  -- Only when it changes: setting a filetype fires FileType (ftplugins, treesitter,
+  -- the user's own handlers) every time, equal or not.
+  local ft = type(res.ft) == "string" and res.ft or ""
+  if vim.bo[surf.bufnr].filetype ~= ft then
+    vim.bo[surf.bufnr].filetype = ft
+  end
   if res.pos and res.pos[1] then
     local line = math.max(1, math.min(res.pos[1], api.nvim_buf_line_count(surf.bufnr)))
     pcall(api.nvim_win_set_cursor, surf.winid, { line, math.max(0, (res.pos[2] or 1) - 1) })
@@ -126,15 +141,14 @@ end
 --- next to it, and does not open where there is none.
 ---@param n integer
 ---@param geom { row: integer, col: integer, width: integer, height: integer, side: string }
+---@param ctx { resolve?: Ui.Slots.Ctx }|nil  # the placeholders as the editor window sees them
 ---@return boolean shown
-function M.show(n, geom)
+function M.show(n, geom, ctx)
   local slot = require("ui.slots.store").get(n)
   if not slot then
     M.close()
     return false
   end
-  local res = M.render(slot)
-
   if not M.is_open() then
     local room = geom.side == "left" and (vim.o.columns - geom.col - geom.width - 3)
       or (geom.col - 1)
@@ -167,7 +181,7 @@ function M.show(n, geom)
     end)
   end
   S.n = n
-  fill(res)
+  fill(M.render(slot, ctx))
   return true
 end
 
