@@ -26,6 +26,16 @@ local DIRECT = 9
 ---@type { mode: string, lhs: string }[]
 local mapped = {}
 
+--- A leader as Neovim reads it: unset or empty means a backslash.
+---@param value any
+---@return string
+local function leader(value)
+  if type(value) ~= "string" or value == "" then
+    return "\\"
+  end
+  return value
+end
+
 ---@param lhs string
 ---@param rhs function
 ---@param desc string
@@ -34,10 +44,10 @@ local function map(lhs, rhs, desc)
   -- look for whatever the leader is by then and miss the mapping.
   local expanded = lhs
     :gsub("<[Ll]eader>", function()
-      return vim.g.mapleader or "\\"
+      return leader(vim.g.mapleader)
     end)
     :gsub("<[Ll]ocal[Ll]eader>", function()
-      return vim.g.maplocalleader or "\\"
+      return leader(vim.g.maplocalleader)
     end)
   vim.keymap.set("n", expanded, rhs, { desc = desc, silent = true })
   mapped[#mapped + 1] = { mode = "n", lhs = expanded }

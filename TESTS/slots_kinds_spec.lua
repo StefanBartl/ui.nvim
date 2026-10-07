@@ -351,6 +351,20 @@ describe("ui.slots.kinds", function()
       end
     )
 
+    it(
+      "treats a path whose placeholders are all empty as nothing, not as the working directory",
+      function()
+        vim.cmd("enew")
+        vim.api.nvim_buf_set_name(0, "")
+        local slot = { kind = "file", path = "{file}" }
+        local ok, err = registry.apply(slot)
+        assert.is_false(ok)
+        assert.is_truthy(err:find("does not exist", 1, true))
+        assert.is_true(registry.render(slot).missing)
+        assert.equals("", registry.text(slot))
+      end
+    )
+
     it("reads {{ and }} in a path as literal braces", function()
       local path = make_file("report {line}.md")
       local escaped = path:gsub("{", "{{"):gsub("}", "}}")
@@ -589,6 +603,22 @@ describe("ui.slots.kinds", function()
       registry.apply({ kind = "url", url = "https://example.org/?a=1&b=2" })
       assert.equals("https://example.org/?a=1&b=2", given.url)
       assert.same(kind.opener(), given.opts)
+    end)
+
+    it("sends non-ASCII characters as %XX through the Windows launcher only", function()
+      local kind = require("ui.slots.kinds.url")
+      local original = kind.opener
+      kind.opener = function()
+        return { cmd = { "rundll32", "url.dll,FileProtocolHandler" } }
+      end
+      registry.apply({ kind = "url", url = "https://example.org/caf\195\169" })
+      kind.opener = function()
+        return nil
+      end
+      registry.apply({ kind = "url", url = "https://example.org/caf\195\169" })
+      kind.opener = original
+      assert.equals("https://example.org/caf%C3%A9", opened[1])
+      assert.equals("https://example.org/caf\195\169", opened[2])
     end)
 
     it("passes on an error of the opener", function()

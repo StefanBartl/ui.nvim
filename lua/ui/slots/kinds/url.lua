@@ -123,7 +123,15 @@ function M.apply(slot, ctx)
   if why then
     return false, why
   end
-  local _, err = vim.ui.open(url, M.opener())
+  local opener = M.opener()
+  if opener then
+    -- FileProtocolHandler reads the address through an ANSI entry point: the
+    -- bytes of a non-ASCII character are sent as %XX, which browsers read back.
+    url = url:gsub("[\128-\255]", function(c)
+      return ("%%%02X"):format(c:byte())
+    end)
+  end
+  local _, err = vim.ui.open(url, opener)
   if err then
     return false, tostring(err)
   end

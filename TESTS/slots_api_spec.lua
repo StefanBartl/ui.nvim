@@ -236,6 +236,17 @@ describe("ui.slots", function()
       end
     )
 
+    it("does not match a slot whose path has a placeholder, and does not warn about it", function()
+      slots.add({ kind = "file", path = "{file}" })
+      slots.add({ kind = "file", path = "~/{foo}.md" })
+      local path = make_file("b.md")
+      vim.cmd.edit(path)
+      messages = {}
+      assert.equals(3, slots.add())
+      assert.is_false(said("unknown placeholder"))
+      assert.is_false(said("already in slot"))
+    end)
+
     it("refuses a buffer without a file", function()
       vim.cmd("enew")
       local n, err = slots.add()
@@ -428,6 +439,16 @@ describe("ui.slots", function()
         assert.same({}, require("ui.slots.bindings").mapped())
       end
     )
+
+    it("reads an empty mapleader as a backslash, like Neovim does", function()
+      local old = vim.g.mapleader
+      vim.g.mapleader = ""
+      start({ keys = { apply = "<leader>%d" } })
+      local mapped = require("ui.slots.bindings").mapped()
+      vim.g.mapleader = old
+      assert.is_true(vim.tbl_contains(mapped, "\\1"))
+      assert.is_false(vim.tbl_contains(mapped, "1"))
+    end)
 
     it("removes the keymaps it made even when the leader changed in between", function()
       local old = vim.g.mapleader
