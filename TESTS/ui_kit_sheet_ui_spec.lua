@@ -313,6 +313,38 @@ describe("kit.sheet in a real Neovim", function()
     assert.equals("yes", screen_has("*********"))
   end)
 
+  it("leaves no secret in the . register once the sheet is submitted or cancelled", function()
+    local function dot()
+      return lua([[return vim.fn.getreg(".")]])
+    end
+    -- The Insert run of title -> token carries the secret; submitting ends it ...
+    open_sheet()
+    input("1<Tab><Tab><Tab>topsecret")
+    expect(function(x)
+      return x.lines[4] == "topsecret"
+    end, "the secret is in the row")
+    input("<CR>")
+    expect(function(x)
+      return type(x.result) == "table"
+    end, "the last <CR> submits")
+    assert.equals("topsecret", state().result.token)
+    vim.wait(300) -- the scrub runs once the Insert run has ended
+    assert.equals("", dot(), "nothing of it is left in the register after a submit")
+
+    -- ... and so does cancelling it.
+    open_sheet()
+    input("1<Tab><Tab><Tab>topsecret")
+    expect(function(x)
+      return x.lines[4] == "topsecret"
+    end, "the secret is in the row again")
+    input("<Esc>")
+    expect(function(x)
+      return x.result == "cancelled"
+    end, "<Esc> cancels")
+    vim.wait(300)
+    assert.equals("", dot(), "nor after a cancel")
+  end)
+
   it("cancels with <Esc> from a text row and from a choice", function()
     open_sheet()
     input("<Esc>")
