@@ -37,15 +37,17 @@ the session.
 
 | `kind` | Payload | Does | Kept in the data file |
 | --- | --- | --- | --- |
-| `file` | `path`, `line?`, `col?`, `target?` | opens the file (a missing one is reported, never created) | yes |
-| `url` | `url` | opens `http`, `https`, `file` or `mailto` addresses with the system opener | yes |
+| `file` | `path`, `line?`, `col?`, `target?` | opens the file (a missing one is reported, never created); a network path (`\host\share`) only from `setup()` | yes |
+| `url` | `url` | opens `http`, `https` or `mailto` addresses with the system opener; `file:` only from `setup()` (the opener would run a program as readily as show a document) | yes |
 | `yank` | `text`, `register?` | puts the text into the clipboard registers | yes |
 | `mark` | `index` | the n-th mark of sessions.nvim | yes (the index only) |
 | `cmd` | `cmd`, `args?` | runs an Ex command; a value with `|`, a backtick or a leading `+`/`!` is refused rather than quoted | **no** |
 | `lua` | `fn` | calls the function with `{ slot, n, count, ... }` | **no** |
 
 `cmd` and `lua` run code, so they come from `setup()` or from Lua only; a data
-file that names them is ignored. Your own kinds: `require("ui.slots").register_kind(name, kind)`.
+file that names them is ignored. The same goes for what a data file, the editor
+and `add()` may not name (a `file:` address, a network path): they are refused
+with the reason, and an entry of a data file is dropped. Your own kinds: `require("ui.slots").register_kind(name, kind)`.
 
 Every slot also takes `label`, `icon` and `style`.
 
@@ -74,7 +76,8 @@ reported by `:checkhealth ui`. In an address a value is percent-encoded.
   [hover.nvim](https://github.com/StefanBartl/hover.nvim) shows it, "loading ..."
   first. Fetching is a request to that host, so it is off by default, and once on
   it happens for the slot under the cursor whenever the preview is shown (also
-  while it follows the cursor). `preview.mode` is `key` (default), `auto` or `off`.
+  while it follows the cursor). An address built from placeholders (`{clip}`,
+  `{file}`, ...) is never fetched: it would put your own data into a request. `preview.mode` is `key` (default), `auto` or `off`.
 - **The editor** (`a`/`e`, `:UI slots edit`): pick the kind, fill a form.
 
 ## Options

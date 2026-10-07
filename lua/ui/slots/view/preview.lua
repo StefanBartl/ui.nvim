@@ -29,7 +29,8 @@ local NS = api.nvim_create_namespace("ui_slots_preview")
 ---@field n integer|nil      # the slot shown
 ---@field gen integer         # moves with every fill: an answer of an older one is dropped
 ---@field later { cancel: fun() }|nil  # the request behind the text shown now
-local S = { surf = nil, n = nil, gen = 0, later = nil }
+---@field sig string|nil       # what the pane shows, to skip a show of the same thing
+local S = { surf = nil, n = nil, gen = 0, later = nil, sig = nil }
 
 ---@return boolean
 function M.is_open()
@@ -141,9 +142,9 @@ function fill(res)
   end
   local lines
   if res.buf then
-    lines = api.nvim_buf_is_valid(res.buf) and api.nvim_buf_get_lines(res.buf, 0, -1, false)
-      or { "(the buffer is gone)" }
-    res = { lines = lines, ft = res.buf and vim.bo[res.buf].filetype or nil, pos = res.pos }
+    local valid = api.nvim_buf_is_valid(res.buf)
+    lines = valid and api.nvim_buf_get_lines(res.buf, 0, -1, false) or { "(the buffer is gone)" }
+    res = { lines = lines, ft = valid and vim.bo[res.buf].filetype or nil, pos = res.pos }
   end
   local ok = pcall(function()
     surf:set_lines(clean(res.lines))
@@ -160,9 +161,10 @@ function fill(res)
   if vim.bo[surf.bufnr].filetype ~= ft then
     vim.bo[surf.bufnr].filetype = ft
   end
-  if res.pos and res.pos[1] then
+  if type(res.pos) == "table" and type(res.pos[1]) == "number" then
     local line = math.max(1, math.min(res.pos[1], api.nvim_buf_line_count(surf.bufnr)))
-    pcall(api.nvim_win_set_cursor, surf.winid, { line, math.max(0, (res.pos[2] or 1) - 1) })
+    local col = type(res.pos[2]) == "number" and res.pos[2] or 1
+    pcall(api.nvim_win_set_cursor, surf.winid, { line, math.max(0, col - 1) })
     pcall(api.nvim_win_call, surf.winid, function()
       vim.cmd("normal! zz")
     end)
@@ -178,7 +180,7 @@ end
 function M.close()
   local surf = S.surf
   forget_later()
-  S.surf, S.n = nil, nil
+  S.surf, S.n, S.sig = nil, nil, nil
   if surf then
     surf:close()
   end
@@ -216,6 +218,9 @@ function M.show(n, geom, ctx)
       enter = false,
       focusable = false,
       modifiable = false,
+      -- Every move replaces the whole text; with undo on, the old texts pile up
+      -- (up to `max_kb` each) for as long as the pane stays open.
+      bo = { undolevels = -1 },
       wo = { wrap = false, cursorline = false, number = true },
     })
     if not surf then
@@ -225,12 +230,27 @@ function M.show(n, geom, ctx)
     surf:on_close(function()
       if S.surf == surf then
         forget_later()
-        S.surf, S.n = nil, nil
+        S.surf, S.n, S.sig = nil, nil, nil
       end
     end)
   end
-  S.n = n
-  fill(M.render(slot, ctx))
+  -- The same slot, unchanged, is already shown (or its page is on its way): a
+  -- redraw of the panel must not cancel that request and start it again.
+  local sig = vim.inspect(slot)
+  if S.n == n and S.sig == sig then
+    return true
+  end
+  S.n, S.sig = n, sig
+  local ok = pcall(function()
+    fill(M.render(slot, ctx))
+  end)
+  if not ok then
+    -- Never leave the text of the slot before under the cursor of this one.
+    forget_later()
+    pcall(function()
+      S.surf:set_lines({ "(the preview could not be shown)" })
+    end)
+  end
   return true
 end
 

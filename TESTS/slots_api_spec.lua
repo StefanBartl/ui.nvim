@@ -223,6 +223,26 @@ describe("ui.slots", function()
       assert.is_true(said("already in slot 1"))
     end)
 
+    it("knows a file by its real path: a link to it is the same slot", function()
+      local real = dir .. "/real"
+      local alias = dir .. "/alias"
+      vim.fn.mkdir(real, "p")
+      local uv = vim.uv or vim.loop
+      local linked = uv.fs_symlink(real, alias, { dir = true, junction = true })
+      if not linked then
+        pending("this system does not allow a directory link here")
+        return
+      end
+      local path = require("lib.nvim.fs.normkey")(real .. "/a.txt")
+      vim.fn.writefile({ "a" }, real .. "/a.txt")
+      assert.equals(1, slots.add({ kind = "file", path = alias .. "/a.txt" }))
+      vim.cmd.edit(path)
+      messages = {}
+      assert.equals(1, slots.add())
+      assert.equals(1, #slots.list())
+      assert.is_true(said("already in slot 1"))
+    end)
+
     it(
       "stores a file name with braces escaped, so it opens again and is not added twice",
       function()

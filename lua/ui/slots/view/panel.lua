@@ -112,8 +112,13 @@ local function build()
   local here_key = here ~= "" and normkey(here) or nil
   for _, slot in ipairs(store.list()) do
     local r = registry.render(slot)
-    local text = registry.text(slot)
-    local current_file = slot.kind == "file" and text and here_key and normkey(text) == here_key
+    -- Only a file slot is compared with the file you came from (and asking any
+    -- other kind for its text, or the file system for a real path, is for nothing).
+    local current_file = false
+    if here_key and slot.kind == "file" then
+      local text = registry.text(slot)
+      current_file = text ~= nil and text ~= "" and normkey(text) == here_key
+    end
     local label = tostring(r.label):gsub("%c", " ")
     local icon = tostring(r.icon):gsub("%c", " ")
     local flags = (slot.fixed and " fixed" or "") .. (r.missing and " ✗" or "")

@@ -531,7 +531,44 @@ describe("ui.slots preview", function()
       assert.equals(0, #asked)
     end)
 
-    it("asks about the address with the placeholders put in", function()
+    it("does not ask twice for the same slot, but asks again once it changed", function()
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/one" })
+      preview.show(1, geom)
+      preview.show(1, geom)
+      preview.show(1, geom)
+      assert.equals(1, #asked)
+      store.update(1, { url = "https://example.org/two" })
+      preview.show(1, geom)
+      assert.equals(2, #asked)
+      assert.equals("https://example.org/two", asked[2].target)
+    end)
+
+    it("makes one request when the panel moves or clears a url slot", function()
+      local count = 0
+      package.loaded["hover"] = {
+        preview_target = function()
+          count = count + 1
+          return {
+            cancel = function() end,
+          }
+        end,
+      }
+      slots.add({ kind = "url", url = "https://example.org/a" })
+      slots.add({ kind = "url", url = "https://example.org/b" })
+      slots.add({ kind = "url", url = "https://example.org/c" })
+      panel.open()
+      press("K")
+      assert.equals(1, count)
+      press("<C-j>")
+      flush()
+      assert.equals(2, count)
+      press("dd")
+      flush()
+      assert.equals(3, count)
+    end)
+
+    it("never fetches an address built from placeholders", function()
       fake_hover()
       store.add({ kind = "url", url = "https://example.org/{word}" })
       preview.show(1, geom, {
@@ -541,7 +578,116 @@ describe("ui.slots preview", function()
           end,
         },
       })
-      assert.equals("https://example.org/hello", asked[1].target)
+      assert.equals(0, #asked)
+      assert.is_truthy(pane_text():find("https://example.org/hello", 1, true))
+    end)
+  end)
+
+  describe("hardening", function()
+    local geom = { row = 2, col = 90, width = 30, height = 20, side = "right" }
+
+    it("keeps no undo history in the pane", function()
+      store.add({ kind = "file", path = write("undo.txt", "text\n") })
+      preview.show(1, geom)
+      assert.equals(-1, vim.bo[vim.api.nvim_win_get_buf(preview.winid())].undolevels)
+    end)
+
+    it("says the buffer is gone, instead of raising, and never keeps the slot before", function()
+      registry.register("ghost", {
+        apply = function() end,
+        preview = function()
+          return { buf = 987654 }
+        end,
+      })
+      store.add({ kind = "file", path = write("before.txt", "the file before\n") })
+      store.set(2, { kind = "ghost" })
+      preview.show(1, geom)
+      assert.same({ "the file before" }, preview.lines())
+      assert.has_no.errors(function()
+        preview.show(2, geom)
+      end)
+      assert.same({ "(the buffer is gone)" }, preview.lines())
+      assert.equals(2, preview.shown())
+    end)
+
+    it("does not raise for a position that is not numbers", function()
+      registry.register("oddpos", {
+        apply = function() end,
+        preview = function()
+          return { lines = { "a", "b" }, pos = { "x", "y" } }
+        end,
+      })
+      store.add({ kind = "oddpos" })
+      assert.has_no.errors(function()
+        preview.show(1, geom)
+      end)
+      assert.same({ "a", "b" }, preview.lines())
+    end)
+
+    it("shows a file slot whose line and column in the data file are not numbers", function()
+      local path = write("oddline.txt", "one\ntwo\n")
+      local pv = preview_of({ kind = "file", path = path, line = "abc", col = { 1 } })
+      assert.same({ "one", "two" }, pv.lines)
+      assert.is_nil(pv.pos)
+    end)
+
+    it("does not touch a network path of a slot that is not from setup()", function()
+      local uv = vim.uv or vim.loop
+      local original = uv.fs_stat
+      local stats = 0
+      uv.fs_stat = function(path)
+        if tostring(path):find("192.0.2.1", 1, true) then
+          stats = stats + 1
+        end
+        return nil
+      end
+      local dynamic = preview_of({ kind = "file", path = "//192.0.2.1/share/notes.md" })
+      local rendered = registry.render({ kind = "file", path = [[\\192.0.2.1\share\notes.md]] })
+      local via_placeholder = registry.render(
+        { kind = "file", path = "{clip}" },
+        { resolve = { clip = "//192.0.2.1/share/x.md" } }
+      )
+      local before_fixed = stats
+      preview_of({ kind = "file", path = "//192.0.2.1/share/notes.md", fixed = true })
+      uv.fs_stat = original
+      assert.equals(0, before_fixed)
+      assert.is_true(stats > before_fixed)
+      assert.same({ "(the path is empty)" }, dynamic.lines)
+      assert.is_not_nil(rendered)
+      assert.is_not_nil(via_placeholder)
+    end)
+
+    it("refuses a network path in the editor and the API, with the reason", function()
+      local err = registry.validate({ kind = "file", path = "//192.0.2.1/share/notes.md" })
+      assert.is_truthy(err and err:find("setup()", 1, true))
+      assert.is_nil(registry.validate({ kind = "file", path = "//192.0.2.1/x", fixed = true }))
+      local number, why = slots.add({ kind = "file", path = [[\\192.0.2.1\share\notes.md]] })
+      assert.is_nil(number)
+      assert.is_truthy(why)
+    end)
+
+    it("asks the slots only when the cursor left a position, not on every BufLeave", function()
+      local path = write("leave.txt", "a\nb\nc\n")
+      slots.add({ kind = "file", path = path })
+      vim.cmd.edit(path)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      file_kind.remember_current()
+      local calls = 0
+      local original = store.list
+      store.list = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+      file_kind.remember_current()
+      file_kind.remember_current()
+      local unmoved = calls
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      file_kind.remember_current()
+      store.list = original
+      assert.equals(0, unmoved)
+      assert.equals(1, calls)
+      assert.equals(3, store.get(1).line)
+      file_kind.forget_positions()
     end)
   end)
 
@@ -796,12 +942,15 @@ describe("ui.slots preview", function()
 
     it("does not cancel or reload the page when the cursor moves within its row", function()
       local saved_hover = package.loaded["hover"]
-      local asked = 0
+      local asked, cancelled, deliver = 0, 0, nil
       package.loaded["hover"] = {
-        preview_target = function()
+        preview_target = function(_, cb)
           asked = asked + 1
+          deliver = cb
           return {
-            cancel = function() end,
+            cancel = function()
+              cancelled = cancelled + 1
+            end,
           }
         end,
       }
@@ -814,6 +963,15 @@ describe("ui.slots preview", function()
       press("h")
       flush()
       assert.equals(1, asked)
+      assert.equals(0, cancelled)
+      deliver({ lines = { "the page" } })
+      vim.wait(500, function()
+        return preview.lines()[1] == "the page"
+      end, 5)
+      assert.same({ "the page" }, preview.lines())
+      press("l")
+      flush()
+      assert.same({ "the page" }, preview.lines())
       package.loaded["hover"] = saved_hover
     end)
 
