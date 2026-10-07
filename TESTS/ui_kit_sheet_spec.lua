@@ -148,6 +148,13 @@ describe("kit.sheet", function()
       assert.equals(5, api.nvim_win_get_height(r.surf.winid), "all of it, no scrolling")
     end)
 
+    it("opens its buffer without auto-indent", function()
+      local r = open(THREE)
+      for _, name in ipairs({ "autoindent", "smartindent", "cindent" }) do
+        assert.is_false(vim.bo[r.surf.bufnr][name], name .. " is off")
+      end
+    end)
+
     it("keeps the labels out of the buffer: they are the window's 'statuscolumn'", function()
       local r = open(THREE)
       for _, line in ipairs(lines_of(r)) do

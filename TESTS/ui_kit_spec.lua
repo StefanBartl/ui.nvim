@@ -2910,6 +2910,25 @@ describe("ui.kit.input back and buttons", function()
     assert.is_true(r:is_valid())
   end)
 
+  it("opens its buffer without auto-indent, with or without buttons and a secret", function()
+    -- An indent Neovim added to a line opened by a paste is deleted by `stopinsert` under
+    -- the cursor, which `park_cursor` leaves on a space of the button row
+    -- (ui_kit_form_back_ui_spec.lua shows it for real).
+    for _, o in ipairs({
+      {},
+      { buttons = { { id = "submit", label = "OK" } } },
+      { secret = true },
+    }) do
+      local r = input.open(o)
+      for _, name in ipairs({ "autoindent", "smartindent", "cindent" }) do
+        assert.is_false(vim.bo[r.bufnr][name], name .. " is off")
+      end
+      r:close()
+    end
+    local sec = input.open({ secret = true })
+    assert.equals(-1, vim.bo[sec.bufnr].undolevels, "a secret's undo is still off")
+  end)
+
   it("is one line without buttons, whatever on_back is", function()
     local r = input.open({ on_back = function() end })
     assert.equals(1, vim.api.nvim_buf_line_count(r.bufnr))
