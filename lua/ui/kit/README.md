@@ -699,7 +699,12 @@ half a second for a directory of five thousand files; this stats no file or
 directory, and a link or an entry the listing gives no type for only until 300
 are found, which for `"dir"` can be every link of the directory, once, as no link
 to a file is a directory; a link that leads nowhere is left out, as
-`getcompletion()` leaves it); typing on narrows it. A fragment with a backtick
+`getcompletion()` leaves it); typing on narrows it. Where a non-ASCII character
+is involved, Neovim's own regex engine decides whether a name starts with the
+fragment (its case folding is not `toupper()`, and it does not split a character
+from a combining mark that follows), and a candidate with a combining mark
+(`é` written as `e` plus U+0301) leaves the whole list to `getcompletion()`,
+which orders such names its own way. A fragment with a backtick
 in it is never completed:
 `getcompletion()` runs the span between backticks through the shell, and the
 fragment may be pasted text.
