@@ -615,9 +615,11 @@ and the form's. A paste with a newline in it is joined into its row with a
 space. `KitAccent` marks the focused field's label, `KitMuted` the others,
 `KitError` the messages and the `*` of a required field.
 
-The returned surface has four extra methods, for driving a sheet from code and
-from specs: `s:submit()`, `s:cancel()`, `s:focus_field(name | index)` and
-`s:state()` (`{ focus = <field name | "submit" | "cancel">, values, errors }`).
+The returned surface has five extra methods, for driving a sheet from code and
+from specs: `s:submit()`, `s:cancel()`, `s:focus_field(name | index)`,
+`s:validate()` (check every field now so the messages show, without submitting;
+returns whether all passed — for a sheet opened with values that may already be
+wrong) and `s:state()` (`{ focus = <field name | "submit" | "cancel">, values, errors }`).
 Opening options: `focus` (field name or position to start on), `width`
 (default 60), `relative` (default `"editor"`), `theme`.
 
