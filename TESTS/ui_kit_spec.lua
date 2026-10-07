@@ -396,6 +396,8 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
       -- What <Tab> hands to getcompletion(): the whitespace-delimited run that
       -- ends at the cursor. The popup itself needs Insert mode, so the two vim.fn
       -- calls are stubbed and only the fragment and the start column are read.
+      -- The popup really opening on <Tab> (and a pasted backtick span not running
+      -- through the shell) is `ui_kit_input_ui_spec.lua`'s, in a UI-attached child.
       do
         local real_getcompletion, real_complete = vim.fn.getcompletion, vim.fn.complete
         local seen_frag, seen_col
@@ -2939,7 +2941,12 @@ describe("ui.kit.input back and buttons", function()
     })
     assert.is_true(r:is_valid())
     -- <Tab> stays the completion trigger (insert mode); <Down> is how the buttons are reached.
-    assert.is_true(vim.fn.maparg("<Tab>", "i", false, true).expr == 1)
+    -- Not an <expr> mapping: complete() raises E565 under the textlock of one
+    -- (ui_kit_input_ui_spec.lua opens the popup for real).
+    local tab = vim.fn.maparg("<Tab>", "i", false, true)
+    assert.equals(1, tab.buffer)
+    assert.equals(0, tab.expr)
+    assert.is_function(tab.callback)
     keys("<Down>")
     assert.equals("[ OK ]", focused_box())
   end)
