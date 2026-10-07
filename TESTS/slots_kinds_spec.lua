@@ -59,7 +59,7 @@ describe("ui.slots.kinds", function()
 
   describe("registry", function()
     it("loads the built-in kinds on first use and registers nothing before", function()
-      assert.same({ "file", "url", "yank" }, registry.names())
+      assert.same({ "cmd", "file", "lua", "mark", "url", "yank" }, registry.names())
     end)
 
     it("registers a kind, refuses a second one of the same name unless forced", function()
@@ -100,7 +100,7 @@ describe("ui.slots.kinds", function()
       assert.is_true(registry.unregister("mine"))
       assert.is_false(registry.unregister("mine"))
       registry.reset()
-      assert.same({ "file", "url", "yank" }, registry.names())
+      assert.same({ "cmd", "file", "lua", "mark", "url", "yank" }, registry.names())
     end)
 
     it("apply() reports an unknown kind and a slot the kind refuses", function()

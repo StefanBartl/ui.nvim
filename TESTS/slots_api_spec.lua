@@ -618,7 +618,7 @@ describe("ui.slots", function()
 
     it("lists the kinds", function()
       vim.cmd("UI slots kinds")
-      assert.is_true(said("file, url, yank"))
+      assert.is_true(said("cmd, file, lua, mark, url, yank"))
     end)
 
     it("says that the bar and the editor are not built, instead of failing", function()
