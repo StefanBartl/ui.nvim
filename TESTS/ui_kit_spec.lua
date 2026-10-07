@@ -966,6 +966,143 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
     eq(submit_text, "match-2", "picker submit reports the highlighted line text")
     vim.cmd("stopinsert")
 
+    -- item mode: format with highlights, word filter, marks, current/marked, set_items, preview, caller keys
+    do
+      local function same(a, b, msg)
+        eq(vim.inspect(a), vim.inspect(b), msg)
+      end
+      local picked, previewed, closed_called, keyed
+      local list = {
+        { id = 1, text = "alpha one" },
+        { id = 2, text = "beta two" },
+        { id = 3, text = "alpha three" },
+      }
+      local ip = assert(
+        kit.picker({
+          items = list,
+          key = function(item)
+            return item.id
+          end,
+          format = function(item)
+            return { { item.text, "Title" }, { " #" .. item.id, "Comment" } }
+          end,
+          preview = function(item, surface)
+            previewed = item.id
+            surface:set_lines({ "preview " .. item.id })
+          end,
+          keys = {
+            ["<M-x>"] = function(h)
+              keyed = h.current().id
+            end,
+          },
+          on_submit = function(idx, _, item)
+            picked = { idx, item.id }
+          end,
+          on_close = function()
+            closed_called = true
+          end,
+        }),
+        "item picker opens"
+      )
+      local lines = vim.api.nvim_buf_get_lines(ip.slots.results.bufnr, 0, -1, false)
+      same(
+        lines,
+        { "  alpha one #1", "  beta two #2", "  alpha three #3" },
+        "rows are the formatted items"
+      )
+      eq(previewed, 1, "the preview follows the cursor item")
+      -- the typed words filter (every word, any case)
+      vim.api.nvim_buf_set_lines(ip.slots.prompt.bufnr, 0, -1, false, { "ALPHA th" })
+      vim.api.nvim_exec_autocmds("TextChangedI", { buffer = ip.slots.prompt.bufnr })
+      vim.wait(250, function()
+        return #vim.api.nvim_buf_get_lines(ip.slots.results.bufnr, 0, -1, false) == 1
+      end)
+      same(vim.api.nvim_buf_get_lines(ip.slots.results.bufnr, 0, -1, false), { "  alpha three #3" })
+      eq(ip.current().id, 3)
+      vim.api.nvim_buf_set_lines(ip.slots.prompt.bufnr, 0, -1, false, { "" })
+      ip.set_items(list) -- everything again; the cursor item stays
+      ip.move(-1)
+      ip.toggle_mark() -- marks the current item (row 2 now: beta) and moves down
+      eq(#ip.marked(), 1, "one marked item")
+      ip.set_items({ list[2], list[3] }, { cursor_key = 3 })
+      eq(ip.marked()[1].id, 2, "a mark survives set_items")
+      eq(ip.current().id, 3, "cursor_key puts the cursor back")
+      ip.set_items({ list[1] })
+      eq(#ip.marked(), 0, "the mark of an item that is gone is dropped")
+      eq(ip.current().id, 1)
+      ip.submit()
+      same(picked, { 1, 1 }, "submit reports the item")
+      ok(closed_called and ip.is_closed(), "on_close ran")
+      ok(keyed == nil)
+      vim.cmd("stopinsert")
+    end
+
+    -- item mode, review round: no stale list after a fast keystroke, headings, failing preview, marks in place
+    do
+      local rows = {}
+      for i = 1, 50 do
+        rows[#rows + 1] = { id = i, text = "T-" .. i }
+      end
+      table.insert(rows, 1, { id = 0, text = "HEADING", heading = true })
+      local fail_preview = false
+      local submitted
+      local rp = assert(kit.picker({
+        items = rows,
+        key = function(item)
+          return item.id
+        end,
+        selectable = function(item)
+          return not item.heading
+        end,
+        format = function(item)
+          return { { item.text, "Title" } }
+        end,
+        preview = function(item, surface)
+          if fail_preview then
+            error("boom")
+          end
+          surface:set_lines({ "preview " .. item.id })
+        end,
+        on_submit = function(_, _, item)
+          submitted = item.id
+        end,
+      }))
+      eq(
+        rp.current().id,
+        1,
+        "the cursor starts on the first row that can be acted on, not on the heading"
+      )
+      rp.move(-1) -- wraps to the last row, never rests on the heading
+      ok(rp.current().id ~= 0)
+      -- a fast keystroke: the list is flushed before it is read
+      vim.api.nvim_buf_set_lines(rp.slots.prompt.bufnr, 0, -1, false, { "T-42" })
+      vim.api.nvim_exec_autocmds("TextChangedI", { buffer = rp.slots.prompt.bufnr })
+      eq(rp.current().id, 42, "current() sees the typed query at once")
+      -- marks flip in place
+      local before = #vim.api.nvim_buf_get_lines(rp.slots.results.bufnr, 0, -1, false)
+      rp.toggle_mark()
+      eq(#rp.marked(), 1)
+      eq(#vim.api.nvim_buf_get_lines(rp.slots.results.bufnr, 0, -1, false), before)
+      eq(vim.api.nvim_buf_get_lines(rp.slots.results.bufnr, 0, 1, false)[1], "+ T-42")
+      -- a preview that raises says so instead of keeping the old text
+      vim.api.nvim_buf_set_lines(rp.slots.prompt.bufnr, 0, -1, false, { "" })
+      rp.set_items(rows)
+      fail_preview = true
+      rp.move(1)
+      ok(
+        vim.api
+          .nvim_buf_get_lines(rp.slots.preview.bufnr, 0, 1, false)[1]
+          :find("preview failed", 1, true) ~= nil
+      )
+      -- nothing to submit: an empty list keeps the picker open
+      vim.api.nvim_buf_set_lines(rp.slots.prompt.bufnr, 0, -1, false, { "no-such-text" })
+      vim.api.nvim_exec_autocmds("TextChangedI", { buffer = rp.slots.prompt.bufnr })
+      rp.submit()
+      ok(not rp.is_closed() and submitted == nil, "an empty list stays open")
+      rp.close()
+      vim.cmd("stopinsert")
+    end
+
     -- plain mode falls back to a bare template mount
     local plain = assert(kit.picker({ prompt = "plain" }), "plain picker mounts")
     ok(plain.slots.prompt:is_valid(), "plain picker has slots")

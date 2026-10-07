@@ -525,7 +525,10 @@ writes the files that differ and formats them with lib.nvim's stylua config
 named, relative to the kit directory). Name the files you changed whenever the
 two copies differ in one you did not: without `--only` the script overwrites
 lib.nvim's version of it with this repo's, which loses work if lib.nvim is the
-one that is ahead there (as `picker.lua` was on 2026-10-07). Push lib.nvim **first**: this repo's CI reads
+one that is ahead there (as `picker.lua` was on 2026-10-07: its item mode had
+landed in lib.nvim only, and was carried over to this repo the same day, the
+other way round -- `lib.nvim`'s file through the inverse of the drift spec's
+rename table). Push lib.nvim **first**: this repo's CI reads
 lib.nvim's `ci-verified` branch, which advances only after lib.nvim's own CI is
 green on all three systems, so the other order leaves the drift check red until
 it catches up.
