@@ -81,3 +81,24 @@
 --- What `resolve.resolve()` can be told.
 ---@class Ui.Slots.ResolveOpts
 ---@field escape? fun(value: string, name: string): string  # applied to every substituted value
+
+--- What a view needs to draw a slot.
+---@class Ui.Slots.RenderInfo
+---@field label? string
+---@field icon? string
+---@field hl? string          # highlight group of the chip
+---@field missing? boolean    # the target is gone: draw dimmed
+
+--- What a preview pane shows: lines of text, a ready buffer, or a draw callback.
+---@alias Ui.Slots.Preview
+---| { lines: string[], ft?: string, pos?: { [1]: integer, [2]: integer } }
+---| { buf: integer, pos?: { [1]: integer, [2]: integer } }
+---| { draw: fun(surface: table) }
+
+--- The behaviour behind a slot's `kind` (see `ui.slots.kinds.registry`).
+---@class Ui.Slots.Kind
+---@field apply fun(slot: table, ctx: table): boolean|nil, string|nil
+---@field validate? fun(slot: table): string|nil
+---@field render? fun(slot: table): Ui.Slots.RenderInfo
+---@field preview? fun(slot: table, ctx: table): Ui.Slots.Preview|nil
+---@field persist? boolean    # may a data file hold slots of this kind
