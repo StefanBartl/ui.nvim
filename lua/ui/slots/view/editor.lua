@@ -91,19 +91,28 @@ end
 --- The slot a set of answers describes.
 ---@param kind string
 ---@param values table<string, string>
+---@param old table|nil  # the slot being changed: a field left as it was is kept as it was
 ---@return table
-function M.build(kind, values)
+function M.build(kind, values, old)
   local slot = { kind = kind }
+  --- The sheet shows one line and trims: the same text, seen that way, is unchanged.
+  local function unchanged(name, v)
+    if not old or old[name] == nil then
+      return false
+    end
+    local was = vim.trim((tostring(old[name]):gsub("%c", " ")))
+    return was == v
+  end
   for _, f in ipairs(FIELDS[kind] or {}) do
     local v = vim.trim(values[f.name] or "")
     if v ~= "" then
-      slot[f.name] = coerce(f.name, v)
+      slot[f.name] = unchanged(f.name, v) and old[f.name] or coerce(f.name, v)
     end
   end
   for _, name in ipairs({ "label", "icon" }) do
     local v = vim.trim(values[name] or "")
     if v ~= "" then
-      slot[name] = v
+      slot[name] = unchanged(name, v) and old[name] or v
     end
   end
   local style = values.style
@@ -126,6 +135,10 @@ local function field_check(kind, name)
         probe[f.name] = (f.name == "index") and 1 or "x"
       end
     end
+    local max = config.get().max_string_len
+    if #value > max then
+      return false, ("longer than %d bytes"):format(max)
+    end
     probe[name] = coerce(name, vim.trim(value))
     local err = registry.validate(probe)
     if err then
@@ -139,8 +152,9 @@ end
 ---@param slot table|nil   # the slot being changed
 ---@param n integer|nil
 ---@param defaults table|nil
+---@param typed table<string, string>|nil  # what was typed before a save failed
 ---@return table[] fields
-local function sheet_fields(kind, slot, n, defaults)
+local function sheet_fields(kind, slot, n, defaults, typed)
   local cfg = config.get()
   local fields = {}
   for _, f in ipairs(FIELDS[kind]) do
@@ -168,6 +182,19 @@ local function sheet_fields(kind, slot, n, defaults)
         and slot.style
       or styles[1],
   }
+  local max = config.get().max_string_len
+  for _, name in ipairs({ "label", "icon" }) do
+    for _, f in ipairs(fields) do
+      if f.name == name then
+        f.validate = function(value)
+          if #value > max then
+            return false, ("longer than %d bytes"):format(max)
+          end
+          return true
+        end
+      end
+    end
+  end
   fields[#fields + 1] = {
     name = "number",
     label = "Number",
@@ -184,6 +211,13 @@ local function sheet_fields(kind, slot, n, defaults)
       return true
     end,
   }
+  if typed then
+    for _, f in ipairs(fields) do
+      if typed[f.name] ~= nil then
+        f.default = typed[f.name]
+      end
+    end
+  end
   return fields
 end
 
@@ -194,7 +228,7 @@ end
 ---@return integer|nil number
 ---@return string|nil err
 function M.save(kind, values, n)
-  local slot = M.build(kind, values)
+  local slot = M.build(kind, values, n and store.get(n) or nil)
   local err = registry.validate(slot)
   if err then
     return nil, err
@@ -229,7 +263,8 @@ end
 --- Open the sheet for `kind`.
 ---@param kind string
 ---@param opts { n?: integer, defaults?: table, on_close?: fun(n: integer|nil) }
-local function open_sheet(kind, opts)
+---@param typed table<string, string>|nil  # answers of a try that could not be saved
+local function open_sheet(kind, opts, typed)
   local slot = opts.n and store.get(opts.n) or nil
   local done = false
   local function finish(n)
@@ -243,12 +278,20 @@ local function open_sheet(kind, opts)
   end
   local sheet = require("ui.kit.sheet").open({
     title = opts.n and ("Slot %d (%s)"):format(opts.n, kind) or ("New %s slot"):format(kind),
-    fields = sheet_fields(kind, slot, opts.n, opts.defaults),
+    fields = sheet_fields(kind, slot, opts.n, opts.defaults, typed),
     width = 64,
     on_submit = function(values)
       local num, err = M.save(kind, values, opts.n)
       if not num then
+        -- Said, and the sheet comes back with what was typed: a refused save must
+        -- not throw the answers away.
         util.notify(err or "the slot could not be saved")
+        vim.schedule(function()
+          if not done then
+            open_sheet(kind, opts, values)
+          end
+        end)
+        return
       end
       finish(num)
     end,

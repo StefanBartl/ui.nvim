@@ -177,23 +177,35 @@ local function with_slot(fn)
   end
 end
 
---- The actions of the context menu, for a slot.
+--- The actions of the context menu, for a slot. `back` says how an action ends:
+---   * (nothing) -- done at once, the panel may come back (Copy, Clear);
+---   * `"stay"`  -- it moved the focus to its result (Apply, Open in ...): the
+---     panel stays closed;
+---   * `"editor"` -- it opens the editor, which brings the panel back when it
+---     closes; `run(on_close)` takes that callback.
 ---@param n integer
----@return { label: string, run: fun() }[]
+---@return { label: string, back?: "stay"|"editor", run: fun(on_close: fun()|nil) }[]
 function M.actions(n)
   local slots = require("ui.slots")
   local slot = store.get(n)
   local list = {
     {
       label = "Apply",
+      back = "stay",
       run = function()
         slots.apply(n)
       end,
     },
     {
       label = "Edit",
-      run = function()
-        require("ui.slots.view.editor").open({ n = n })
+      back = "editor",
+      run = function(on_close)
+        require("ui.slots.view.editor").open({
+          n = n,
+          on_close = on_close and function()
+            on_close()
+          end or nil,
+        })
       end,
     },
     {
@@ -207,6 +219,7 @@ function M.actions(n)
     for _, where in ipairs({ "split", "vsplit", "tab" }) do
       list[#list + 1] = {
         label = "Open in " .. (where == "tab" and "a new tab" or "a " .. where),
+        back = "stay",
         run = function()
           local copy = vim.deepcopy(slot)
           copy.target = where
@@ -227,7 +240,10 @@ function M.actions(n)
   return list
 end
 
---- The context menu of one slot.
+--- The context menu of one slot. `on_done` (the panel coming back) runs when the
+--- menu is cancelled and after an action that is over at once; an action that
+--- opens the editor hands it to the editor, one that moves the focus to its
+--- result (Apply, Open in ...) does not call it.
 ---@param n integer
 ---@param on_done fun()|nil
 function M.menu(n, on_done)
@@ -238,9 +254,15 @@ function M.menu(n, on_done)
       return a.label
     end,
     on_select = function(a)
-      a.run()
-      if on_done then
-        on_done()
+      if a.back == "editor" then
+        a.run(on_done)
+      elseif a.back == "stay" then
+        a.run()
+      else
+        a.run()
+        if on_done then
+          on_done()
+        end
       end
     end,
     on_cancel = on_done,
@@ -369,6 +391,8 @@ local function attach_keys()
   map("<RightMouse>", function()
     local pos = vim.fn.getmousepos()
     if pos.winid ~= S.surf.winid then
+      -- Outside the panel: it is left, as a left click would leave it.
+      M.close()
       return
     end
     local n = S.numbers[pos.line]
@@ -395,7 +419,10 @@ function M.open(opts)
   if M.is_open() then
     M.close()
   end
-  S.from = opts.from or api.nvim_get_current_win()
+  -- The window the panel came from may be gone (a float that closed, a window
+  -- closed while the editor was open): then the current one is the origin.
+  S.from = (opts.from and api.nvim_win_is_valid(opts.from)) and opts.from
+    or api.nvim_get_current_win()
   local name = api.nvim_buf_get_name(api.nvim_win_get_buf(S.from))
   S.from_path = (name ~= "" and vim.bo[api.nvim_win_get_buf(S.from)].buftype == "")
       and vim.fs.normalize(name)
