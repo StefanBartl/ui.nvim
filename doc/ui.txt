@@ -154,6 +154,17 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI slots
     List the numbered action slots (see docs/BINDINGS.md).
 
+:UI slots toggle
+:UI slots open
+:UI slots close
+    The slot bar: a chip per slot at the right edge (number, icon, label).
+    A click runs the slot, a right click offers apply, copy and clear, the
+    wheel over the bar scrolls it. With more slots than rows it scrolls like
+    an accordion (the top one drops out, the next comes in below) and keeps
+    the slot you applied last, or the one of the current file, in sight;
+    "▲ +n" and "▼ +n" say what is hidden. The option `show = true` opens it
+    when the slots are switched on.
+
 :UI slots {n}
     Run slot {n}: open its file or address, copy its text, ...
 

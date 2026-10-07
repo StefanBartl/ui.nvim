@@ -837,6 +837,7 @@ local function ui_help(_args)
 │  :UI keys [prefix]          Mappings under a prefix  │
 │                                                      │
 │  :UI slots                  List the slots           │
+│  :UI slots toggle           Show/hide the slot bar   │
 │  :UI slots <n>              Run slot n               │
 │  :UI slots add [n]          Current file -> slot     │
 │  :UI slots yank <n>         Copy what slot n is      │

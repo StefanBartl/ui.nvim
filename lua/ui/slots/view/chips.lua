@@ -1,0 +1,823 @@
+---@module 'ui.slots.view.chips'
+--- The slot bar: one float at the edge of the editor, a chip per slot -- number,
+--- icon, label -- stacked from the top. Not a window anyone works in: it takes
+--- clicks and the wheel, and hands the focus straight back.
+---
+--- **One window, many chips.** The chips are lines of a single scratch buffer
+--- (borders drawn in the text), not one float each: one geometry to keep right,
+--- one thing to hit-test, one thing to clean up.
+---
+--- **Accordion, no upper bound.** The bar shows as many slots as the editor has
+--- rows. With more, it is a window over the sorted list that moves one slot at a
+--- time -- the top one drops out, the next comes in at the bottom -- and follows
+--- the *focus slot* (the one applied last, else the one of the current file) so
+--- it is never out of sight. `▲ +n` / `▼ +n` rows say what is hidden; a click on
+--- one of them, or the wheel over the bar, scrolls by one.
+---
+--- **Mouse without a mapping.** A buffer-local `<LeftMouse>` map is only read for
+--- the CURRENT buffer, so it never fires for a click on a bar that is not
+--- entered, and a global one would take over every click in the editor. Instead
+--- `vim.on_key` watches (and does not touch) the mouse keys; when
+--- `getmousepos()` says the pointer is on the bar, the action is scheduled and
+--- the focus the click moved into the bar is given back. The right click is the
+--- one the global `<RightMouse>` menu (`ui.menu`) would also answer; it asks
+--- `pointer_on_bar()` first and stays out of the way.
+---
+--- No timer: the bar redraws on events (buffer and tab changes, saves, a slot
+--- changing, a resize), coalesced into one redraw per tick.
+
+require("ui.slots.@types")
+
+local autocmd = require("lib.nvim.bindings.autocmd")
+local config = require("ui.slots.config")
+local registry = require("ui.slots.kinds.registry")
+local store = require("ui.slots.store")
+
+local api = vim.api
+local uv = vim.uv or vim.loop
+
+local M = {}
+
+local NS = api.nvim_create_namespace("ui_slots_bar")
+local KEY_NS = api.nvim_create_namespace("ui_slots_bar_keys")
+local GROUP = "ui_slots_bar"
+
+--- The look of a chip. `h` is how many rows one chip takes.
+local SHAPES = {
+  rounded = {
+    h = 3,
+    tl = "╭",
+    t = "─",
+    tr = "╮",
+    l = "│",
+    r = "│",
+    bl = "╰",
+    b = "─",
+    br = "╯",
+  },
+  double = {
+    h = 3,
+    tl = "╔",
+    t = "═",
+    tr = "╗",
+    l = "║",
+    r = "║",
+    bl = "╚",
+    b = "═",
+    br = "╝",
+  },
+  ascii = { h = 3, tl = "+", t = "-", tr = "+", l = "|", r = "|", bl = "+", b = "-", br = "+" },
+  solid = { h = 1, solid = true },
+  minimal = { h = 1 },
+}
+
+--- The vocabulary `ui.kit.presets` uses for chips, mapped onto the shapes above.
+local ALIASES = { rounded_chip = "rounded", chip = "solid", classic = "minimal" }
+
+local MIN_WIDTH = 10
+local STAT_TTL_MS = 1000
+
+---@class Ui.Slots.Chips.State
+---@field want boolean              # the bar is switched on (toggle), whether or not there is anything to show
+---@field win integer|nil
+---@field buf integer|nil
+---@field top_n integer|nil         # slot number of the first slot shown
+---@field focus_n integer|nil       # the slot the bar keeps in sight
+---@field rows table<integer, { kind: string, n?: integer }>  # buffer line -> what a click there means
+---@field pending boolean
+---@field attached boolean
+---@field listener integer|nil
+---@field render_cache table<integer, { sig: string, t: integer, r: table }>
+---@field key_cache table<string, string|false>
+---@field solid_groups table<string, string>
+---@field bad_style table<string, boolean>
+local S = {
+  want = false,
+  win = nil,
+  buf = nil,
+  top_n = nil,
+  focus_n = nil,
+  rows = {},
+  pending = false,
+  attached = false,
+  listener = nil,
+  render_cache = {},
+  key_cache = {},
+  solid_groups = {},
+  bad_style = {},
+}
+
+-- Text helpers ----------------------------------------------------------
+
+--- `text` cut to `w` display cells (with an ellipsis) and padded to exactly `w`.
+---@param text string
+---@param w integer
+---@return string
+local function fit(text, w)
+  if w < 1 then
+    return ""
+  end
+  local dw = vim.fn.strdisplaywidth(text)
+  if dw > w then
+    local chars = vim.fn.strchars(text)
+    while chars > 0 and vim.fn.strdisplaywidth(vim.fn.strcharpart(text, 0, chars) .. "…") > w do
+      chars = chars - 1
+    end
+    text = vim.fn.strcharpart(text, 0, chars) .. "…"
+    dw = vim.fn.strdisplaywidth(text)
+  end
+  return text .. string.rep(" ", math.max(0, w - dw))
+end
+
+--- The shape a style name stands for; an unknown one falls back to `rounded`
+--- and is said once.
+---@param style any
+---@return string name
+---@return table shape
+local function shape_of(style)
+  if type(style) == "table" then
+    style = style.shape or style.name
+  end
+  if type(style) ~= "string" then
+    style = "rounded"
+  end
+  local name = ALIASES[style] or style
+  if not SHAPES[name] then
+    if not S.bad_style[style] then
+      S.bad_style[style] = true
+      vim.notify(
+        ("[ui.slots] style '%s' is not one of rounded, double, ascii, solid, minimal"):format(style),
+        vim.log.levels.WARN
+      )
+    end
+    name = "rounded"
+  end
+  return name, SHAPES[name]
+end
+
+--- A group that shows `hl` as a filled block: its colour as background.
+---@param hl string
+---@return string
+local function solid_group(hl)
+  local name = S.solid_groups[hl]
+  if name then
+    return name
+  end
+  local fg = api.nvim_get_hl(0, { name = hl, link = false }).fg
+  local text = api.nvim_get_hl(0, { name = "NormalFloat", link = false }).bg
+    or api.nvim_get_hl(0, { name = "Normal", link = false }).bg
+  name = "UiSlotsSolid_" .. hl
+  api.nvim_set_hl(0, name, { fg = text, bg = fg, reverse = (fg == nil or text == nil) or nil })
+  S.solid_groups[hl] = name
+  return name
+end
+
+-- What to draw ----------------------------------------------------------
+
+---@param slot table
+---@return string signature of what `render` depends on
+local function signature(slot)
+  return table.concat({
+    tostring(slot.kind),
+    tostring(slot.path or slot.index or slot.url or slot.cmd or slot.text or ""),
+    tostring(slot.label or ""),
+  }, "\0")
+end
+
+--- `registry.render`, with the answer for file and mark slots kept for a second:
+--- it asks the filesystem, and a redraw happens on every buffer change.
+---@param slot table
+---@return table
+local function render(slot)
+  local cached = S.render_cache[slot.n]
+  local now = uv.now()
+  local sig = signature(slot)
+  if cached and cached.sig == sig and now - cached.t < STAT_TTL_MS then
+    return cached.r
+  end
+  local r = registry.render(slot)
+  S.render_cache[slot.n] = { sig = sig, t = now, r = r }
+  return r
+end
+
+--- The canonical key of the file a file slot points at, or nil when that cannot
+--- be known without running placeholders.
+---@param slot table
+---@return string|nil
+local function file_key(slot)
+  if slot.kind ~= "file" or type(slot.path) ~= "string" then
+    return nil
+  end
+  local cached = S.key_cache[slot.path]
+  if cached ~= nil then
+    return cached or nil
+  end
+  local key = false
+  if not require("ui.slots.resolve").has_placeholder(slot.path) then
+    local text = registry.text(slot)
+    if text and text ~= "" then
+      key = require("lib.nvim.fs.normkey")(text)
+    end
+  end
+  S.key_cache[slot.path] = key
+  return key or nil
+end
+
+--- Keys of the files with unsaved changes.
+---@return table<string, boolean>
+local function modified_keys()
+  local out = {}
+  local normkey = require("lib.nvim.fs.normkey")
+  for _, buf in ipairs(api.nvim_list_bufs()) do
+    if api.nvim_buf_is_loaded(buf) and vim.bo[buf].modified and vim.bo[buf].buftype == "" then
+      local name = api.nvim_buf_get_name(buf)
+      if name ~= "" then
+        out[normkey(name)] = true
+      end
+    end
+  end
+  return out
+end
+
+--- One entry per slot, ascending: what to show and how tall it is.
+---@return { n: integer, text: string, hl: string, current: boolean, missing: boolean, shape: table, shape_name: string, h: integer }[]
+local function describe()
+  local normkey = require("lib.nvim.fs.normkey")
+  local name = api.nvim_buf_get_name(0)
+  local here = (name ~= "" and vim.bo.buftype == "") and normkey(name) or nil
+  local dirty = modified_keys()
+  local cfg = config.get()
+  local out = {}
+  for _, slot in ipairs(store.list()) do
+    local r = render(slot)
+    local key = file_key(slot)
+    local shape_name, shape = shape_of(slot.style or cfg.style)
+    local current = here ~= nil and key == here
+    local parts = { current and "• " or "  ", tostring(slot.n) }
+    if r.icon ~= "" then
+      parts[#parts + 1] = " " .. r.icon
+    end
+    parts[#parts + 1] = " " .. r.label
+    if key and dirty[key] then
+      parts[#parts + 1] = " +"
+    end
+    if r.missing then
+      parts[#parts + 1] = " ✗"
+    end
+    out[#out + 1] = {
+      n = slot.n,
+      text = table.concat(parts),
+      hl = r.hl,
+      current = current,
+      missing = r.missing,
+      shape = shape,
+      shape_name = shape_name,
+      h = shape.h,
+    }
+  end
+  return out
+end
+
+-- Geometry --------------------------------------------------------------
+
+--- Row of the first line and the rows that are free, from the editor's chrome.
+---@return integer row0
+---@return integer avail
+local function room()
+  local row0 = 0
+  if vim.o.showtabline == 2 or (vim.o.showtabline == 1 and #api.nvim_list_tabpages() > 1) then
+    row0 = 1
+  end
+  local avail = vim.o.lines - vim.o.cmdheight - (vim.o.laststatus > 0 and 1 or 0) - row0
+  return row0, math.max(1, avail)
+end
+
+--- How wide the chips are: the widest text, within the configured cap.
+---@param descs table[]
+---@return integer
+local function chip_width(descs)
+  local cfg = config.get()
+  local cap = cfg.width
+  if cap <= 1 then
+    cap = math.floor(vim.o.columns * cap)
+  end
+  cap = math.max(MIN_WIDTH, math.min(math.floor(cap), vim.o.columns - 2))
+  local want = MIN_WIDTH
+  for _, d in ipairs(descs) do
+    local border = d.h == 3 and 2 or 0
+    want = math.max(want, vim.fn.strdisplaywidth(d.text) + 2 + border)
+  end
+  return math.min(want, cap)
+end
+
+--- Which slots fit from `top` on, with a row kept for the counters that are
+--- needed. Always at least the first one.
+---@param descs table[]
+---@param top integer
+---@param avail integer
+---@return integer first
+---@return integer last
+function M._range(descs, top, avail)
+  local n = #descs
+  local used = top > 1 and 1 or 0
+  local last = top - 1
+  while last < n do
+    local h = descs[last + 1].h
+    local more_after = last + 1 < n
+    if used + h + (more_after and 1 or 0) > avail then
+      break
+    end
+    used = used + h
+    last = last + 1
+  end
+  if last < top then
+    last = top
+  end
+  return top, last
+end
+
+--- Index of the first slot whose number is `n` or higher.
+---@param descs table[]
+---@param n integer|nil
+---@return integer
+local function index_from(descs, n)
+  if not n then
+    return 1
+  end
+  for i, d in ipairs(descs) do
+    if d.n >= n then
+      return i
+    end
+  end
+  return math.max(1, #descs)
+end
+
+--- Pull the window up while the end of the list leaves room below it: no empty
+--- space at the bottom with slots hidden above.
+---@param descs table[]
+---@param top integer
+---@param avail integer
+---@return integer
+local function settle(descs, top, avail)
+  top = math.max(1, math.min(top, math.max(1, #descs)))
+  while top > 1 do
+    local _, last = M._range(descs, top - 1, avail)
+    if last >= #descs then
+      top = top - 1
+    else
+      break
+    end
+  end
+  return top
+end
+
+--- Move the window as little as possible so slot index `target` is shown.
+---@param descs table[]
+---@param top integer
+---@param avail integer
+---@param target integer
+---@return integer
+local function reveal(descs, top, avail, target)
+  if target < top then
+    return target
+  end
+  local _, last = M._range(descs, top, avail)
+  while last < target and top < target do
+    top = top + 1
+    _, last = M._range(descs, top, avail)
+  end
+  return top
+end
+
+-- Drawing ---------------------------------------------------------------
+
+---@param descs table[]
+---@param top integer
+---@param last integer
+---@param width integer
+---@return string[] lines
+---@return { row: integer, hl: string }[] marks
+---@return table<integer, { kind: string, n?: integer }> rows
+local function build(descs, top, last, width)
+  local lines, marks, rows = {}, {}, {}
+  local function add(line, hl, row)
+    lines[#lines + 1] = line
+    marks[#marks + 1] = { row = #lines - 1, hl = hl }
+    rows[#lines] = row
+  end
+
+  if top > 1 then
+    add(fit(("▲ +%d"):format(top - 1), width), "KitMuted", { kind = "up" })
+  end
+  for i = top, last do
+    local d = descs[i]
+    local sh = d.shape
+    local row = { kind = "slot", n = d.n }
+    if d.h == 3 then
+      local inner = width - 2
+      local body_hl = d.current and "KitSelection" or d.hl
+      add(sh.tl .. string.rep(sh.t, inner) .. sh.tr, d.hl, row)
+      add(sh.l .. " " .. fit(d.text, inner - 2) .. " " .. sh.r, body_hl, row)
+      add(sh.bl .. string.rep(sh.b, inner) .. sh.br, d.hl, row)
+    else
+      local hl = d.current and "KitSelection" or d.hl
+      if sh.solid and not d.current then
+        hl = solid_group(d.hl)
+      end
+      add(" " .. fit(d.text, width - 2) .. " ", hl, row)
+    end
+  end
+  if last < #descs then
+    add(fit(("▼ +%d"):format(#descs - last), width), "KitMuted", { kind = "down" })
+  end
+  return lines, marks, rows
+end
+
+---@return boolean
+local function win_alive()
+  return S.win ~= nil and api.nvim_win_is_valid(S.win)
+end
+
+local function close_window()
+  if win_alive() then
+    pcall(api.nvim_win_close, S.win, true)
+  end
+  S.win, S.buf, S.rows = nil, nil, {}
+end
+
+--- Make sure the float exists, on the current tab page.
+---@param cfg table  # nvim_open_win config
+local function ensure_window(cfg)
+  if win_alive() and api.nvim_win_get_tabpage(S.win) ~= api.nvim_get_current_tabpage() then
+    -- A float belongs to the tab page it was opened in.
+    close_window()
+  end
+  if win_alive() then
+    api.nvim_win_set_config(S.win, cfg)
+    return
+  end
+  local buf = api.nvim_create_buf(false, true)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = false
+  S.buf = buf
+  S.win = api.nvim_open_win(
+    buf,
+    false,
+    vim.tbl_extend("force", cfg, {
+      focusable = true,
+      style = "minimal",
+      border = "none",
+      zindex = 40,
+      noautocmd = true,
+    })
+  )
+  vim.wo[S.win].wrap = false
+  vim.wo[S.win].cursorline = false
+  local theme = require("ui.kit.theme")
+  pcall(theme.apply, S.win, theme.resolve(nil))
+end
+
+--- Draw the bar now.
+function M.refresh()
+  if not S.want then
+    return
+  end
+  local descs = describe()
+  if #descs == 0 then
+    close_window()
+    return
+  end
+
+  local row0, avail = room()
+  local width = chip_width(descs)
+  local top = index_from(descs, S.top_n)
+  top = settle(descs, top, avail)
+  if S.focus_n then
+    top = reveal(descs, top, avail, index_from(descs, S.focus_n))
+  end
+  local first, last = M._range(descs, top, avail)
+  S.top_n = descs[first].n
+
+  local lines, marks, rows = build(descs, first, last, width)
+  local side = config.get().side
+  ensure_window({
+    relative = "editor",
+    row = row0,
+    col = side == "left" and 0 or math.max(0, vim.o.columns - width),
+    width = width,
+    height = #lines,
+  })
+
+  S.rows = rows
+  vim.bo[S.buf].modifiable = true
+  api.nvim_buf_set_lines(S.buf, 0, -1, false, lines)
+  vim.bo[S.buf].modifiable = false
+  api.nvim_buf_clear_namespace(S.buf, NS, 0, -1)
+  for _, m in ipairs(marks) do
+    api.nvim_buf_set_extmark(S.buf, NS, m.row, 0, {
+      end_row = m.row,
+      end_col = #lines[m.row + 1],
+      hl_group = m.hl,
+    })
+  end
+end
+
+--- One redraw for any number of requests in a tick.
+local function schedule()
+  if S.pending then
+    return
+  end
+  S.pending = true
+  vim.schedule(function()
+    S.pending = false
+    M.refresh()
+  end)
+end
+
+-- Focus and scrolling ---------------------------------------------------
+
+--- Keep slot `n` in sight (the one just applied, or the current file's).
+---@param n integer|nil
+function M.set_focus(n)
+  S.focus_n = n
+  if S.want then
+    schedule()
+  end
+end
+
+--- Move the window over the list by `delta` slots.
+---@param delta integer
+function M.scroll(delta)
+  local descs = describe()
+  if #descs == 0 then
+    return
+  end
+  local _, avail = room()
+  local top = index_from(descs, S.top_n)
+  top = settle(descs, top + delta, avail)
+  S.top_n = descs[top].n
+  -- A wheel turn is a request to look elsewhere: the focus must not pull the
+  -- window straight back.
+  S.focus_n = nil
+  M.refresh()
+end
+
+-- Mouse -----------------------------------------------------------------
+
+---@return boolean
+function M.pointer_on_bar()
+  if not win_alive() then
+    return false
+  end
+  local ok, pos = pcall(vim.fn.getmousepos)
+  return ok and type(pos) == "table" and pos.winid == S.win
+end
+
+--- What a right click on a chip offers.
+---@param n integer
+local function slot_menu(n)
+  local slots = require("ui.slots")
+  local actions = {
+    {
+      label = "Apply",
+      run = function()
+        slots.apply(n)
+      end,
+    },
+    {
+      label = "Copy",
+      run = function()
+        slots.yank(n)
+      end,
+    },
+    {
+      label = "Clear",
+      run = function()
+        slots.clear(n)
+      end,
+    },
+  }
+  require("ui.kit.select").open({
+    title = ("slot %d"):format(n),
+    items = actions,
+    format_item = function(a)
+      return a.label
+    end,
+    on_select = function(a)
+      a.run()
+    end,
+  })
+end
+
+--- Hand the focus back to the window the click came from.
+---@param prev integer
+local function give_back(prev)
+  if
+    S.win
+    and api.nvim_get_current_win() == S.win
+    and api.nvim_win_is_valid(prev)
+    and prev ~= S.win
+  then
+    pcall(api.nvim_set_current_win, prev)
+  end
+end
+
+---@param name string  # keytrans of the mouse key
+---@param item { kind: string, n?: integer }|nil
+---@param prev integer
+local function on_pointer(name, item, prev)
+  give_back(prev)
+  if name == "<ScrollWheelUp>" then
+    return M.scroll(-1)
+  elseif name == "<ScrollWheelDown>" then
+    return M.scroll(1)
+  end
+  if not item then
+    return
+  end
+  if item.kind == "up" and name == "<LeftMouse>" then
+    return M.scroll(-1)
+  elseif item.kind == "down" and name == "<LeftMouse>" then
+    return M.scroll(1)
+  elseif item.kind == "slot" and item.n then
+    if name == "<LeftMouse>" then
+      require("ui.slots").apply(item.n)
+    elseif name == "<RightMouse>" then
+      slot_menu(item.n)
+    end
+  end
+end
+
+local MOUSE = { ["<LeftMouse>"] = true, ["<RightMouse>"] = true }
+local WHEEL = { ["<ScrollWheelUp>"] = true, ["<ScrollWheelDown>"] = true }
+
+--- `vim.on_key` listener: only looks, never changes the key.
+---@param key string
+---@param typed string
+local function on_key(key, typed)
+  if not win_alive() then
+    return
+  end
+  local name = vim.fn.keytrans(typed ~= "" and typed or key)
+  if not (MOUSE[name] or WHEEL[name]) then
+    return
+  end
+  local ok, pos = pcall(vim.fn.getmousepos)
+  if not ok or type(pos) ~= "table" or pos.winid ~= S.win then
+    return
+  end
+  local item = S.rows[pos.line]
+  local prev = api.nvim_get_current_win()
+  vim.schedule(function()
+    on_pointer(name, item, prev)
+  end)
+end
+
+-- Exposed for the specs: a real click cannot be sent in a suite without a UI.
+M._on_key = on_key
+
+-- Lifecycle -------------------------------------------------------------
+
+local function attach()
+  if S.attached then
+    return
+  end
+  S.attached = true
+  local group = autocmd.group(GROUP, true)
+  local function on(events, fn, desc)
+    autocmd.create(events, fn, { group = group, desc = "ui.slots bar: " .. desc })
+  end
+
+  on(
+    { "BufEnter", "BufWritePost", "BufModifiedSet", "TabEnter", "VimResized", "BufFilePost" },
+    function()
+      schedule()
+    end,
+    "redraw"
+  )
+
+  -- The slot of the file you are in is the one the bar keeps in sight.
+  on("BufEnter", function()
+    local name = api.nvim_buf_get_name(0)
+    if name == "" or vim.bo.buftype ~= "" then
+      return
+    end
+    local here = require("lib.nvim.fs.normkey")(name)
+    for _, slot in ipairs(store.list()) do
+      if file_key(slot) == here then
+        S.focus_n = slot.n
+        break
+      end
+    end
+  end, "follow the current file")
+
+  on("ColorScheme", function()
+    S.solid_groups = {}
+    schedule()
+  end, "colours")
+
+  -- Nothing is worked in here: entering the bar (a click, a stray <C-w>w) sends
+  -- the focus to the window it came from.
+  on("WinEnter", function()
+    if S.win and api.nvim_get_current_win() == S.win then
+      local prev = vim.fn.win_getid(vim.fn.winnr("#"))
+      vim.schedule(function()
+        give_back(prev)
+      end)
+    end
+  end, "give the focus back")
+
+  on("WinClosed", function(args)
+    if S.win and tonumber(args.match) == S.win then
+      S.win, S.buf, S.rows = nil, nil, {}
+    end
+  end, "forget a closed window")
+
+  S.listener = store.on_change(function(event, n)
+    if event == "reload" or event == "clear_all" then
+      S.render_cache, S.key_cache = {}, {}
+    elseif (event == "set" or event == "move") and n then
+      S.render_cache[n] = nil
+      S.focus_n = n
+    end
+    schedule()
+  end)
+
+  vim.on_key(on_key, KEY_NS)
+end
+
+local function detach()
+  if not S.attached then
+    return
+  end
+  S.attached = false
+  vim.on_key(nil, KEY_NS)
+  if S.listener then
+    store.off(S.listener)
+    S.listener = nil
+  end
+  autocmd.group(GROUP, true)
+end
+
+--- Show the bar (and keep it up to date) until `close()`.
+function M.open()
+  S.want = true
+  attach()
+  M.refresh()
+end
+
+--- Hide the bar and stop watching anything.
+function M.close()
+  S.want = false
+  detach()
+  close_window()
+end
+
+---@return boolean now_open
+function M.toggle()
+  if S.want then
+    M.close()
+  else
+    M.open()
+  end
+  return S.want
+end
+
+--- Is the bar switched on (it may have nothing to show yet)?
+---@return boolean
+function M.wanted()
+  return S.want
+end
+
+--- Is the window on screen right now?
+---@return boolean
+function M.is_open()
+  return win_alive()
+end
+
+--- What the bar shows right now, for tests and the health check.
+---@return { win: integer|nil, buf: integer|nil, top_n: integer|nil, focus_n: integer|nil, rows: table, lines: string[] }
+function M.state()
+  return {
+    win = win_alive() and S.win or nil,
+    buf = S.buf,
+    top_n = S.top_n,
+    focus_n = S.focus_n,
+    rows = S.rows,
+    lines = (S.buf and api.nvim_buf_is_valid(S.buf))
+        and api.nvim_buf_get_lines(S.buf, 0, -1, false)
+      or {},
+  }
+end
+
+--- Forget everything (tests, `disable()`).
+function M.reset()
+  M.close()
+  S.top_n, S.focus_n = nil, nil
+  S.render_cache, S.key_cache, S.solid_groups, S.bad_style = {}, {}, {}, {}
+  S.pending = false
+end
+
+return M
