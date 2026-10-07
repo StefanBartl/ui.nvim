@@ -362,6 +362,187 @@ describe("ui.slots preview", function()
     end)
   end)
 
+  describe("a url slot", function()
+    local geom = { row = 2, col = 90, width = 30, height = 20, side = "right" }
+    local saved_hover, asked, deliver_now, pending
+
+    --- A stand-in for hover.nvim: records what it was asked, answers at once or
+    --- when the test says so.
+    local function fake_hover(answer)
+      package.loaded["hover"] = {
+        preview_target = function(target, cb, opts)
+          asked[#asked + 1] = { target = target, opts = opts }
+          local entry = { cb = cb, cancelled = false }
+          pending[#pending + 1] = entry
+          if deliver_now then
+            cb(answer or { lines = { "HTTP 200 OK", "A page" } })
+          end
+          return {
+            cancel = function()
+              entry.cancelled = true
+            end,
+          }
+        end,
+      }
+    end
+
+    before_each(function()
+      saved_hover = package.loaded["hover"]
+      asked, pending, deliver_now = {}, {}, true
+    end)
+
+    after_each(function()
+      package.loaded["hover"] = saved_hover
+    end)
+
+    local function pane_text()
+      return table.concat(preview.lines(), "\n")
+    end
+
+    local function wait_for_text(needle)
+      vim.wait(500, function()
+        return pane_text():find(needle, 1, true) ~= nil
+      end, 5)
+    end
+
+    it("shows the address and the host when hover.nvim is not there", function()
+      package.loaded["hover"] = nil
+      package.preload["hover"] = function()
+        error("no hover")
+      end
+      store.add({ kind = "url", url = "https://example.org/a" })
+      preview.show(1, geom)
+      package.preload["hover"] = nil
+      assert.is_truthy(pane_text():find("host: example.org", 1, true))
+    end)
+
+    it("asks hover.nvim only when a preview is shown, not when the slot is rendered", function()
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/a" })
+      require("ui.slots.view.chips").open()
+      flush()
+      assert.equals(0, #asked)
+    end)
+
+    it("shows loading first and then the page", function()
+      deliver_now = false
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/a" })
+      preview.show(1, geom)
+      assert.is_truthy(pane_text():find("loading", 1, true))
+      assert.equals(1, #asked)
+      assert.equals("https://example.org/a", asked[1].target)
+      assert.is_true(asked[1].opts.fetch)
+      pending[1].cb({ lines = { "HTTP 200 OK", "A page" } })
+      wait_for_text("A page")
+      assert.same({ "HTTP 200 OK", "A page" }, preview.lines())
+    end)
+
+    it("shows an error answer as text", function()
+      fake_hover({ lines = { "x no answer", "could not resolve host" } })
+      store.add({ kind = "url", url = "https://nowhere.invalid/" })
+      preview.show(1, geom)
+      wait_for_text("no answer")
+      assert.is_truthy(pane_text():find("could not resolve host", 1, true))
+    end)
+
+    it("drops the answer of a slot the cursor has left, and cancels its request", function()
+      deliver_now = false
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/one" })
+      store.add({ kind = "file", path = write("later.txt", "the file\n") })
+      preview.show(1, geom)
+      preview.show(2, geom)
+      assert.is_true(pending[1].cancelled)
+      pending[1].cb({ lines = { "stale page" } })
+      vim.wait(60, function()
+        return false
+      end)
+      assert.same({ "the file" }, preview.lines())
+    end)
+
+    it("shows only the last of several quick moves", function()
+      deliver_now = false
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/one" })
+      store.add({ kind = "url", url = "https://example.org/two" })
+      preview.show(1, geom)
+      preview.show(2, geom)
+      pending[2].cb({ lines = { "page two" } })
+      pending[1].cb({ lines = { "page one" } })
+      wait_for_text("page two")
+      vim.wait(60, function()
+        return false
+      end)
+      assert.same({ "page two" }, preview.lines())
+    end)
+
+    it("ignores an answer that arrives after the pane was closed", function()
+      deliver_now = false
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/one" })
+      preview.show(1, geom)
+      preview.close()
+      assert.is_true(pending[1].cancelled)
+      pending[1].cb({ lines = { "late" } })
+      vim.wait(60, function()
+        return false
+      end)
+      assert.is_false(preview.is_open())
+    end)
+
+    it("falls back to the address when hover.nvim raises", function()
+      package.loaded["hover"] = {
+        preview_target = function()
+          error("boom")
+        end,
+      }
+      store.add({ kind = "url", url = "https://example.org/one" })
+      preview.show(1, geom)
+      wait_for_text("host: example.org")
+      assert.is_truthy(pane_text():find("could not preview", 1, true))
+    end)
+
+    it("falls back to the address when hover.nvim answers nothing usable", function()
+      fake_hover({ lines = {} })
+      store.add({ kind = "url", url = "https://example.org/one" })
+      preview.show(1, geom)
+      wait_for_text("host: example.org")
+      assert.is_truthy(pane_text():find("host: example.org", 1, true))
+    end)
+
+    it("makes no request with preview.fetch = false", function()
+      fake_hover()
+      config.get().preview.fetch = false
+      store.add({ kind = "url", url = "https://example.org/one" })
+      preview.show(1, geom)
+      assert.equals(0, #asked)
+      assert.is_truthy(pane_text():find("host: example.org", 1, true))
+    end)
+
+    it("never asks about file: or mailto: addresses, nor one that is refused", function()
+      fake_hover()
+      store.add({ kind = "url", url = "mailto:someone@example.org" })
+      store.add({ kind = "url", url = "file:///tmp/x" })
+      preview.show(1, geom)
+      preview.show(2, geom)
+      assert.equals(0, #asked)
+    end)
+
+    it("asks about the address with the placeholders put in", function()
+      fake_hover()
+      store.add({ kind = "url", url = "https://example.org/{word}" })
+      preview.show(1, geom, {
+        resolve = {
+          word = function()
+            return "hello"
+          end,
+        },
+      })
+      assert.equals("https://example.org/hello", asked[1].target)
+    end)
+  end)
+
   describe("which window the placeholders belong to", function()
     it(
       "a path with {dir} previews the file <CR> will open, not one relative to the panel",

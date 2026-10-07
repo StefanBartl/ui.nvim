@@ -86,7 +86,7 @@ describe("ui.slots.config", function()
         keys = 3,
         slots = 4,
         data_dir = "",
-        preview = { mode = "hover", delay = "slow", max_lines = -5 },
+        preview = { mode = "hover", delay = "slow", max_lines = -5, fetch = "yes" },
       })
       local D = config.DEFAULTS
       assert.equals(D.layout, cfg.layout)
@@ -104,6 +104,7 @@ describe("ui.slots.config", function()
       assert.equals(D.preview.mode, cfg.preview.mode)
       assert.equals(D.preview.delay, cfg.preview.delay)
       assert.equals(D.preview.max_lines, cfg.preview.max_lines)
+      assert.is_true(cfg.preview.fetch)
       assert.is_true(#config.issues() >= 10)
     end)
 

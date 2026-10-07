@@ -19,6 +19,7 @@
 ---@field delay integer         # ms before `auto` opens the preview
 ---@field max_kb integer        # a larger file is cut here and says so
 ---@field max_lines integer
+---@field fetch boolean         # a url slot's preview may fetch the page (through hover.nvim)
 
 --- Resolved configuration (`ui.slots.config.get()`).
 ---@class Ui.Slots.Config
@@ -93,7 +94,7 @@
 
 --- What a preview pane shows: lines of text, a ready buffer, or a draw callback.
 ---@alias Ui.Slots.Preview
----| { lines: string[], ft?: string, pos?: { [1]: integer, [2]: integer } }
+---| { lines: string[], ft?: string, pos?: { [1]: integer, [2]: integer }, later?: fun(deliver: fun(res: table)): { cancel: fun() }|nil }
 ---| { buf: integer, pos?: { [1]: integer, [2]: integer } }
 ---| { draw: fun(surface: table) }
 

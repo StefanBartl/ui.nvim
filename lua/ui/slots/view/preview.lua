@@ -27,7 +27,9 @@ local NS = api.nvim_create_namespace("ui_slots_preview")
 ---@class Ui.Slots.Preview.State
 ---@field surf Ui.Kit.Surface|nil
 ---@field n integer|nil      # the slot shown
-local S = { surf = nil, n = nil }
+---@field gen integer         # moves with every fill: an answer of an older one is dropped
+---@field later { cancel: fun() }|nil  # the request behind the text shown now
+local S = { surf = nil, n = nil, gen = 0, later = nil }
 
 ---@return boolean
 function M.is_open()
@@ -71,13 +73,55 @@ local function clean(lines)
   return out
 end
 
+--- Stop waiting for the answer of the slot shown before.
+local function forget_later()
+  S.gen = S.gen + 1
+  local later = S.later
+  S.later = nil
+  if later and type(later.cancel) == "function" then
+    pcall(later.cancel)
+  end
+end
+
+local fill
+
+--- Start the request behind a preview that answers later. What it delivers
+--- replaces the text only if the pane still shows the same slot at the same
+--- fill: moving on, closing, or a newer fill make it a no-op.
+---@param later fun(deliver: fun(res: table)): { cancel: fun() }|nil
+local function wait_for(later)
+  local gen = S.gen
+  local surf = S.surf
+  local ok, handle = pcall(later, function(res)
+    vim.schedule(function()
+      if gen ~= S.gen or S.surf ~= surf or not M.is_open() then
+        return
+      end
+      if type(res) ~= "table" then
+        res = { lines = { "(the preview could not be made)" } }
+      end
+      fill(vim.tbl_extend("force", res, { later = false }))
+    end)
+  end)
+  if not ok then
+    fill({ lines = { "(the preview could not be made)" }, later = false })
+    return
+  end
+  if gen == S.gen then
+    S.later = handle
+  elseif handle and type(handle.cancel) == "function" then
+    pcall(handle.cancel)
+  end
+end
+
 --- Put a rendered preview into the pane.
 ---@param res table
-local function fill(res)
+function fill(res)
   local surf = S.surf
   if not surf then
     return
   end
+  forget_later()
   api.nvim_buf_clear_namespace(surf.bufnr, NS, 0, -1)
   if res.draw then
     -- A clean pane first: a draw that does not touch every line must not show
@@ -125,11 +169,15 @@ local function fill(res)
   else
     pcall(api.nvim_win_set_cursor, surf.winid, { 1, 0 })
   end
+  if type(res.later) == "function" then
+    wait_for(res.later)
+  end
 end
 
 --- Close the pane.
 function M.close()
   local surf = S.surf
+  forget_later()
   S.surf, S.n = nil, nil
   if surf then
     surf:close()
@@ -176,6 +224,7 @@ function M.show(n, geom, ctx)
     S.surf = surf
     surf:on_close(function()
       if S.surf == surf then
+        forget_later()
         S.surf, S.n = nil, nil
       end
     end)
