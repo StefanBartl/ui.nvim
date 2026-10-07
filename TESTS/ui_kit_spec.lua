@@ -427,6 +427,26 @@ describe("ui.kit (ported from ui.kit's TESTS/ui_kit_spec.lua)", function()
           eq((press_tab("", 0)), "", "an empty line gives an empty fragment")
           eq((press_tab("a\tb", 3)), "b", "a tab delimits like a space")
 
+          -- getcompletion() runs a backtick span through 'shell' (SEC-34): a
+          -- fragment that holds one is never handed over, not even a harmless-looking one.
+          eq(
+            (press_tab("`touch${IFS}x`", 14)),
+            nil,
+            "a backtick fragment never reaches getcompletion"
+          )
+          eq((press_tab("cd a`b", 6)), nil, "a backtick anywhere in the fragment blocks it")
+          eq(
+            (press_tab("`x` /etc/pas", 12)),
+            "/etc/pas",
+            "a backtick before the whitespace is not part of it"
+          )
+          eq(
+            (press_tab("`x`y z", 3)),
+            nil,
+            "a span closed right at the cursor is still a backtick fragment"
+          )
+          eq((press_tab("ab`cd", 2)), "ab", "a backtick behind the cursor blocks nothing")
+
           -- One long word followed by more text used to cost seconds (SEC-32):
           -- the old `%S*$` retried the rest of the word from every byte.
           local long = ("a"):rep(50000) .. " x y"
