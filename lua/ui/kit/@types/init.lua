@@ -231,12 +231,13 @@
 ---@field on_submit fun(values: table<string, string>)
 ---@field on_cancel? fun()
 
---- What `kit.sheet` returns: its surface plus four methods, for driving it from
+--- What `kit.sheet` returns: its surface plus five methods, for driving it from
 --- code and from specs.
 ---@class Ui.Kit.Sheet : Ui.Kit.Surface
 ---@field submit fun(self: Ui.Kit.Sheet)                       # as if Submit were pressed (validation included)
 ---@field cancel fun(self: Ui.Kit.Sheet)                       # as if <Esc> were pressed
 ---@field focus_field fun(self: Ui.Kit.Sheet, which: string|integer)  # focus a field by name or position
+---@field validate fun(self: Ui.Kit.Sheet): boolean              # check every field now (the messages show), without submitting; whether all passed
 ---@field state fun(self: Ui.Kit.Sheet): { focus: string, values: table<string, string>, errors: table<string, string> }  # focus = a field name, "submit" or "cancel"
 
 --- Options for `kit.input` / `kit.popup({ type = "input" })`.

@@ -709,6 +709,31 @@ describe("kit.sheet", function()
       assert.equals("b", r.surf:state().focus)
     end)
 
+    it("validate() shows every message now, without submitting or moving the focus", function()
+      local r = open({
+        {
+          name = "n",
+          label = "N",
+          default = "x",
+          validate = function()
+            return false, "no"
+          end,
+        },
+        { name = "m", label = "M", required = true },
+      })
+      r.surf:focus_field("m")
+      assert.is_false(r.surf:validate())
+      assert.same({ n = "no", m = "required" }, r.surf:state().errors)
+      assert.same({ "✗ no", "✗ required" }, shown_errors(r))
+      assert.equals("m", r.surf:state().focus)
+      assert.is_nil(r.values)
+
+      type_into(r, 1, "")
+      type_into(r, 2, "ok")
+      assert.is_true(r.surf:validate())
+      assert.same({}, r.surf:state().errors)
+    end)
+
     it("works through kit.sync, like the other on_submit/on_cancel components", function()
       vim.defer_fn(function()
         for _, w in ipairs(api.nvim_list_wins()) do
