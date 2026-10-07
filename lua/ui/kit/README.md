@@ -92,10 +92,10 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | `toast`  | ephemeral top-right message; stacks; never steals focus; auto-dismiss |
 | `input`  | single-line insert-mode prompt; `<CR>` submits, `<Esc>` cancels; `secret = true` masks it as you type; `completion = "file"` (or any `getcompletion()` type) wires `<Tab>` to the native completion popup |
 | `live_input` | like `input`, but also debounces keystrokes into `on_change(query)` as you type — for filter/search boxes |
-| `form`   | sequential multi-field prompt — chained `input`s collected into one keyed table; `<Esc>` skips an optional field, aborts on a `required` one |
+| `form`   | sequential multi-field prompt — chained `input`s collected into one keyed table; `<Esc>` skips an optional field, aborts on a `required` one; `back = true` adds [back navigation](#form-multi-field) (`<BS>` on an empty field, `<S-Tab>`, a `[← Back] [Skip] [Next ↵]` button row, "(2/5)" in the title) |
 | `select` | native themed list chooser (single/multi; `j`/`k`, `<CR>`, `<Tab>` mark) |
 | `prompt` | ask: `answer_type = "confirm"` (yes/no → boolean) or `"text"` |
-| `confirm` | button dialog — horizontal buttons, `h`/`l`/arrows move, `<CR>` confirm, `<Esc>` cancel, left click confirms a button directly |
+| `confirm` | button dialog — horizontal buttons, `h`/`l`/arrows move, `<CR>` confirm, `<Esc>` cancel, left click confirms a button directly (the button row is `ui.kit.buttons`, shared with the form's) |
 | `menu`    | anchored action list — `{ label, action }` items; picking runs the action. Also renders [`ui.contextmenu`](../contextmenu/README.md) tables (`name`/`cmd`, `{ name = "separator" }`, `rtxt`, `icon`, nested `items`) and takes `mouse = true` to anchor at the pointer. A row is a set of **fixed-width columns** measured across the whole level — icon, label, fly-out marker, `rtxt` — so entries line up whichever section they sit in; `icon` is a field, never a prefix on `label`. The marker follows the *label* column rather than the row, so it stays beside the list instead of against the frame, and the hint column keeps the right edge. Named groups (`contextmenu.heading`) are drawn as titled frames (`group_style` = `"box"` \| `"header"` \| `"plain"`; a menu that names nothing keeps the plain divider look). The block cursor is hidden while it is open, one left click picks, and a click or focus change elsewhere dismisses it (`hide_cursor` / `single_click` / `close_on_focus_lost` turn those off). A pick is acknowledged before it is acted on: the row lights up (`KitFlash`) for `flash_ms` (default 100) and the action follows, the way a button shows its press — the delay is the point, since a leaf action closes the menu and a flash painted at that moment would never be seen. A menu dismissed while a row is lit runs nothing (`flash_on_select = false` turns it off). Defaults to the `menu` preset, so the frame is coloured. Drilling into a submenu and walking back swap the list **inside the same window** — no flash, and the menu stays put |
 | `progress`| passthrough to `lib.nvim.progress` (`:update`/`:finish`/`:cancel`) |
 | `compare` | pick two items out of one picker, then view them side by side — see [Compare](#compare-pick-two-view-side-by-side) below |
@@ -397,6 +397,12 @@ kit, where clicking empty space never dismisses a surface. Hit-testing uses
 `getmousepos()` against the per-button ranges the focus highlight already
 tracks, so the click target is exactly the visible `[ Label ]` box.
 
+The layout, the focus highlight and the hit-test live in `ui.kit.buttons` — a
+small stateless helper (`layout`, `paint`, `hit`, `wrap`, `row_width`) that the
+button row under a [`kit.form`](#form-multi-field) field uses as well, so a
+click lands on exactly the box that is drawn in both places. It owns no window
+or keymap: a caller keeps its own `labels`/`ranges`/`focus` and hands them in.
+
 ### Form (multi-field)
 
 `kit.form(opts)` chains `kit.input` prompts field-by-field into one keyed
@@ -418,6 +424,63 @@ kit.form({
 Each field accepts the same options as `kit.input` (`default`, `theme`,
 `width`, `relative`, `expand_env`), falling back to `opts.theme`/`opts.width`/
 `opts.relative` when omitted.
+
+#### Back navigation (`back = true`)
+
+Off by default — a form without `back` is exactly the chain above. With
+`back = true` the user can walk back through it to fix an earlier answer:
+
+```lua
+kit.form({
+  back = true,
+  fields = {
+    { name = "image", label = "Image", required = true },
+    { name = "name", label = "Name" },
+    { name = "ports", label = "Ports" },
+  },
+  on_submit = function(values) end,
+  on_cancel = function() end,
+})
+```
+
+```text
+╭──────────── Name (2/3) ────────────╮
+│ my-container                       │
+│  [ ← Back ]  [ Skip ]  [ Next ↵ ]  │
+╰────────────────────────────────────╯
+```
+
+- **Keys, in the field:** `<BS>` on an **empty** field (with text it is the
+  ordinary backspace), `<S-Tab>` or `<C-p>` (with a completion popup open they
+  still belong to the popup) go back to the field before. `<CR>` goes forward,
+  `<Esc>` keeps its meaning (skips an optional field, aborts on a `required`
+  one) on every field, one reached by going back included. The first field has
+  no back: those keys do nothing there and the `[← Back]` button is not drawn.
+- **The previous answer is the editable text.** Going back shows that field's
+  answer again, cursor at the end, so only the correction has to be typed. A
+  field left half-typed keeps its text for when the user comes back to it, so
+  going back and forth loses nothing; the result table is only handed to
+  `on_submit` after the last field. Skipping a field again (`<Esc>`) resets it
+  to its `default`, as it always did.
+- **Step indicator.** The title reads `Label (2/5)`; a one-field form has none.
+- **Buttons.** A clickable row under the field: `[← Back]` (not on the first
+  field), `[Skip]` (not on a `required` field — it is `<Esc>`, which aborts
+  there) and `[Next ↵]` (`[Done ↵]` on the last field — it is `<CR>`). A left
+  click focuses *and* presses a button in one action, like `kit.confirm`. From
+  the field, `<Down>` or `<Tab>` moves the focus onto the row, starting on
+  `Next`; there `h`/`l`/`<Left>`/`<Right>`/`<Tab>`/`<S-Tab>` move it (wrapping),
+  `<CR>` presses the focused button, `<Esc>` still cancels, and `<Up>`/`k`/`i`/
+  `a` (or a click on the text) return to the field. The labels are read-only
+  while the buttons have focus. Mouse needs `:set mouse=a`, as it always does.
+- **`kit.input` underneath.** `back` is `kit.input`'s two opt-in options, which
+  can be used on their own: `on_back = function(line) end` (the keys above; it
+  gets the line as it stood) and `buttons = { { id = "back" | "skip" |
+  "submit", label = "…" }, … }` (`submit` is `<CR>`, `skip` is `<Esc>`, a
+  `back` button needs `on_back`). Without them an input is one line and binds
+  none of these keys.
+
+Every field of a chain opens in Insert mode, the one reached by going back
+included.
 
 ### Live input (debounced on_change)
 

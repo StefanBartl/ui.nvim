@@ -2040,3 +2040,724 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
     )
   end)
 end)
+
+--- Back navigation (`kit.form({ back = true })`, `ui.kit.input`'s `on_back`/`buttons`,
+--- the shared `ui.kit.buttons` row). Opt-in: the last describe below pins that
+--- a form without `back` is exactly what it was.
+---
+--- Driven from Normal mode like the form spec above (this headless runner never
+--- enters Insert mode); every key under test is mapped for `i` and `n`. Mouse
+--- clicks are the mapping's own callback with `getmousepos()` stubbed, the way
+--- the other mouse specs here do it.
+local function keys(k)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(k, true, false, true), "x", false)
+end
+
+---@return string
+local function field_text()
+  return vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+end
+
+---@param text string
+local function type_into_field(text)
+  vim.api.nvim_buf_set_lines(0, 0, 1, false, { text })
+end
+
+--- Title of the float that has the focus, "(i/n)" step indicator included.
+---@return string|nil
+local function title_now()
+  local t = vim.api.nvim_win_get_config(0).title
+  if type(t) == "table" then
+    return t[1] and t[1][1] or nil
+  end
+  return t
+end
+
+--- The button row as drawn (line 2 of the focused float), trimmed.
+---@return string
+local function button_row_text()
+  local line = vim.api.nvim_buf_get_lines(0, 1, 2, false)[1] or ""
+  return (line:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+--- The box the focus highlight covers, or nil while the focus is in the field.
+---@return string|nil
+local function focused_box()
+  local ns = vim.api.nvim_get_namespaces().lib_kit_input_buttons
+  local marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })
+  if #marks == 0 then
+    return nil
+  end
+  local line = vim.api.nvim_buf_get_lines(0, marks[1][2], marks[1][2] + 1, false)[1]
+  return line:sub(marks[1][3] + 1, marks[1][4].end_col)
+end
+
+--- Left-click at (`row`, `col`) of the focused float, 1-based like
+--- `getmousepos()`, by running the mapping that `<LeftMouse>` is bound to.
+---@param row integer
+---@param col integer
+local function click_at(row, col)
+  local real = vim.fn.getmousepos
+  vim.fn.getmousepos = function()
+    return { winid = vim.api.nvim_get_current_win(), line = row, column = col }
+  end
+  local map = vim.fn.maparg("<LeftMouse>", "n", false, true)
+  local ok, err = pcall(map.callback)
+  vim.fn.getmousepos = real
+  assert(ok, err)
+end
+
+--- Left-click the drawn `[ label ]` box on the button row.
+---@param label string
+local function click_button(label)
+  local line = vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]
+  local from = assert(line:find("[ " .. label .. " ]", 1, true), "no such button: " .. label)
+  click_at(2, from + 2)
+end
+
+--- Close every float. Closing a form's field from the outside is that field's
+--- `<Esc>`, which opens the next one, so loop until the chain has run out.
+local function close_floats()
+  for _ = 1, 20 do
+    local closed = false
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_config(w).relative ~= "" then
+        pcall(vim.api.nvim_win_close, w, true)
+        closed = true
+      end
+    end
+    if not closed then
+      return
+    end
+  end
+end
+
+---@param fields table[]
+---@param extra? table
+---@return table result  # { surf, values, cancelled }
+local function open_back_form(fields, extra)
+  local result = {}
+  result.surf = require("ui.kit").form(vim.tbl_extend("force", {
+    back = true,
+    fields = fields,
+    on_submit = function(values)
+      result.values = values
+    end,
+    on_cancel = function()
+      result.cancelled = true
+    end,
+  }, extra or {}))
+  return result
+end
+
+local THREE = {
+  { name = "a", label = "A" },
+  { name = "b", label = "B" },
+  { name = "c", label = "C" },
+}
+
+describe("kit.form back navigation", function()
+  after_each(close_floats)
+
+  describe("a field", function()
+    it("carries a step indicator in its title and a button row under it", function()
+      open_back_form(THREE)
+      assert.equals("A (1/3)", title_now())
+      assert.equals(2, vim.api.nvim_win_get_height(0))
+      assert.equals("[ Skip ]  [ Next ↵ ]", button_row_text())
+      keys("<CR>")
+      assert.equals("B (2/3)", title_now())
+    end)
+
+    it("leaves the indicator out of a one-field form but keeps the buttons", function()
+      open_back_form({ { name = "only", label = "Only" } })
+      assert.equals("Only", title_now())
+      assert.equals("[ Skip ]  [ Done ↵ ]", button_row_text())
+    end)
+
+    it("shows Back from the second field on, Skip unless the field is required", function()
+      open_back_form({
+        { name = "a", label = "A" },
+        { name = "b", label = "B" },
+        { name = "c", label = "C", required = true },
+      })
+      keys("<CR>")
+      assert.equals("[ ← Back ]  [ Skip ]  [ Next ↵ ]", button_row_text())
+      keys("<CR>")
+      assert.equals("[ ← Back ]  [ Done ↵ ]", button_row_text())
+    end)
+
+    it("has no back on the first field: the keys do nothing, there is no button", function()
+      local r = open_back_form(THREE)
+      assert.is_nil(button_row_text():find("Back", 1, true))
+      for _, k in ipairs({ "<S-Tab>", "<C-p>", "<BS>" }) do
+        keys(k)
+        assert.equals("A (1/3)", title_now(), k .. " must not leave the first field")
+        assert.is_true(r.surf:is_valid())
+      end
+      assert.is_nil(r.cancelled)
+    end)
+  end)
+
+  describe("going back", function()
+    it("shows the previous answer as the editable text of the field before", function()
+      open_back_form(
+        THREE,
+        { fields = { { name = "a", label = "A", default = "dflt" }, THREE[2] } }
+      )
+      type_into_field("first answer")
+      keys("<CR>")
+      assert.equals("B (2/2)", title_now())
+      keys("<S-Tab>")
+      assert.equals("A (1/2)", title_now())
+      assert.equals("first answer", field_text())
+    end)
+
+    it("keeps every value across a round trip in both directions", function()
+      local r = open_back_form(THREE)
+      type_into_field("one")
+      keys("<CR>")
+      type_into_field("two (draft)")
+      keys("<S-Tab>") -- back to A, leaving a half-typed B behind
+      assert.equals("one", field_text())
+      type_into_field("ONE")
+      keys("<CR>")
+      assert.equals("two (draft)", field_text(), "the field left half-typed comes back as typed")
+      keys("<CR>")
+      type_into_field("three")
+      keys("<CR>")
+      assert.same({ a = "ONE", b = "two (draft)", c = "three" }, r.values)
+    end)
+
+    it("can walk back several fields in a row", function()
+      open_back_form(THREE)
+      type_into_field("1")
+      keys("<CR>")
+      type_into_field("2")
+      keys("<CR>")
+      assert.equals("C (3/3)", title_now())
+      keys("<S-Tab>")
+      assert.equals("2", field_text())
+      keys("<S-Tab>")
+      assert.equals("A (1/3)", title_now())
+      assert.equals("1", field_text())
+    end)
+
+    it("shows a skipped optional field as its default again", function()
+      open_back_form({
+        { name = "a", label = "A", default = "keepme" },
+        { name = "b", label = "B" },
+      })
+      keys("<Esc>") -- skip A
+      assert.equals("B (2/2)", title_now())
+      keys("<S-Tab>")
+      assert.equals("keepme", field_text())
+    end)
+
+    it("goes back with <C-p> as well as <S-Tab>", function()
+      open_back_form(THREE)
+      keys("<CR>")
+      keys("<C-p>")
+      assert.equals("A (1/3)", title_now())
+    end)
+
+    it("goes back on <BS> only once the field is empty", function()
+      open_back_form(THREE)
+      type_into_field("one")
+      keys("<CR>")
+      type_into_field("xy")
+      vim.api.nvim_win_set_cursor(0, { 1, 1 })
+      keys("<BS>")
+      assert.equals("B (2/3)", title_now(), "<BS> on a field with text is not back")
+      assert.equals("xy", field_text())
+      assert.equals(0, vim.api.nvim_win_get_cursor(0)[2], "it is still the native <BS>")
+      type_into_field("")
+      keys("<BS>")
+      assert.equals("A (1/3)", title_now())
+      assert.equals("one", field_text())
+    end)
+  end)
+
+  describe("<Esc>", function()
+    it("still skips an optional field, on one reached by going back too", function()
+      local r = open_back_form(THREE)
+      type_into_field("1")
+      keys("<CR>")
+      keys("<S-Tab>")
+      keys("<Esc>") -- skip A again: its value becomes its default
+      assert.equals("B (2/3)", title_now())
+      keys("<Esc>")
+      keys("<Esc>")
+      assert.same({ a = "", b = "", c = "" }, r.values)
+    end)
+
+    it("aborts on a required field reached by going forward again", function()
+      local r = open_back_form({
+        { name = "a", label = "A" },
+        { name = "b", label = "B", required = true },
+      })
+      keys("<CR>")
+      keys("<S-Tab>")
+      keys("<CR>")
+      keys("<Esc>")
+      assert.is_true(r.cancelled)
+      assert.is_nil(r.values)
+    end)
+
+    it("cancels the whole form from a later required field", function()
+      local r = open_back_form({
+        { name = "a", label = "A" },
+        { name = "b", label = "B" },
+        { name = "c", label = "C", required = true },
+      })
+      keys("<CR>")
+      keys("<CR>")
+      assert.equals("C (3/3)", title_now())
+      assert.is_nil(button_row_text():find("Skip", 1, true), "a required field cannot be skipped")
+      keys("<Esc>")
+      assert.is_true(r.cancelled)
+      assert.is_nil(r.values)
+    end)
+  end)
+
+  describe("the button row, by keyboard", function()
+    it("takes the focus with <Down> onto Next and presses it with <CR>", function()
+      local r = open_back_form(THREE)
+      type_into_field("typed")
+      keys("<Down>")
+      assert.equals("[ Next ↵ ]", focused_box())
+      assert.is_false(vim.bo.modifiable, "the labels are not editable while the buttons have focus")
+      keys("<CR>")
+      assert.equals("B (2/3)", title_now())
+      keys("<S-Tab>")
+      assert.equals("typed", field_text(), "pressing Next submitted what was in the field")
+      assert.is_nil(r.cancelled)
+    end)
+
+    it("takes the focus with <Tab> too", function()
+      open_back_form(THREE)
+      keys("<Tab>")
+      assert.equals("[ Next ↵ ]", focused_box())
+    end)
+
+    it("moves with h/l/arrows/<Tab>/<S-Tab>, wrapping around", function()
+      open_back_form(THREE)
+      keys("<CR>")
+      keys("<Down>")
+      assert.equals("[ Next ↵ ]", focused_box())
+      keys("h")
+      assert.equals("[ Skip ]", focused_box())
+      keys("<Left>")
+      assert.equals("[ ← Back ]", focused_box())
+      keys("<S-Tab>")
+      assert.equals("[ Next ↵ ]", focused_box(), "wraps to the last button")
+      keys("<Tab>")
+      assert.equals("[ ← Back ]", focused_box(), "wraps to the first button")
+      keys("l")
+      assert.equals("[ Skip ]", focused_box())
+      keys("<Right>")
+      assert.equals("[ Next ↵ ]", focused_box())
+    end)
+
+    it("presses Back, Skip and Next on <CR>", function()
+      local r = open_back_form(THREE)
+      type_into_field("one")
+      keys("<CR>")
+      keys("<Down>")
+      keys("hh") -- Back
+      keys("<CR>")
+      assert.equals("A (1/3)", title_now())
+      keys("<CR>")
+      keys("<Down>")
+      keys("h") -- Skip
+      keys("<CR>")
+      assert.equals("C (3/3)", title_now())
+      type_into_field("three")
+      keys("<Down>")
+      keys("<CR>")
+      assert.same({ a = "one", b = "", c = "three" }, r.values)
+    end)
+
+    it("returns to the field with <Up>, and the field is editable again", function()
+      open_back_form(THREE)
+      type_into_field("abc")
+      keys("<Down>")
+      keys("<Up>")
+      assert.is_nil(focused_box())
+      assert.is_true(vim.bo.modifiable)
+      assert.equals("abc", field_text())
+      assert.equals(1, vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("keeps <Esc> a cancel while the buttons have focus", function()
+      local r = open_back_form({ { name = "a", label = "A", required = true }, THREE[2] })
+      keys("<Down>")
+      keys("<Esc>")
+      assert.is_true(r.cancelled)
+    end)
+
+    it("does not edit the labels whatever moves the cursor there", function()
+      open_back_form(THREE)
+      type_into_field("abc")
+      vim.api.nvim_win_set_cursor(0, { 2, 3 })
+      vim.cmd("doautocmd <nomodeline> CursorMoved")
+      assert.equals(1, vim.api.nvim_win_get_cursor(0)[1], "the cursor goes back to the field")
+    end)
+  end)
+
+  describe("the button row, by mouse", function()
+    it("presses Next in one click", function()
+      local r = open_back_form(THREE)
+      type_into_field("clicked")
+      click_button("Next ↵")
+      assert.equals("B (2/3)", title_now())
+      keys("<S-Tab>")
+      assert.equals("clicked", field_text())
+      assert.is_nil(r.cancelled)
+    end)
+
+    it("presses Back in one click", function()
+      open_back_form(THREE)
+      type_into_field("one")
+      keys("<CR>")
+      click_button("← Back")
+      assert.equals("A (1/3)", title_now())
+      assert.equals("one", field_text())
+    end)
+
+    it("presses Skip in one click", function()
+      local r = open_back_form({
+        { name = "a", label = "A", default = "dflt" },
+        { name = "b", label = "B" },
+      })
+      type_into_field("discarded")
+      click_button("Skip")
+      assert.equals("B (2/2)", title_now())
+      keys("<CR>")
+      assert.equals("dflt", r.values.a)
+    end)
+
+    it("ignores blank space on the button row", function()
+      open_back_form(THREE)
+      click_at(2, 1)
+      assert.equals("A (1/3)", title_now())
+      assert.is_nil(focused_box())
+    end)
+
+    it("puts the focus back in the field when its text is clicked", function()
+      open_back_form(THREE)
+      type_into_field("abcdef")
+      keys("<Down>")
+      assert.equals("[ Next ↵ ]", focused_box())
+      click_at(1, 3)
+      assert.is_nil(focused_box())
+      assert.is_true(vim.bo.modifiable)
+      assert.equals("abcdef", field_text())
+    end)
+
+    it("leaves a click outside the float to Neovim", function()
+      open_back_form(THREE)
+      local real, fed = vim.fn.getmousepos, nil
+      local real_feedkeys = vim.api.nvim_feedkeys
+      vim.fn.getmousepos = function()
+        return { winid = 1000, line = 1, column = 1 }
+      end
+      vim.api.nvim_feedkeys = function(k, mode)
+        fed = { k = k, mode = mode }
+      end
+      local map = vim.fn.maparg("<LeftMouse>", "n", false, true)
+      local ok, err = pcall(map.callback)
+      vim.fn.getmousepos = real
+      vim.api.nvim_feedkeys = real_feedkeys
+      assert(ok, err)
+      assert.is_not_nil(fed, "the click was handed back")
+      assert.equals(vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true), fed.k)
+      assert.is_truthy(fed.mode:find("n", 1, true), "un-remapped, so it cannot loop")
+    end)
+  end)
+
+  it("works through kit.popup({ type = 'form' }) and kit.sync", function()
+    local r = {}
+    require("ui.kit").popup({
+      type = "form",
+      back = true,
+      fields = { { name = "x", label = "X" }, { name = "y", label = "Y" } },
+      on_submit = function(v)
+        r.values = v
+      end,
+    })
+    assert.equals("X (1/2)", title_now())
+    type_into_field("1")
+    keys("<CR>")
+    keys("<S-Tab>")
+    keys("<CR>")
+    type_into_field("2")
+    keys("<CR>")
+    assert.same({ x = "1", y = "2" }, r.values)
+  end)
+end)
+
+describe("kit.form without `back`", function()
+  after_each(close_floats)
+
+  it("is unchanged: one line, no indicator, no buttons, no new keys", function()
+    local r = {}
+    require("ui.kit").form({
+      fields = { { name = "a", label = "A", default = "dA" }, { name = "b", label = "B" } },
+      on_submit = function(v)
+        r.values = v
+      end,
+    })
+    assert.equals("A", title_now())
+    assert.equals(1, vim.api.nvim_win_get_height(0))
+    assert.equals(1, vim.api.nvim_buf_line_count(0))
+    assert.equals("dA", field_text())
+    for _, k in ipairs({ "<BS>", "<S-Tab>", "<C-p>", "<Down>", "<Tab>", "<LeftMouse>" }) do
+      for _, mode in ipairs({ "n", "i" }) do
+        -- Buffer-local only: Neovim's own defaults map a few of these globally.
+        local map = vim.fn.maparg(k, mode, false, true)
+        assert.is_true((map.buffer or 0) ~= 1, k .. " is not bound in the field without opt-in")
+      end
+    end
+    keys("<CR>")
+    assert.equals("B", title_now())
+    type_into_field("bee")
+    keys("<CR>")
+    assert.same({ a = "dA", b = "bee" }, r.values)
+  end)
+
+  it("treats back = false like an absent option", function()
+    require("ui.kit").form({
+      back = false,
+      fields = { { name = "a", label = "A" }, { name = "b", label = "B" } },
+      on_submit = function() end,
+    })
+    assert.equals("A", title_now())
+    assert.equals(1, vim.api.nvim_win_get_height(0))
+  end)
+end)
+
+describe("ui.kit.input back and buttons", function()
+  after_each(close_floats)
+
+  local input = require("ui.kit.input")
+
+  it("drops a back button that has no on_back, and ids it does not know", function()
+    input.open({
+      buttons = {
+        { id = "back", label = "Back" },
+        { id = "bogus", label = "Bogus" },
+        { id = "submit", label = "OK" },
+        { id = "skip" },
+      },
+    })
+    assert.equals("[ OK ]", button_row_text())
+  end)
+
+  it("hands the line as it stood to on_back", function()
+    local got
+    input.open({
+      default = "half",
+      on_back = function(line)
+        got = line
+      end,
+    })
+    keys("<S-Tab>")
+    assert.equals("half", got)
+  end)
+
+  it("does not go back when on_back is absent", function()
+    local r = input.open({ default = "stay" })
+    keys("<S-Tab>")
+    keys("<C-p>")
+    assert.is_true(r:is_valid())
+  end)
+
+  it("is one line without buttons, whatever on_back is", function()
+    local r = input.open({ on_back = function() end })
+    assert.equals(1, vim.api.nvim_buf_line_count(r.bufnr))
+    assert.equals(1, vim.api.nvim_win_get_height(r.winid))
+  end)
+
+  it("widens the float to fit the button row, never narrower than asked", function()
+    local narrow = input.open({
+      width = 12,
+      buttons = { { id = "skip", label = "Skip" }, { id = "submit", label = "Next ↵" } },
+    })
+    assert.is_true(vim.api.nvim_win_get_width(narrow.winid) >= 20)
+    local wide = input.open({ width = 60, buttons = { { id = "submit", label = "OK" } } })
+    assert.equals(60, vim.api.nvim_win_get_width(wide.winid))
+  end)
+
+  it("does not let u reach the button row", function()
+    local r = input.open({ buttons = { { id = "submit", label = "OK" } } })
+    local before = vim.api.nvim_buf_get_lines(r.bufnr, 1, 2, false)[1]
+    pcall(vim.cmd, "silent! undo")
+    assert.equals(before, vim.api.nvim_buf_get_lines(r.bufnr, 1, 2, false)[1])
+  end)
+
+  it("keeps the completion popup's keys when completion is set", function()
+    local r = input.open({
+      completion = "file",
+      on_back = function() end,
+      buttons = { { id = "submit", label = "OK" } },
+    })
+    assert.is_true(r:is_valid())
+    -- <Tab> stays the completion trigger (insert mode); <Down> is how the buttons are reached.
+    assert.is_true(vim.fn.maparg("<Tab>", "i", false, true).expr == 1)
+    keys("<Down>")
+    assert.equals("[ OK ]", focused_box())
+  end)
+end)
+
+describe("ui.kit.buttons", function()
+  local buttons = require("ui.kit.buttons")
+
+  it("lays the row out centered, with a byte range per drawn box", function()
+    local line, ranges = buttons.layout({ "A", "B" }, 20, 3)
+    assert.equals("[ A ]  [ B ]", vim.trim(line))
+    assert.equals(buttons.row_width({ "A", "B" }), vim.fn.strdisplaywidth(vim.trim(line)))
+    assert.equals(2, #ranges)
+    assert.equals(3, ranges[1].row)
+    assert.equals("[ A ]", line:sub(ranges[1].start_col + 1, ranges[1].end_col))
+    assert.equals("[ B ]", line:sub(ranges[2].start_col + 1, ranges[2].end_col))
+  end)
+
+  it("measures multibyte labels in display cells but ranges them in bytes", function()
+    local line, ranges = buttons.layout({ "← Back", "Next ↵" }, 40, 0)
+    assert.equals("[ ← Back ]", line:sub(ranges[1].start_col + 1, ranges[1].end_col))
+    assert.equals("[ Next ↵ ]", line:sub(ranges[2].start_col + 1, ranges[2].end_col))
+    assert.equals(
+      vim.fn.strdisplaywidth("[ ← Back ]  [ Next ↵ ]"),
+      buttons.row_width({ "← Back", "Next ↵" })
+    )
+  end)
+
+  it("wraps focus both ways and survives an empty row", function()
+    assert.equals(1, buttons.wrap(3, 1, 3))
+    assert.equals(3, buttons.wrap(1, -1, 3))
+    assert.equals(2, buttons.wrap(1, 1, 3))
+    assert.equals(1, buttons.wrap(1, 1, 0))
+  end)
+
+  it("hit-tests getmousepos() against the ranges, and says where a miss was", function()
+    local _, ranges = buttons.layout({ "A", "B" }, 20, 1)
+    local real = vim.fn.getmousepos
+    local winid = vim.api.nvim_get_current_win()
+    local function at(w, line, column)
+      vim.fn.getmousepos = function()
+        return { winid = w, line = line, column = column }
+      end
+      return buttons.hit(ranges, winid)
+    end
+    local i = at(winid, 2, ranges[2].start_col + 2)
+    assert.equals(2, i)
+    local miss, pos = at(winid, 2, 1)
+    assert.is_nil(miss)
+    assert.is_not_nil(pos, "a miss inside the window still reports where")
+    local off_row = at(winid, 1, ranges[1].start_col + 2)
+    assert.is_nil(off_row)
+    local outside, outside_pos = at(winid + 1000, 2, ranges[1].start_col + 2)
+    assert.is_nil(outside)
+    assert.is_nil(outside_pos)
+    vim.fn.getmousepos = real
+  end)
+
+  it("paints the focused box and nothing else", function()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "x" })
+    local ns = vim.api.nvim_create_namespace("spec_buttons_paint")
+    local ranges =
+      { { row = 0, start_col = 0, end_col = 1 }, { row = 0, start_col = 0, end_col = 1 } }
+    buttons.paint(buf, ns, ranges, 2)
+    assert.equals(1, #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}))
+    buttons.paint(buf, ns, ranges, nil)
+    assert.equals(0, #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}))
+    vim.api.nvim_buf_delete(buf, { force = true })
+    buttons.paint(buf, ns, ranges, 1) -- a dead buffer is a no-op
+  end)
+end)
+
+describe("kit.confirm after the shared buttons refactor", function()
+  -- Fetched per test, not once at collection: the failure-path specs above
+  -- swap `package.loaded["ui.kit.confirm"]` and reload it, and the instance
+  -- that is open has to be the one that is clicked.
+  local confirm
+
+  before_each(function()
+    confirm = require("ui.kit.confirm")
+  end)
+
+  after_each(function()
+    confirm.close()
+  end)
+
+  --- Left-click the drawn `[ label ]` box of the open dialog.
+  ---@param label string
+  local function click_box(label)
+    local buf = vim.api.nvim_get_current_buf()
+    for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      local from = line:find("[ " .. label .. " ]", 1, true)
+      if from then
+        local real = vim.fn.getmousepos
+        vim.fn.getmousepos = function()
+          return { winid = vim.api.nvim_get_current_win(), line = row, column = from + 2 }
+        end
+        confirm.click()
+        vim.fn.getmousepos = real
+        return
+      end
+    end
+    error("no such button: " .. label)
+  end
+
+  it("still focuses and answers the button that was clicked", function()
+    local answer = "unset"
+    confirm.open({
+      question = "Sure?",
+      on_answer = function(a)
+        answer = a
+      end,
+    })
+    click_box("No")
+    assert.is_false(answer)
+    assert.is_false(confirm.is_open())
+  end)
+
+  it("still answers a custom choice by click, and ignores blank space", function()
+    local answer = "unset"
+    confirm.open({
+      question = "Pick",
+      choices = { "Keep", "Discard" },
+      on_answer = function(a)
+        answer = a
+      end,
+    })
+    local real = vim.fn.getmousepos
+    vim.fn.getmousepos = function()
+      return { winid = vim.api.nvim_get_current_win(), line = 1, column = 1 }
+    end
+    confirm.click()
+    vim.fn.getmousepos = real
+    assert.equals("unset", answer)
+    assert.is_true(confirm.is_open())
+    click_box("Discard")
+    assert.equals("Discard", answer)
+  end)
+
+  it("still moves focus with wrap, and paints it with KitSelection", function()
+    confirm.open({
+      question = "Q",
+      choices = { "A", "B", "C" },
+      on_answer = function() end,
+    })
+    confirm.move(-1)
+    assert.equals(3, confirm.current_focus())
+    local ns = vim.api.nvim_get_namespaces().lib_kit_confirm
+    local marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })
+    assert.equals(1, #marks)
+    assert.equals("KitSelection", marks[1][4].hl_group)
+    confirm.move(1)
+    assert.equals(1, confirm.current_focus())
+  end)
+end)

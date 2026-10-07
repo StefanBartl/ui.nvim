@@ -492,6 +492,13 @@ and lib.nvim cannot require `ui.nvim` without inverting the dependency
 direction the whole fleet rests on. So both copies stay, and lib.nvim's is
 frozen: no new features, only what is here already.
 
+One opt-in feature went across anyway, on 2026-10-07: `kit.form`'s `back`
+navigation (and the `ui.kit.buttons` helper it shares with `kit.confirm`).
+The drift spec compares code, not intent, so a kit feature left on one side
+is a red CI run; the feature is off unless asked for, so lib.nvim's own call
+sites behave as before. Until the spec learns a way to name a deliberate
+difference, a kit feature has to be mirrored like a fix — see below.
+
 **"Frozen" does not mean "keeps known bugs", and for a while it did.** By
 2026-09-17 three fixes and a security note lived only here, while the copy
 lib.nvim actually runs still leaked an augroup per popup, left a picker
@@ -514,7 +521,11 @@ side only. Byte-identity is not achievable; identical code is.
 the spec's own rename table: from this repo's root,
 `LIB_NVIM_DIR=<lib.nvim> nvim --headless -n -u NONE -l scripts/mirror_kit.lua`
 writes the files that differ and formats them with lib.nvim's stylua config
-(`--check` only reports). Push lib.nvim **first**: this repo's CI reads
+(`--check` only reports; `--only buttons.lua form.lua` restricts it to the files
+named, relative to the kit directory). Name the files you changed whenever the
+two copies differ in one you did not: without `--only` the script overwrites
+lib.nvim's version of it with this repo's, which loses work if lib.nvim is the
+one that is ahead there (as `picker.lua` was on 2026-10-07). Push lib.nvim **first**: this repo's CI reads
 lib.nvim's `ci-verified` branch, which advances only after lib.nvim's own CI is
 green on all three systems, so the other order leaves the drift check red until
 it catches up.
