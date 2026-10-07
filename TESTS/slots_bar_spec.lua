@@ -18,9 +18,14 @@ describe("ui.slots bar", function()
 
   --- Run the scheduled redraws.
   local function flush()
-    vim.wait(40, function()
+    -- One turn of the loop first (a click's action is scheduled), then until the
+    -- redraw an event asked for has run.
+    vim.wait(20, function()
       return false
     end)
+    vim.wait(2000, function()
+      return not chips._pending()
+    end, 2)
   end
 
   ---@param opts table|nil
@@ -55,18 +60,53 @@ describe("ui.slots bar", function()
     return table.concat(lines(), "\n")
   end
 
-  --- Point the pointer at line `line` of the bar and deliver `key`.
-  ---@param key string  # "<LeftMouse>", ...
+  --- A `getmousepos()` for the screen cell of line `line` of the bar. The bar is
+  --- not focusable, so `winid` names the window under it, as in a real session.
   ---@param line integer
-  local function click(key, line)
-    local st = chips.state()
+  ---@return table
+  local function pointer(line)
+    local at = vim.api.nvim_win_get_position(chips.state().win)
+    return {
+      winid = vim.api.nvim_get_current_win(),
+      line = 1,
+      screenrow = at[1] + line,
+      screencol = at[2] + 3,
+    }
+  end
+
+  --- Run `fn` with the pointer stubbed to `pos`.
+  ---@param pos table
+  ---@param fn fun(): any
+  ---@return any
+  local function with_pointer(pos, fn)
     local original = vim.fn.getmousepos
     vim.fn.getmousepos = function()
-      return { winid = st.win, line = line, screenrow = 1, screencol = 1 }
+      return pos
     end
-    chips._on_key("", vim.api.nvim_replace_termcodes(key, true, true, true))
+    local ok, res = pcall(fn)
     vim.fn.getmousepos = original
+    assert(ok, res)
+    return res
+  end
+
+  --- Deliver mouse key `name` at line `line` of the bar; returns what the
+  --- listener answered ("" = the key was taken, nil = left alone).
+  ---@param name string
+  ---@param line integer
+  ---@return string|nil
+  local function key_at(name, line)
+    local res = with_pointer(pointer(line), function()
+      return chips._on_key("", vim.api.nvim_replace_termcodes(name, true, true, true))
+    end)
     flush()
+    return res
+  end
+
+  --- Click `key` at line `line` of the bar.
+  ---@param key string
+  ---@param line integer
+  local function click(key, line)
+    key_at(key, line)
   end
 
   before_each(function()
@@ -380,7 +420,7 @@ describe("ui.slots bar", function()
   end)
 
   describe("the mouse", function()
-    local path, main
+    local path
 
     before_each(function()
       path = require("lib.nvim.fs.normkey")((function()
@@ -391,24 +431,19 @@ describe("ui.slots bar", function()
       slots.add({ kind = "file", path = path })
       slots.add({ kind = "yank", text = "copy me" })
       chips.open()
-      main = vim.api.nvim_get_current_win()
     end)
 
-    it("applies the slot under a left click and returns the focus it moved", function()
+    it("is not focusable: the window cycle and :windo never meet it", function()
+      local cfg = vim.api.nvim_win_get_config(chips.state().win)
+      assert.is_false(cfg.focusable)
+    end)
+
+    it("applies the slot under a left click, takes the key and moves no focus", function()
       vim.cmd("enew")
-      main = vim.api.nvim_get_current_win()
-      local bar = chips.state().win
-      -- what Neovim does with a click on a focusable float: it enters it
-      local st = chips.state()
-      local original = vim.fn.getmousepos
-      vim.fn.getmousepos = function()
-        return { winid = st.win, line = 2 }
-      end
-      chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
-      vim.fn.getmousepos = original
-      vim.api.nvim_set_current_win(bar)
-      flush()
-      assert.equals(main, vim.api.nvim_get_current_win())
+      local win = vim.api.nvim_get_current_win()
+      local answer = key_at("<LeftMouse>", 2)
+      assert.equals("", answer)
+      assert.equals(win, vim.api.nvim_get_current_win())
       assert.equals(path, require("lib.nvim.fs.normkey")(vim.api.nvim_buf_get_name(0)))
     end)
 
@@ -421,35 +456,84 @@ describe("ui.slots bar", function()
       end
     end)
 
+    it("counts a fast second click (<2-LeftMouse>) as a click again", function()
+      config.get().clipboard = { "a" }
+      vim.fn.setreg("a", "")
+      click("<2-LeftMouse>", 5)
+      assert.equals("copy me", vim.fn.getreg("a"))
+    end)
+
+    it("takes a modified click without acting on it", function()
+      config.get().clipboard = { "a" }
+      vim.fn.setreg("a", "")
+      assert.equals("", key_at("<C-LeftMouse>", 5))
+      assert.equals("", vim.fn.getreg("a"))
+    end)
+
+    it("takes the drag and the release of a press that began on the bar", function()
+      assert.equals("", key_at("<LeftMouse>", 2))
+      assert.equals("", key_at("<LeftDrag>", 5))
+      assert.equals("", key_at("<LeftRelease>", 5))
+      -- and a release with no press behind it belongs to whoever wants it
+      assert.is_nil(key_at("<LeftRelease>", 5))
+    end)
+
+    it("leaves a drag alone that began in the editor", function()
+      assert.is_nil(key_at("<LeftDrag>", 5))
+      assert.is_nil(key_at("<LeftRelease>", 5))
+    end)
+
     it("ignores a click that is not on the bar", function()
       vim.cmd("enew")
-      local original = vim.fn.getmousepos
-      vim.fn.getmousepos = function()
-        return { winid = vim.api.nvim_get_current_win(), line = 2 }
-      end
-      chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
-      vim.fn.getmousepos = original
+      local answer = with_pointer(
+        { winid = vim.api.nvim_get_current_win(), line = 1, screenrow = 2, screencol = 1 },
+        function()
+          return chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
+        end
+      )
       flush()
+      assert.is_nil(answer)
       assert.equals("", vim.api.nvim_buf_get_name(0))
     end)
 
-    it("ignores keys that are no mouse keys, and a click on the bar's empty row", function()
-      local st = chips.state()
-      local original = vim.fn.getmousepos
-      vim.fn.getmousepos = function()
-        return { winid = st.win, line = 99 }
-      end
-      chips._on_key("j", "j")
-      chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
-      vim.fn.getmousepos = original
-      flush()
-      assert.is_true(vim.api.nvim_win_is_valid(st.win))
+    it("ignores keys that are no mouse keys, and a cell past the last row", function()
+      assert.is_nil(chips._on_key("j", "j"))
+      local at = vim.api.nvim_win_get_position(chips.state().win)
+      local answer = with_pointer(
+        { winid = 1000, line = 1, screenrow = at[1] + 99, screencol = at[2] + 2 },
+        function()
+          return chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
+        end
+      )
+      assert.is_nil(answer)
     end)
 
-    it("does not change the key it looks at", function()
-      assert.is_nil(
-        chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
-      )
+    it("leaves a click to a float that is stacked above the bar", function()
+      config.get().clipboard = { "a" }
+      vim.fn.setreg("a", "")
+      local over = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), false, {
+        relative = "editor",
+        row = 0,
+        col = vim.o.columns - 12,
+        width = 12,
+        height = 8,
+        zindex = 60,
+      })
+      local pos = pointer(5)
+      pos.winid = over
+      local answer = with_pointer(pos, function()
+        return chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
+      end)
+      flush()
+      pcall(vim.api.nvim_win_close, over, true)
+      assert.is_nil(answer)
+      assert.equals("", vim.fn.getreg("a"))
+    end)
+
+    it("takes the middle click and the sideways wheel away from the code below", function()
+      assert.equals("", key_at("<MiddleMouse>", 2))
+      assert.equals("", key_at("<ScrollWheelLeft>", 2))
+      assert.equals("", key_at("<ScrollWheelRight>", 2))
     end)
 
     it("opens a menu of the slot on a right click", function()
@@ -483,47 +567,191 @@ describe("ui.slots bar", function()
       assert.equals(1, chips.state().top_n)
     end)
 
-    it("scrolls by one on a click on a counter", function()
+    it("scrolls by one on a click on a counter, also on a fast second click", function()
       vim.o.lines = 14
       slots.clear_all()
       add_yanks(10)
       chips.set_focus(1)
       flush()
-      click("<LeftMouse>", 10)
+      click("<LeftMouse>", #lines())
       assert.equals(2, chips.state().top_n)
+      -- the counters moved with the redraw: the down counter is the last row again
+      click("<2-LeftMouse>", #lines())
+      assert.equals(3, chips.state().top_n)
       click("<LeftMouse>", 1)
-      assert.equals(1, chips.state().top_n)
+      assert.equals(2, chips.state().top_n)
     end)
 
-    it("tells ui.menu that the pointer is on the bar", function()
-      local st = chips.state()
-      local original = vim.fn.getmousepos
-      vim.fn.getmousepos = function()
-        return { winid = st.win, line = 2 }
-      end
-      assert.is_true(chips.pointer_on_bar())
+    it("tells ui.menu that the pointer is on the bar, by the screen cell", function()
       local menu = require("ui.menu")
       local opened = false
       local original_open = menu.open
       menu.open = function()
         opened = true
       end
-      menu.on_right_click()
+      with_pointer(pointer(2), function()
+        assert.is_true(chips.pointer_on_bar())
+        menu.on_right_click()
+      end)
       menu.open = original_open
-      vim.fn.getmousepos = original
       assert.is_false(opened)
-      assert.is_false(chips.pointer_on_bar())
+      with_pointer(
+        { winid = vim.api.nvim_get_current_win(), line = 1, screenrow = 1, screencol = 1 },
+        function()
+          assert.is_false(chips.pointer_on_bar())
+        end
+      )
+    end)
+  end)
+
+  describe("what a slot may look like", function()
+    it("survives a label with a newline, a NUL or a tab, and a label that is no string", function()
+      store.set(1, { kind = "yank", text = "x", label = "two\nlines" })
+      store.set(2, { kind = "yank", text = "x", label = "a\0b" })
+      store.set(3, { kind = "yank", text = "x", label = "a\tb", icon = "i\nj" })
+      store.set(4, { kind = "yank", text = "x", label = { "table" } })
+      chips.open()
+      flush()
+      local st = chips.state()
+      assert.is_not_nil(st.win)
+      local width = vim.api.nvim_win_get_width(st.win)
+      for _, l in ipairs(st.lines) do
+        assert.is_nil(l:find("[%c]"))
+        assert.equals(width, vim.fn.strdisplaywidth(l))
+      end
+      assert.is_false(vim.bo[st.buf].modifiable)
+    end)
+
+    it("leaves the buffer read-only and says so once if a line is refused anyway", function()
+      add_yanks(1)
+      chips.open()
+      local st = chips.state()
+      local original = vim.api.nvim_buf_set_lines
+      vim.api.nvim_buf_set_lines = function(buf, ...)
+        if buf == st.buf then
+          error("refused")
+        end
+        return original(buf, ...)
+      end
+      chips.refresh()
+      chips.refresh()
+      vim.api.nvim_buf_set_lines = original
+      assert.is_false(vim.bo[st.buf].modifiable)
+      local told = vim.tbl_filter(function(m)
+        return m:find("could not be drawn", 1, true) ~= nil
+      end, messages)
+      assert.equals(1, #told)
+    end)
+  end)
+
+  describe("editors of unusual size and setup", function()
+    it("shows the slot itself, not its borders, when only a row or two are free", function()
+      vim.o.lines, vim.o.cmdheight, vim.o.laststatus = 5, 3, 0
+      add_yanks(5)
+      chips.open()
+      chips.set_focus(3)
+      flush()
+      local st = chips.state()
+      assert.is_not_nil(st.win)
+      assert.is_true(vim.api.nvim_win_get_height(st.win) <= 2)
+      assert.is_truthy(table.concat(st.lines, "\n"):find("slot 3", 1, true))
+      vim.o.cmdheight, vim.o.laststatus = 1, 1
+    end)
+
+    it("draws a border of the right width when box characters are two cells wide", function()
+      local original = vim.o.ambiwidth
+      vim.o.ambiwidth = "double"
+      add_yanks(2)
+      chips.open()
+      local width = vim.api.nvim_win_get_width(chips.state().win)
+      for _, l in ipairs(lines()) do
+        assert.equals(width, vim.fn.strdisplaywidth(l), l)
+      end
+      vim.o.ambiwidth = original
+    end)
+
+    it("draws a solid chip even when the editor has no background colour", function()
+      vim.api.nvim_set_hl(0, "Normal", {})
+      vim.api.nvim_set_hl(0, "NormalFloat", {})
+      start({ style = "solid" })
+      add_yanks(1)
+      chips.open()
+      local hl = vim.api.nvim_get_hl(0, { name = "UiSlotsSolid_KitMuted", link = false })
+      local accent = vim.api.nvim_get_hl(0, { name = "UiSlotsSolid_KitAccent", link = false })
+      assert.is_true(hl.reverse == true or hl.bg ~= nil or next(accent) ~= nil)
+    end)
+
+    it("follows a change of the command-line height and of the tab line", function()
+      -- The runner's child is still starting up, and Neovim sends no OptionSet then:
+      -- the event is sent by hand. (Outside the runner `:set cmdheight=4` sends it.)
+      local function set(name, value)
+        vim.o[name] = value
+        vim.api.nvim_exec_autocmds("OptionSet", { pattern = name })
+        flush()
+      end
+      vim.o.lines = 14
+      add_yanks(10)
+      chips.open()
+      local before = #lines()
+      set("cmdheight", 4)
+      assert.is_true(#lines() < before)
+      set("cmdheight", 1)
+      assert.equals(before, #lines())
+      set("showtabline", 2)
+      assert.equals(1, vim.api.nvim_win_get_config(chips.state().win).row)
+      set("showtabline", 1)
+    end)
+
+    it("learns the file of a relative path anew after :cd", function()
+      start({ scope = "global" })
+      local a, b = dir .. "/da", dir .. "/db"
+      vim.fn.mkdir(a, "p")
+      vim.fn.mkdir(b, "p")
+      vim.fn.writefile({ "a" }, a .. "/f.txt")
+      vim.fn.writefile({ "b" }, b .. "/f.txt")
+      local old = vim.fn.getcwd()
+      vim.cmd.cd(a)
+      slots.add({ kind = "file", path = "f.txt" })
+      vim.cmd.edit(a .. "/f.txt")
+      chips.open()
+      assert.is_truthy(lines()[2]:find("•", 1, true))
+      vim.cmd.cd(b)
+      vim.cmd.edit(b .. "/f.txt")
+      flush()
+      assert.is_truthy(lines()[2]:find("•", 1, true))
+      vim.cmd.cd(old)
+    end)
+
+    it("comes back when its window is closed from outside", function()
+      add_yanks(2)
+      chips.open()
+      local win = chips.state().win
+      vim.api.nvim_win_close(win, true)
+      flush()
+      assert.is_not_nil(chips.state().win)
+      assert.is_not.equals(win, chips.state().win)
+    end)
+
+    it("survives a colour scheme change", function()
+      add_yanks(2)
+      chips.open()
+      vim.api.nvim_exec_autocmds("ColorScheme", {})
+      flush()
+      assert.is_not_nil(chips.state().win)
     end)
   end)
 
   describe("focus", function()
-    it("sends the focus back when the bar is entered some other way", function()
+    it("never lets the bar into the window cycle", function()
       add_yanks(2)
       chips.open()
-      local main = vim.api.nvim_get_current_win()
-      vim.api.nvim_set_current_win(chips.state().win)
-      flush()
-      assert.equals(main, vim.api.nvim_get_current_win())
+      vim.cmd.vsplit()
+      local bar = chips.state().win
+      for _ = 1, 6 do
+        vim.cmd.wincmd("w")
+        assert.is_not.equals(bar, vim.api.nvim_get_current_win())
+      end
+      vim.cmd("only")
     end)
   end)
 
