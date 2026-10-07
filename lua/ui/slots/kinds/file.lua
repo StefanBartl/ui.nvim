@@ -38,6 +38,10 @@ local function target_path(slot, ctx)
   local resolved, unknown = resolve.resolve(slot.path, ctx)
   -- Absolute: a relative name that starts with "+" would be read by :edit as
   -- a +cmd argument, and the position memory needs one spelling per file.
+  if resolved == "" then
+    -- Nothing to open (every placeholder was empty): not the current directory.
+    return "", unknown
+  end
   return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
 end
 

@@ -23,6 +23,7 @@ require("ui.slots.@types")
 
 local config = require("ui.slots.config")
 local registry = require("ui.slots.kinds.registry")
+local resolve = require("ui.slots.resolve")
 local store = require("ui.slots.store")
 local util = require("ui.slots.util")
 
@@ -187,9 +188,15 @@ function M.add(slot, n)
     local normkey = require("lib.nvim.fs.normkey")
     local key = normkey(path)
     for _, existing in ipairs(store.list()) do
-      if existing.kind == "file" and type(existing.path) == "string" then
-        local text = registry.text(existing)
-        if text and normkey(text) == key then
+      -- Only slots whose path is a plain path: one with a placeholder stands
+      -- for whatever the editor looks like when it runs, not for this file.
+      if
+        existing.kind == "file"
+        and type(existing.path) == "string"
+        and not resolve.has_placeholder(existing.path)
+      then
+        local text = resolve.resolve(existing.path, {})
+        if text ~= "" and normkey(vim.fs.normalize(text)) == key then
           say(("already in slot %d"):format(existing.n), vim.log.levels.INFO)
           return existing.n
         end

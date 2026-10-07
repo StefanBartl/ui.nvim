@@ -188,4 +188,19 @@ function M.unknown(text)
   return names
 end
 
+--- Does `text` hold a placeholder (a `{name}` that is not an escaped brace)?
+---@param text string|nil
+---@return boolean
+function M.has_placeholder(text)
+  local found = false
+  if type(text) == "string" then
+    scan(text, function(kind)
+      if kind == "name" then
+        found = true
+      end
+    end)
+  end
+  return found
+end
+
 return M
