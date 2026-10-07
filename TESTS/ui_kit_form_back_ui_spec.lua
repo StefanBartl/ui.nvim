@@ -363,4 +363,55 @@ describe("kit.form back navigation in a real Neovim", function()
     end, "the form is still on field A, and <Down> still reaches its buttons")
     assert.equals("A (1/3)", s.title)
   end)
+
+  describe(
+    "a field that was split by a paste or <C-j> before the focus moved onto the buttons",
+    function()
+      -- A line opened in Insert mode keeps the indent Neovim added (`autoindent` is on in
+      -- every Neovim): `stopinsert` deletes the white space under the cursor, and the
+      -- cursor was parked on the space after the `[` of the button. The row came back
+      -- one space short, and the field joined with it into the answer.
+      for name, split in pairs({
+        ["a linewise register"] = function()
+          lua([[vim.fn.setreg('"', "copied line\n", "V")]])
+          input('<C-r>"')
+        end,
+        ["<C-j>"] = function()
+          input("<C-j>")
+        end,
+      }) do
+        it("keeps the button row whole after " .. name, function()
+          open_form()
+          local row = state().lines[2]
+          assert.is_truthy(row:find("[ Next ↵ ]", 1, true), "the row as laid out: " .. row)
+          split()
+          expect(function(x)
+            return #x.lines >= 2 and x.mode == "i"
+          end, "the field was split")
+          input("<Tab>")
+          local s = expect(function(x)
+            return not x.modifiable
+          end, "the focus is on the buttons")
+          assert.equals(row, s.lines[2], "the button row is as it was laid out")
+          input("<Up>")
+          s = expect(function(x)
+            return x.modifiable
+          end, "back in the field")
+          assert.equals(2, #s.lines)
+          assert.is_nil(s.lines[1]:find("Next", 1, true), "the field holds no button text")
+          assert.is_truthy(s.lines[1]:find("^abc"), "but what was typed: " .. s.lines[1])
+          assert.equals(row, s.lines[2])
+          input("<CR>")
+          expect(function(x)
+            return x.title == "B (2/3)"
+          end, "the next field opens")
+          input("<S-Tab>")
+          s = expect(function(x)
+            return x.title == "A (1/3)"
+          end, "and back")
+          assert.is_nil(s.lines[1]:find("Next", 1, true), "the answer carries no button text")
+        end)
+      end
+    end
+  )
 end)
