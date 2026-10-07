@@ -337,6 +337,32 @@ describe("kit.sheet", function()
       assert.is_false(r2.surf:is_valid())
     end)
 
+    it("does not stop Insert mode on the way to a refused click on Submit", function()
+      -- The click used to move the focus onto the button first, which stops Insert
+      -- mode -- after the mapping returns, so the `startinsert` of the refused submit,
+      -- which puts the focus back on the bad field, was ignored and the field ended
+      -- up in Normal mode (ui_kit_sheet_ui_spec.lua shows it for real).
+      local r = open(THREE)
+      assert.equals("a", r.surf:state().focus)
+      local stops = 0
+      local real_cmd = vim.cmd
+      vim.cmd = setmetatable({}, {
+        __call = function(_, c, ...)
+          if c == "stopinsert" then
+            stops = stops + 1
+          end
+          return real_cmd(c, ...)
+        end,
+        __index = real_cmd,
+      })
+      local ok, err = pcall(click_button, r, "Submit")
+      vim.cmd = real_cmd
+      assert(ok, err)
+      assert.equals("b", r.surf:state().focus, "the blank required field has the focus again")
+      assert.is_nil(r.values, "the submit was refused")
+      assert.equals(0, stops, "nothing stopped Insert mode on the way")
+    end)
+
     it("moves along the buttons with h/l and presses with <Space>", function()
       local r = open(THREE)
       keys("<Down><Down><Down>")
