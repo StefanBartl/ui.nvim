@@ -10,6 +10,7 @@
 --- whose prompt slot the caller wires itself.
 
 local layout = require("ui.kit.layout")
+local input = require("ui.kit.input")
 local map = require("lib.nvim.bindings.keymap")
 
 local api = vim.api
@@ -531,6 +532,8 @@ function M.open(opts)
     render(nil)
   end
   prompt:focus()
+  -- A prompt that closes while its callback opens this picker must leave Insert mode on.
+  input.mark_opened()
   vim.cmd("startinsert")
 
   return handle

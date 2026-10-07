@@ -198,4 +198,151 @@ describe("kit.input in a real Neovim", function()
     assert.is_nil(vim.uv.fs_stat(tmp .. "/pwned_sh"), "no command ran (POSIX shell)")
     assert.is_nil(vim.uv.fs_stat(tmp .. "/pwned_cmd"), "no command ran (cmd.exe)")
   end)
+
+  describe("which mode the window a callback opens is in", function()
+    --- A prompt whose `on_submit` runs `opener` (Lua, in the child), answered with
+    --- `x<CR>`; the state once the dust of the mode change has settled.
+    ---@param opener string
+    ---@return table
+    local function after_submit(opener)
+      lua(([[
+        _G.RESULT = nil
+        require("ui.kit").input({
+          on_submit = function(v)
+            _G.RESULT = v
+            %s
+          end,
+        })
+      ]]):format(opener))
+      expect(function(s)
+        return s.mode == "i"
+      end, "the first prompt opens in Insert mode")
+      input("x<CR>")
+      expect(function(s)
+        return s.result == "x"
+      end, "the first prompt is answered")
+      vim.wait(200) -- `stopinsert` (or its absence) lands once the mapping has returned
+      return state()
+    end
+
+    -- A window to be typed into is opened in Insert mode: the prompt that closes
+    -- must not stop the Insert mode that the new window's own `startinsert` could not
+    -- re-enter (it is ignored while the old one's is still on).
+    for name, opener in pairs({
+      ["another prompt"] = [[ require("ui.kit").input({}) ]],
+      ["a sheet whose first field is text"] = [[
+        require("ui.kit").sheet({ fields = { { name = "a" } }, on_submit = function() end })
+      ]],
+      ["a picker"] = [[
+        require("ui.kit").picker({ on_change = function() end, on_submit = function() end })
+      ]],
+      ["a live_input"] = [[ require("ui.kit").live_input({ on_change = function() end }) ]],
+      ["a compare"] = [[
+        require("ui.kit").compare({
+          items = { "a", "b" },
+          render = function(item, surface) surface:set_lines({ item }) end,
+        })
+      ]],
+    }) do
+      it("is Insert mode for " .. name, function()
+        local s = after_submit(opener)
+        assert.equals("i", s.mode, "the new window is typed into, not commanded")
+      end)
+    end
+
+    -- Nothing that waits for typing: the prompt's Insert mode must end.
+    for name, opener in pairs({
+      ["nothing"] = [[ ]],
+      ["a chooser"] = [[
+        require("ui.kit.select").open({ items = { "a", "b" }, on_select = function() end })
+      ]],
+      ["a sheet that starts on a select"] = [[
+        require("ui.kit").sheet({
+          fields = { { name = "a", kind = "select", choices = { "x", "y" } } },
+          on_submit = function() end,
+        })
+      ]],
+    }) do
+      it("is Normal mode for " .. name, function()
+        local s = after_submit(opener)
+        assert.equals("n", s.mode, "no Insert mode is left behind")
+      end)
+    end
+
+    it("is Insert mode for the sheet that follows the last field of a form", function()
+      lua([[
+        _G.RESULT = nil
+        require("ui.kit").form({
+          fields = { { name = "a" } },
+          on_submit = function(v)
+            _G.RESULT = v.a
+            require("ui.kit").sheet({ fields = { { name = "b" } }, on_submit = function() end })
+          end,
+        })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the form opens in Insert mode")
+      input("x<CR>")
+      expect(function(s)
+        return s.result == "x"
+      end, "the form is answered")
+      vim.wait(200)
+      assert.equals("i", state().mode)
+    end)
+
+    it("leaves a window that was there before as it was, when a sheet closes over it", function()
+      -- A modifiable float in Normal mode opens a sheet and the sheet is cancelled: the
+      -- focus goes back to the float, which was never in Insert mode. It is a
+      -- modifiable float all the same, and used to be taken for the next prompt of a
+      -- chain, so the Insert mode of the sheet was left running in it.
+      lua([[
+        _G.RESULT = nil
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_open_win(buf, true, { relative = "editor", row = 2, col = 2, width = 20, height = 3 })
+        _G.ORIGIN = vim.api.nvim_get_current_win()
+        require("ui.kit").sheet({
+          fields = { { name = "a" } },
+          on_submit = function() end,
+          on_cancel = function() _G.RESULT = "cancelled" end,
+        })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the sheet opens in Insert mode")
+      input("<Esc>")
+      expect(function(s)
+        return s.result == "cancelled"
+      end, "the sheet is cancelled")
+      vim.wait(200)
+      assert.is_true(
+        lua([[return vim.api.nvim_get_current_win() == _G.ORIGIN]]),
+        "back in the float"
+      )
+      assert.equals("n", state().mode, "which is still in Normal mode")
+    end)
+
+    it("leaves a window that was there before as it was, when a prompt closes over it", function()
+      lua([[
+        _G.RESULT = nil
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_open_win(buf, true, { relative = "editor", row = 2, col = 2, width = 20, height = 3 })
+        _G.ORIGIN = vim.api.nvim_get_current_win()
+        require("ui.kit").input({ on_submit = function(v) _G.RESULT = v end })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the prompt opens in Insert mode")
+      input("x<CR>")
+      expect(function(s)
+        return s.result == "x"
+      end, "the prompt is answered")
+      vim.wait(200)
+      assert.is_true(
+        lua([[return vim.api.nvim_get_current_win() == _G.ORIGIN]]),
+        "back in the float"
+      )
+      assert.equals("n", state().mode)
+    end)
+  end)
 end)
