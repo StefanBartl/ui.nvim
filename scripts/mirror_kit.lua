@@ -3,6 +3,11 @@
 ---
 ---   LIB_NVIM_DIR=<lib.nvim> nvim --headless -n -u NONE -l scripts/mirror_kit.lua           # write what differs
 ---   LIB_NVIM_DIR=<lib.nvim> nvim --headless -n -u NONE -l scripts/mirror_kit.lua --check   # write nothing, exit 1 on drift
+---   ... -l scripts/mirror_kit.lua --only buttons.lua form.lua   # only these files (paths relative to the kit dir)
+---
+--- `--only` is for the day the two copies differ in a file you did NOT touch: without it
+--- this overwrites lib.nvim's version of that file with ui.nvim's, which is a loss when
+--- lib.nvim is the one that is ahead there (a change landed in lib.nvim first).
 ---
 --- Run from the ui.nvim root. `TESTS/kit_drift_spec.lua` requires the frozen copy
 --- to carry the same code as `lua/ui/kit/`, modulo the rename and ignoring
@@ -22,6 +27,21 @@
 
 local uv = vim.uv or vim.loop
 local check_only = vim.tbl_contains(arg or {}, "--check")
+
+--- `--only a.lua b/c.lua`: every argument after the flag that is not itself a flag.
+---@type table<string, true>|nil
+local only
+do
+  local seen = false
+  for _, a in ipairs(arg or {}) do
+    if a == "--only" then
+      seen = true
+      only = only or {}
+    elseif seen and a:sub(1, 2) ~= "--" then
+      only[a] = true
+    end
+  end
+end
 
 ---@param p string
 ---@return string
@@ -115,6 +135,20 @@ local function kit_files(dir)
 end
 
 local ui_files = kit_files(ui_kit)
+local all_ui_files = ui_files -- the "only in lib.nvim" report below is about the whole kit, not the --only subset
+if only then
+  for name in pairs(only) do
+    if not vim.tbl_contains(ui_files, name) then
+      io.stderr:write(
+        "mirror_kit: --only names a file that is not in " .. ui_kit .. ": " .. name .. "\n"
+      )
+      os.exit(2)
+    end
+  end
+  ui_files = vim.tbl_filter(function(rel)
+    return only[rel] == true
+  end, ui_files)
+end
 if #ui_files == 0 then
   io.stderr:write("mirror_kit: no .lua files under " .. ui_kit .. " -- run from the ui.nvim root\n")
   os.exit(2)
@@ -139,7 +173,7 @@ end
 -- Files only lib.nvim has are reported, never deleted: a rename or removal is a
 -- decision for a person.
 local ui_set = {}
-for _, rel in ipairs(ui_files) do
+for _, rel in ipairs(all_ui_files) do
   ui_set[rel] = true
 end
 local only_lib = vim.tbl_filter(function(rel)

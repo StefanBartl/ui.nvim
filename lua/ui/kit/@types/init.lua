@@ -195,6 +195,7 @@
 ---@field theme? Ui.Kit.ThemeArg
 ---@field width? integer
 ---@field relative? "editor"|"cursor"|"win"
+---@field back? boolean                    # opt-in back navigation: <BS> on an empty field / <S-Tab> / <C-p> / [← Back] reopen the previous field with its answer; "(i/n)" in the title; a [← Back] [Skip] [Next ↵] button row under the field (default off: nothing below changes)
 ---@field on_submit fun(values: table<string, string>)
 ---@field on_cancel? fun()
 
@@ -210,8 +211,24 @@
 ---@field secret? boolean                  # mask the input as you type (vim.fn.inputsecret replacement)
 ---@field mask? string                     # placeholder char when secret = true (default "*")
 ---@field completion? string               # a getcompletion() type ("file", "dir", ...); <Tab> completes (vim.fn.input's completion="file" replacement)
+---@field on_back? fun(line: string)        # opt-in: <BS> on an EMPTY line, <S-Tab> and <C-p> close the prompt and call this with the line as it stood (kit.form's `back` uses it)
+---@field buttons? Ui.Kit.InputButton[]     # opt-in: a clickable row of `[ Label ]` buttons under the field (the prompt is then two lines tall)
 ---@field on_submit? fun(line: string)      # <CR>
 ---@field on_cancel? fun()                  # <Esc>
+
+--- One button of `Ui.Kit.InputOpts.buttons`. `id` says what pressing it does:
+--- `submit` is `<CR>`, `skip` is `<Esc>`, `back` is the `on_back` keys (dropped
+--- when there is no `on_back`).
+---@class Ui.Kit.InputButton
+---@field id "back"|"skip"|"submit"
+---@field label string
+
+--- Where one button of a row sits: 0-based buffer row and byte columns
+--- (`end_col` exclusive) -- what an extmark takes, and what a click is tested against.
+---@class Ui.Kit.ButtonRange
+---@field row integer
+---@field start_col integer
+---@field end_col integer
 
 --- Options for `kit.live_input` / `kit.popup({ type = "live_input" })`.
 ---@class Ui.Kit.LiveInputOpts
@@ -320,6 +337,16 @@
 ---@field layout Ui.Kit.LayoutModule
 ---@field chooser Ui.Kit.ChooserModule  # low-level escape hatch behind kit.select -- see its own doc comment
 ---@field chip Ui.Kit.ChipModule  # persistent editor-corner status chip (mount/refresh/pulse/unmount)
+
+--- `ui.kit.buttons`: the row layout, focus highlight and mouse hit-test that
+--- `kit.confirm` and the button row of `kit.input`/`kit.form` share. Stateless.
+---@class Ui.Kit.ButtonsModule
+---@field box fun(label: string): string  # "[ label ]"
+---@field row_width fun(labels: string[]): integer  # display width of the whole row
+---@field layout fun(labels: string[], width: integer, row: integer): string, Ui.Kit.ButtonRange[]
+---@field paint fun(buf: integer|nil, ns: integer, ranges: Ui.Kit.ButtonRange[], focus: integer|nil)  # KitSelection on the focused box; nil focus = none
+---@field hit fun(ranges: Ui.Kit.ButtonRange[], winid: integer): integer|nil, table|nil  # button under the mouse; second value is getmousepos() when the click was in `winid`
+---@field wrap fun(focus: integer, delta: integer, n: integer): integer
 
 ---@class Ui.Kit.SurfaceModule
 ---@field open fun(opts?: Ui.Kit.SurfaceOpts): Ui.Kit.Surface|nil
