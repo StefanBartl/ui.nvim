@@ -12,6 +12,10 @@
 --- Everything else -- few matches, a pattern, another completion type, a directory
 --- that cannot be listed -- is `getcompletion()`'s as before; it is stubbed here, which
 --- is what tells the two paths apart.
+---
+--- The list has to be the one `getcompletion()` would make, so a few cases compare it
+--- with the real function (taken before the stub): which entries match and in which order
+--- they come under 'fileignorecase' and 'wildignorecase', and for non-ASCII names.
 
 local kit = require("ui.kit")
 local api = vim.api
@@ -21,9 +25,9 @@ local MAX = 300
 
 ---@param path string
 local function touch(path)
-  local f = assert(io.open(path, "w"))
-  f:write("")
-  f:close()
+  -- Not `io.open`: on Windows LuaJIT's takes the ANSI code page, which turns a file name
+  -- with a non-ASCII character into another name. "S": no fsync, a few hundred files add up.
+  assert(vim.fn.writefile({}, path, "S") == 0, "could not create " .. path)
 end
 
 local function close_floats()
@@ -43,19 +47,25 @@ end
 
 describe("path completion in a big directory", function()
   local dir ---@type string
-  local real_getcompletion, real_complete, real_stat, real_scandir_next
+  local real_getcompletion, real_complete, real_stat, real_scandir, real_scandir_next
   local getcompletion_calls, stat_calls, shown, shown_col
 
-  --- A directory (forward slashes, long names: getcompletion() would choke on the
-  --- 8.3 form of a Windows temp path) with `files` `item_NNN` files and `dirs`
-  --- `sub_NNN` subdirectories, a dot file and one more file.
+  --- An empty directory (forward slashes, long names: getcompletion() would choke on
+  --- the 8.3 form of a Windows temp path).
+  ---@return string
+  local function new_dir()
+    local d = vim.fn.tempname()
+    vim.fn.mkdir(d, "p")
+    return (uv.fs_realpath(d) or d):gsub("\\", "/")
+  end
+
+  --- A directory with `files` `item_NNN` files and `dirs` `sub_NNN` subdirectories, a
+  --- dot file and one more file.
   ---@param files integer
   ---@param dirs integer
   ---@return string
   local function make_dir(files, dirs)
-    local d = vim.fn.tempname()
-    vim.fn.mkdir(d, "p")
-    d = (uv.fs_realpath(d) or d):gsub("\\", "/")
+    local d = new_dir()
     for i = 0, files - 1 do
       touch(("%s/item_%03d"):format(d, i))
     end
@@ -87,10 +97,33 @@ describe("path completion in a big directory", function()
     end
   end
 
+  --- What `getcompletion()` itself lists for `frag`: slashes forward, cut to what a
+  --- menu holds.
+  ---@param frag string
+  ---@return string[]
+  local function expected_list(frag)
+    local names = vim.tbl_map(function(name)
+      return (name:gsub("\\", "/"))
+    end, real_getcompletion(frag, "file"))
+    return vim.list_slice(names, 1, MAX)
+  end
+
+  --- Run `fn` with 'fileignorecase' and 'wildignorecase' set, whatever happens in it.
+  ---@param fic boolean
+  ---@param wic boolean
+  ---@param fn fun()
+  local function with_case_options(fic, wic, fn)
+    local saved_fic, saved_wic = vim.o.fileignorecase, vim.o.wildignorecase
+    vim.o.fileignorecase, vim.o.wildignorecase = fic, wic
+    local ok, err = pcall(fn)
+    vim.o.fileignorecase, vim.o.wildignorecase = saved_fic, saved_wic
+    assert(ok, err)
+  end
+
   before_each(function()
     getcompletion_calls, stat_calls = 0, 0
     real_getcompletion, real_complete, real_stat = vim.fn.getcompletion, vim.fn.complete, uv.fs_stat
-    real_scandir_next = uv.fs_scandir_next
+    real_scandir, real_scandir_next = uv.fs_scandir, uv.fs_scandir_next
     vim.fn.getcompletion = function()
       getcompletion_calls = getcompletion_calls + 1
       return { "from-getcompletion" }
@@ -106,7 +139,7 @@ describe("path completion in a big directory", function()
 
   after_each(function()
     vim.fn.getcompletion, vim.fn.complete, uv.fs_stat = real_getcompletion, real_complete, real_stat
-    uv.fs_scandir_next = real_scandir_next
+    uv.fs_scandir, uv.fs_scandir_next = real_scandir, real_scandir_next
     close_floats()
     if dir then
       vim.fn.delete(dir, "rf")
@@ -224,18 +257,109 @@ describe("path completion in a big directory", function()
     assert.is_true(dirs > 0, "a directory is among the files, with its slash")
   end)
 
-  it("sorts the way getcompletion() does", function()
-    dir = make_dir(MAX + 10, 0)
-    touch(dir .. "/Item_upper")
-    touch(dir .. "/item_ZZ")
-    press_tab(dir .. "/item")
-    local keys = {}
-    for i, name in ipairs(shown) do
-      keys[i] = vim.o.fileignorecase and name:lower() or name
+  --- Over the limit, with names that tell the cases apart and the characters that sort
+  --- between the capitals and the small letters (`[ ] ^ _` and the backtick) from the
+  --- letters. The mixed-case names are all among the first `MAX` however they sort.
+  ---@return string
+  local function make_mixed_dir()
+    local d = make_dir(MAX + 10, 0)
+    for _, name in ipairs({
+      "itemA",
+      "itemb",
+      "item[x",
+      "item]x",
+      "item^x",
+      "item`x",
+      "Item_000x",
+      "ITEM_001y",
+    }) do
+      touch(d .. "/" .. name)
     end
-    local sorted = vim.deepcopy(keys)
-    table.sort(sorted)
-    assert.same(sorted, keys)
+    vim.fn.mkdir(d .. "/Item_000Dir", "p")
+    return d
+  end
+
+  for _, case in ipairs({ { true, false }, { false, false }, { false, true }, { true, true } }) do
+    local fic, wic = case[1], case[2]
+    it(
+      ("lists what getcompletion() does, in its order: 'fileignorecase' %s, 'wildignorecase' %s"):format(
+        tostring(fic),
+        tostring(wic)
+      ),
+      function()
+        dir = make_mixed_dir()
+        with_case_options(fic, wic, function()
+          local expected = expected_list(dir .. "/item")
+          assert.equals(MAX, #expected, "more than a menu holds: the big list runs")
+          press_tab(dir .. "/item")
+          assert.equals(0, getcompletion_calls, "the big list, not getcompletion()")
+          assert.same(expected, shown)
+        end)
+      end
+    )
+  end
+
+  it("orders non-ASCII names under 'fileignorecase' the way getcompletion() does", function()
+    -- `string.upper` folds ASCII only: left to it, an a-umlaut would sort behind a
+    -- capital U-umlaut, where Neovim (which upper-cases the whole character) has it ahead.
+    -- The bulk is Cyrillic so that it sorts behind the Latin-1 names and they stay in the
+    -- first `MAX`.
+    dir = new_dir()
+    local bulk = "a" .. vim.fn.nr2char(0x400)
+    for i = 0, MAX + 9 do
+      touch(("%s/%s%03d"):format(dir, bulk, i))
+    end
+    for _, name in ipairs({
+      "ae",
+      "aF",
+      "a" .. vim.fn.nr2char(0xE4),
+      "a" .. vim.fn.nr2char(0xC9),
+      "a" .. vim.fn.nr2char(0xCA),
+      "a" .. vim.fn.nr2char(0xF6),
+      "a" .. vim.fn.nr2char(0xDC),
+    }) do
+      touch(dir .. "/" .. name)
+    end
+    with_case_options(true, false, function()
+      local expected = expected_list(dir .. "/a")
+      assert.equals(MAX, #expected, "more than a menu holds: the big list runs")
+      press_tab(dir .. "/a")
+      assert.equals(0, getcompletion_calls, "the big list, not getcompletion()")
+      assert.same(expected, shown)
+    end)
+  end)
+
+  it("orders names that fold to one key by spelling, not by the order of the listing", function()
+    -- Zebra / zebra can only exist side by side on a file system that tells the cases
+    -- apart, so the listing is made up here.
+    local names = { "Zebra", "zebra", "ZEBRA" }
+    for i = 0, MAX do
+      names[#names + 1] = ("zz_%03d"):format(i)
+    end
+    local function list(order)
+      local at = 0
+      uv.fs_scandir = function()
+        at = 0
+        return {}
+      end
+      uv.fs_scandir_next = function()
+        at = at + 1
+        local name = names[order(at)]
+        return name, name and "file"
+      end
+      press_tab("fake/")
+      return shown
+    end
+    with_case_options(true, false, function()
+      local forward = list(function(i)
+        return i
+      end)
+      local backward = list(function(i)
+        return #names + 1 - i
+      end)
+      assert.same({ "fake/ZEBRA", "fake/Zebra", "fake/zebra" }, vim.list_slice(forward, 1, 3))
+      assert.same(forward, backward)
+    end)
   end)
 
   it("leaves a fragment with few matches to getcompletion()", function()
