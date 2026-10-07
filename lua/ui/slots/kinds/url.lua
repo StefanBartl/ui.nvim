@@ -161,10 +161,15 @@ end
 
 --- What the page says, asked through hover.nvim: the preview shows the address
 --- and "loading ..." first, and the answer replaces it when it arrives (the
---- pane drops an answer that is no longer wanted). Nothing is asked unless a
---- preview is shown -- the bar never does, and the panel only on `K` or in
---- `auto` mode -- and `preview.fetch = false` keeps it to the address. Without
---- hover.nvim, or for `file:` and `mailto:`, it is the address and its host.
+--- pane drops an answer that is no longer wanted).
+---
+--- **Fetching is a request from this machine to that host, so it is opt-in:**
+--- `preview.fetch` is off by default, and then (as without hover.nvim, and for
+--- `file:` and `mailto:`) the preview is the address and its host. With
+--- `preview.fetch = true` the pane fetches the page of the slot under the
+--- cursor whenever it is shown -- also while the cursor follows (after `K`, or
+--- in `auto` mode) -- so turning it on is the consent for that. The bar never
+--- shows a preview.
 ---@param slot table
 ---@param ctx { resolve?: Ui.Slots.Ctx }|nil
 ---@return Ui.Slots.Preview

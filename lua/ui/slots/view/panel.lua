@@ -181,6 +181,20 @@ update_preview = function()
   preview.show(n, S.geom, origin_context())
 end
 
+--- The cursor moved: the preview follows, but a move within the row it already
+--- shows (`h`/`l`) must not cancel the page that is on its way, or load it again.
+local function follow_preview()
+  local n = current()
+  if
+    n
+    and package.loaded["ui.slots.view.preview"]
+    and package.loaded["ui.slots.view.preview"].shown() == n
+  then
+    return
+  end
+  update_preview()
+end
+
 function M.close()
   local surf = S.surf
   S.surf = nil
@@ -598,7 +612,7 @@ function M.open(opts)
   -- `auto` mode (a cursor held down a list does not read a file per row).
   local pv = cfg.preview
   if pv.mode ~= "off" and pv.delay > 0 then
-    S.deb = require("lib.nvim.debounce").new(update_preview, pv.delay)
+    S.deb = require("lib.nvim.debounce").new(follow_preview, pv.delay)
   end
   require("lib.nvim.bindings.autocmd").create("CursorMoved", function()
     if not S.preview_on then
@@ -607,7 +621,7 @@ function M.open(opts)
     if S.deb then
       S.deb.call()
     else
-      update_preview()
+      follow_preview()
     end
   end, {
     buffer = surf.bufnr,

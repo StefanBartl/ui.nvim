@@ -389,6 +389,7 @@ describe("ui.slots preview", function()
     before_each(function()
       saved_hover = package.loaded["hover"]
       asked, pending, deliver_now = {}, {}, true
+      config.get().preview.fetch = true
     end)
 
     after_each(function()
@@ -511,8 +512,9 @@ describe("ui.slots preview", function()
       assert.is_truthy(pane_text():find("host: example.org", 1, true))
     end)
 
-    it("makes no request with preview.fetch = false", function()
+    it("makes no request unless preview.fetch is on (the default)", function()
       fake_hover()
+      assert.is_false(config.DEFAULTS.preview.fetch)
       config.get().preview.fetch = false
       store.add({ kind = "url", url = "https://example.org/one" })
       preview.show(1, geom)
@@ -790,6 +792,29 @@ describe("ui.slots preview", function()
       vim.api.nvim_set_current_win(other)
       flush()
       assert.is_false(preview.is_open())
+    end)
+
+    it("does not cancel or reload the page when the cursor moves within its row", function()
+      local saved_hover = package.loaded["hover"]
+      local asked = 0
+      package.loaded["hover"] = {
+        preview_target = function()
+          asked = asked + 1
+          return {
+            cancel = function() end,
+          }
+        end,
+      }
+      config.get().preview.fetch = true
+      slots.add({ kind = "url", url = "https://example.org/a" })
+      panel.open()
+      press("K")
+      assert.equals(1, asked)
+      press("l")
+      press("h")
+      flush()
+      assert.equals(1, asked)
+      package.loaded["hover"] = saved_hover
     end)
 
     it("goes with the panel when its window is closed directly", function()
