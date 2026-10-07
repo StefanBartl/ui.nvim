@@ -426,6 +426,19 @@ describe("ui.slots panel and editor", function()
       assert.same({ "Apply", "Edit", "Copy", "Clear" }, names)
     end)
 
+    it("a right click outside the panel leaves it, as a left click does", function()
+      vim.cmd.vsplit()
+      local other = vim.api.nvim_get_current_win()
+      panel.open()
+      local original = vim.fn.getmousepos
+      vim.fn.getmousepos = function()
+        return { winid = other, line = 1 }
+      end
+      press("<RightMouse>")
+      vim.fn.getmousepos = original
+      assert.is_false(panel.is_open())
+    end)
+
     it("is silent on a right click that is not on a row", function()
       local cap = capture()
       local original = vim.fn.getmousepos
@@ -497,6 +510,51 @@ describe("ui.slots panel and editor", function()
       assert.same({ "Apply", "Edit", "Copy", "Clear" }, labels)
     end)
 
+    it("Apply and Open in ... do not bring the panel back over their result", function()
+      local path = dir .. "/m.txt"
+      vim.fn.writefile({ "x" }, path)
+      slots.add({ kind = "file", path = path })
+      local cap = capture()
+      local back = 0
+      panel.menu(1, function()
+        back = back + 1
+      end)
+      cap.restore()
+      local items = cap.select.items
+      cap.select.on_select(items[1]) -- Apply
+      cap.select.on_select(items[4]) -- Open in a split
+      assert.equals(0, back)
+      cap.select.on_select(items[3]) -- Copy
+      assert.equals(1, back)
+    end)
+
+    it("Edit hands the way back to the editor, which calls it when it closes", function()
+      add_yanks(1)
+      local cap = capture()
+      local back = 0
+      panel.menu(1, function()
+        back = back + 1
+      end)
+      cap.select.on_select(cap.select.items[2]) -- Edit
+      assert.equals(0, back, "not before the editor is done")
+      assert.is_not_nil(cap.sheet)
+      cap.sheet.on_cancel()
+      cap.restore()
+      assert.equals(1, back)
+    end)
+
+    it("a cancelled menu comes back, too", function()
+      add_yanks(1)
+      local cap = capture()
+      local back = 0
+      panel.menu(1, function()
+        back = back + 1
+      end)
+      cap.restore()
+      cap.select.on_cancel()
+      assert.equals(1, back)
+    end)
+
     it("selecting an entry runs it, then calls back", function()
       add_yanks(1)
       local cap = capture()
@@ -508,6 +566,17 @@ describe("ui.slots panel and editor", function()
       cap.select.on_select(cap.select.items[4])
       assert.is_true(done)
       assert.is_nil(slots.get(1))
+    end)
+  end)
+
+  describe("the panel and a window that is gone", function()
+    it("opens from the current window when the one it came from was closed", function()
+      add_yanks(1)
+      vim.cmd.vsplit()
+      local gone = vim.api.nvim_get_current_win()
+      vim.cmd.close()
+      panel.open({ from = gone })
+      assert.is_true(panel.is_open())
     end)
   end)
 
@@ -755,6 +824,110 @@ describe("ui.slots panel and editor", function()
         number = tostring(n),
       })
       assert.is_nil(slots.get(n).line)
+    end)
+
+    it("keeps the sheet's answers when a save is refused: the sheet comes back filled", function()
+      local cap = capture()
+      editor.open({ kind = "url" })
+      local first = cap.sheet
+      first.on_submit({
+        url = "javascript:alert(1)",
+        label = "mine",
+        icon = "",
+        style = "(default)",
+        number = "1",
+      })
+      flush()
+      assert.is_not_nil(cap.sheet)
+      assert.is_not.equals(first, cap.sheet, "a new sheet")
+      local by = {}
+      for _, f in ipairs(cap.sheet.fields) do
+        by[f.name] = f
+      end
+      assert.equals("javascript:alert(1)", by.url.default)
+      assert.equals("mine", by.label.default)
+      -- fixing it and submitting again saves
+      cap.sheet.on_submit({
+        url = "https://example.org",
+        label = "mine",
+        icon = "",
+        style = "(default)",
+        number = "1",
+      })
+      cap.restore()
+      assert.equals("https://example.org", slots.get(1).url)
+    end)
+
+    it("a refused save that is cancelled afterwards calls on_close once, with nil", function()
+      local seen = {}
+      local cap = capture()
+      editor.open({
+        kind = "url",
+        on_close = function(n)
+          seen[#seen + 1] = n or "none"
+        end,
+      })
+      cap.sheet.on_submit({
+        url = "javascript:x",
+        label = "",
+        icon = "",
+        style = "(default)",
+        number = "1",
+      })
+      flush()
+      cap.sheet.on_cancel()
+      cap.restore()
+      assert.same({ "none" }, seen)
+    end)
+
+    it("checks the length of a text, label and icon in the sheet itself", function()
+      config.get().max_string_len = 20
+      local cap = capture()
+      editor.open({ kind = "yank" })
+      cap.restore()
+      local by = {}
+      for _, f in ipairs(cap.sheet.fields) do
+        by[f.name] = f
+      end
+      local long = string.rep("x", 21)
+      assert.is_false((by.text.validate(long)))
+      assert.is_false((by.label.validate(long)))
+      assert.is_false((by.icon.validate(long)))
+      assert.is_true((by.label.validate(string.rep("x", 20))))
+    end)
+
+    it("leaves a text alone that was not touched, newlines and all", function()
+      local n = slots.add({ kind = "yank", text = "line one\nline two", label = "  padded  " })
+      local cap = capture()
+      editor.open({ n = n })
+      cap.restore()
+      -- what the one-line sheet shows, handed back unchanged
+      cap.sheet.on_submit({
+        text = "line one line two",
+        register = "",
+        label = "padded",
+        icon = "",
+        style = "(default)",
+        number = tostring(n),
+      })
+      assert.equals("line one\nline two", slots.get(n).text)
+      assert.equals("  padded  ", slots.get(n).label)
+    end)
+
+    it("changes a text that was edited", function()
+      local n = slots.add({ kind = "yank", text = "line one\nline two" })
+      local cap = capture()
+      editor.open({ n = n })
+      cap.restore()
+      cap.sheet.on_submit({
+        text = "something else",
+        register = "",
+        label = "",
+        icon = "",
+        style = "(default)",
+        number = tostring(n),
+      })
+      assert.equals("something else", slots.get(n).text)
     end)
 
     it("reports a slot the kind refuses on submit instead of saving it", function()
