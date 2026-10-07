@@ -158,7 +158,11 @@ end
 ---@param kind string
 ---@return boolean
 local function persistable(kind)
-  return vim.tbl_contains(config.get().persistable_kinds, kind)
+  if vim.tbl_contains(config.get().persistable_kinds, kind) then
+    return true
+  end
+  -- A kind registered by a host can ask for it itself (`persist = true`).
+  return require("ui.slots.kinds.registry").persists(kind)
 end
 
 --- Shallow-validate a slot table handed to `set`/`add`.
