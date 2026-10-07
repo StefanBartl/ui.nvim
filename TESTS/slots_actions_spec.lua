@@ -86,14 +86,91 @@ describe("ui.slots action kinds", function()
       assert.same({ "q=a b c", "/my dir" }, seen.fargs)
     end)
 
-    it("cannot be made to run a second command through a value", function()
+    it("refuses a value with a bar instead of passing it on, and runs nothing", function()
       vim.g.ui_slots_pwned = nil
-      registry.apply(
+      local ok, err = registry.apply(
         { kind = "cmd", cmd = "UiSlotsProbe", args = "{word}" },
         { resolve = { word = "x | let g:ui_slots_pwned = 1" } }
       )
+      assert.is_false(ok)
+      assert.is_truthy(err:find("refused", 1, true))
+      assert.is_truthy(err:find("{word}", 1, true))
+      assert.is_nil(seen)
       assert.is_nil(vim.g.ui_slots_pwned)
-      assert.equals("x | let g:ui_slots_pwned = 1", seen.args)
+    end)
+
+    it("refuses a bar even for a command that pastes its raw <args>", function()
+      vim.g.ui_slots_pwned = nil
+      vim.cmd("command! -nargs=* UiSlotsRaw echo <args>")
+      local ok = registry.apply(
+        { kind = "cmd", cmd = "UiSlotsRaw", args = "{sel}" },
+        { resolve = { sel = "'a' | let g:ui_slots_pwned = 2" } }
+      )
+      vim.cmd("delcommand UiSlotsRaw")
+      assert.is_false(ok)
+      assert.is_nil(vim.g.ui_slots_pwned)
+    end)
+
+    it("refuses a backtick, which :argadd and friends would hand to a shell", function()
+      for _, value in ipairs({ "`mkdir x`", "dir/`whoami`", "a`b" }) do
+        local ok = registry.apply(
+          { kind = "cmd", cmd = "argadd", args = "{dir}" },
+          { resolve = { dir = value } }
+        )
+        assert.is_false(ok, value)
+      end
+      assert.equals(0, vim.fn.argc())
+    end)
+
+    it("refuses a value that starts the argument with + or !", function()
+      vim.g.ui_slots_pwned = nil
+      for _, value in ipairs({
+        "+let\\ g:ui_slots_pwned=1 notes.txt",
+        "  +q",
+        "!echo hi",
+        "++ff=dos x",
+      }) do
+        local ok = registry.apply(
+          { kind = "cmd", cmd = "edit", args = "{clip}" },
+          { resolve = { clip = value } }
+        )
+        assert.is_false(ok, value)
+      end
+      assert.is_nil(vim.g.ui_slots_pwned)
+    end)
+
+    it("lets + and ! stand elsewhere: inside a value, or written by the slot's author", function()
+      assert.is_true(
+        (
+          registry.apply(
+            { kind = "cmd", cmd = "UiSlotsProbe", args = "a+b {word}" },
+            { resolve = { word = "c!d" } }
+          )
+        )
+      )
+      assert.same({ "a+b", "c!d" }, seen.fargs)
+      assert.is_true(
+        (registry.apply({ kind = "cmd", cmd = "UiSlotsProbe", args = "+literal !also" }))
+      )
+      assert.same({ "+literal", "!also" }, seen.fargs)
+      assert.is_true(
+        (
+          registry.apply(
+            { kind = "cmd", cmd = "UiSlotsProbe", args = "pre{word}" },
+            { resolve = { word = "+x" } }
+          )
+        )
+      )
+    end)
+
+    it("takes the values as they are with raw_values = true", function()
+      local ok = registry.apply(
+        { kind = "cmd", cmd = "UiSlotsProbe", args = "{word}", raw_values = true },
+        { resolve = { word = "x | y `z` +w" } }
+      )
+      assert.is_true(ok)
+      assert.equals("x | y `z` +w", seen.args)
+      assert.is_truthy(registry.validate({ kind = "cmd", cmd = "X", raw_values = "yes" }))
     end)
 
     it("turns a newline in a value into a space instead of ending the command", function()
@@ -181,6 +258,40 @@ describe("ui.slots action kinds", function()
       assert.is_true(store.flush())
       local data = vim.json.decode(table.concat(vim.fn.readfile(store.path() or ""), "\n"))
       assert.same({}, data.slots)
+    end)
+  end)
+
+  describe("slots of this session", function()
+    it("survive a change of scope, because they were never part of a project", function()
+      slots.add({
+        kind = "lua",
+        fn = function() end,
+      })
+      slots.add({ kind = "yank", text = "saved here" })
+      config.get().scope = "global"
+      store.reload()
+      assert.equals("lua", slots.get(1).kind)
+      assert.is_nil(slots.get(2))
+    end)
+
+    it("give way to a saved slot with the same number, and say so", function()
+      config.get().scope = "global"
+      store.reload()
+      slots.add({ kind = "yank", text = "global one" })
+      store.flush()
+      config.get().scope = "project"
+      store.reload()
+      slots.add({
+        kind = "lua",
+        fn = function() end,
+      })
+      config.get().scope = "global"
+      store.reload()
+      vim.wait(30, function()
+        return false
+      end)
+      assert.equals("yank", slots.get(1).kind)
+      assert.is_true(said("replaced by the one saved"))
     end)
   end)
 
@@ -370,6 +481,17 @@ describe("ui.slots action kinds", function()
       local ok, err = registry.apply({ kind = "mark", index = 5 })
       assert.is_false(ok)
       assert.is_truthy(err:find("no mark at 5", 1, true))
+    end)
+
+    it("tells a broken sessions.nvim from a missing one", function()
+      package.loaded["sessions.marks"] = nil
+      package.preload["sessions.marks"] = function()
+        error("syntax error near x")
+      end
+      local ok, err = registry.apply({ kind = "mark", index = 1 })
+      assert.is_false(ok)
+      assert.is_truthy(err:find("failed to load", 1, true))
+      assert.is_truthy(err:find("syntax error", 1, true))
     end)
 
     it("says that sessions.nvim is missing instead of failing", function()

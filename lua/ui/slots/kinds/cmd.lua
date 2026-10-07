@@ -4,15 +4,28 @@
 ---
 --- Code runs from a slot of this kind, so it is never read from the data file
 --- (`persistable_kinds` does not list it): a `cmd` slot comes from `setup()` or
---- from a host's own Lua. Nothing here goes through a shell, and the arguments
---- are built so a placeholder cannot add more of them:
+--- from a host's own Lua.
 ---
----   * `args` is split into words BEFORE the placeholders are put in, so a value
----     with spaces stays one argument; a list (`args = { "a b", "c" }`) is taken
----     as it is;
----   * a control character in a value (a newline from `{sel}`) becomes a space;
----   * `|` and `%` in an argument are plain text: the command is run through
----     `nvim_cmd` with `magic = { bar = false, file = false }`.
+--- A value that a placeholder puts in (`{clip}`, `{sel}`, a file name) is text
+--- from outside the slot's author, and the Ex line it ends up in has more syntax
+--- than any one layer of escaping covers. So this kind does not try to quote it,
+--- it refuses what is dangerous and says so (fail closed):
+---
+---   * a value with `|` (a second command in a user command that pastes its raw
+---     `<args>`) or a backtick (`:argadd`, `:args`, `:next` run a shell for it);
+---   * a value that starts the argument with `+` (`:edit +cmd file` runs `cmd`)
+---     or `!` (`:read !cmd`);
+---   * a control character becomes a space (a newline would end the line).
+---
+--- Set `raw_values = true` on a slot to take values as they are, when the command
+--- is one that reads `<q-args>`/`<f-args>` and so is safe against all of this.
+---
+--- The line is built as follows: `args` is split into words BEFORE the
+--- placeholders go in, a list (`args = { "a b", "c" }`) is taken as it is, and
+--- the command runs through `nvim_cmd` with `magic = { bar = false, file = false }`
+--- (`|`, `%`, `#` and wildcards in an argument are not expanded by it). How a
+--- command splits an argument further (`:set`, `:args` split on spaces
+--- themselves) is that command's business; where it matters, use a `lua` slot.
 ---
 --- The command must exist when the slot runs, and an unknown placeholder in
 --- `args` makes the slot invalid (so `:checkhealth` and `add` can say so).
@@ -40,28 +53,44 @@ local function templates(slot)
   return out
 end
 
---- A value as one argument: control characters would end the command line.
----@param value string
----@return string
-local function flatten(value)
-  return (value:gsub("%c", " "))
-end
-
 --- The argument list with the placeholders put in; empty results are dropped.
+--- `problems` lists the values that were refused (see the header).
 ---@param slot table
 ---@param rctx Ui.Slots.Ctx|nil
 ---@return string[] args
 ---@return string[] unknown
+---@return string[] problems
 local function build(slot, rctx)
-  local args, unknown_all = {}, {}
+  local args, unknown_all, problems = {}, {}, {}
   for _, template in ipairs(templates(slot)) do
-    local value, unknown = resolve.resolve(template, rctx, { escape = flatten })
+    -- Does a placeholder start this argument? Then its value is what `+`/`!`
+    -- would act on.
+    local leads = template:find("^{%w+}") ~= nil
+    local first = true
+    local value, unknown = resolve.resolve(template, rctx, {
+      escape = function(v, name)
+        local at_start = first and leads
+        first = false
+        v = v:gsub("%c", " ")
+        if not slot.raw_values then
+          if v:find("|", 1, true) or v:find("`", 1, true) then
+            problems[#problems + 1] = ("the value of {%s} has a | or a backtick"):format(name)
+          elseif at_start and v:match("^%s*[+!]") then
+            problems[#problems + 1] = ("the value of {%s} starts with %s"):format(
+              name,
+              v:match("[+!]")
+            )
+          end
+        end
+        return v
+      end,
+    })
     vim.list_extend(unknown_all, unknown)
     if value ~= "" then
       args[#args + 1] = value
     end
   end
-  return args, unknown_all
+  return args, unknown_all, problems
 end
 
 ---@param slot table
@@ -72,6 +101,9 @@ function M.validate(slot)
   end
   if slot.bang ~= nil and type(slot.bang) ~= "boolean" then
     return "bang must be true or false"
+  end
+  if slot.raw_values ~= nil and type(slot.raw_values) ~= "boolean" then
+    return "raw_values must be true or false"
   end
   local args = slot.args
   if args ~= nil and type(args) ~= "string" and type(args) ~= "table" then
@@ -110,8 +142,15 @@ function M.apply(slot, ctx)
   if vim.fn.exists(":" .. slot.cmd) == 0 then
     return false, ("no such command: :%s"):format(slot.cmd)
   end
-  local args, unknown = build(slot, ctx.resolve)
+  local args, unknown, problems = build(slot, ctx.resolve)
   util.warn_unknown(unknown, "cmd slot")
+  if #problems > 0 then
+    return false,
+      ("refused, %s (set raw_values = true if :%s reads <q-args>)"):format(
+        table.concat(problems, "; "),
+        slot.cmd
+      )
+  end
   local ok, err = pcall(vim.cmd, {
     cmd = slot.cmd,
     args = args,
