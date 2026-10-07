@@ -189,6 +189,25 @@ describe("path completion in a big directory", function()
     assert.equals(1, getcompletion_calls, "a directory that does not exist")
   end)
 
+  it("lists the same entries getcompletion() does, whatever 'wildignore' says", function()
+    -- getcompletion() without `filtered` does not apply 'wildignore', so neither may
+    -- the big-directory list: what <Tab> shows must not depend on the directory size.
+    local saved = vim.o.wildignore
+    dir = make_dir(MAX + 10, 0)
+    touch(dir .. "/aaa.o")
+    vim.o.wildignore = "*.o,item_00*"
+    local ok, err = pcall(function()
+      local expected = vim.tbl_map(function(name)
+        return (name:gsub("\\", "/"))
+      end, real_getcompletion(dir .. "/", "file"))
+      assert.is_true(vim.tbl_contains(expected, dir .. "/aaa.o"), "getcompletion() keeps it")
+      press_tab(dir .. "/")
+      assert.same(vim.list_slice(expected, 1, MAX), shown)
+    end)
+    vim.o.wildignore = saved
+    assert(ok, err)
+  end)
+
   it("lists a dot file only when asked for it by name", function()
     dir = make_dir(MAX + 100, 0)
     press_tab(dir .. "/.")
