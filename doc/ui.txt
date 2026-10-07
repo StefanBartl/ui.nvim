@@ -165,6 +165,19 @@ Theme overrides go to `ui.config.setup`, not here: >lua
     "▲ +n" and "▼ +n" say what is hidden. The option `show = true` opens it
     when the slots are switched on.
 
+:UI slots panel
+    The slot panel: a window docked at the edge, one row per slot, the cursor is
+    the selection. <CR> runs the slot, typing a number goes to that slot (1,
+    then 2 for slot 12), e edits it, a adds one, dd clears it, y copies what it stands for,
+    <C-j>/<C-k> move it down/up, a right click opens a menu (apply, edit, copy,
+    open a file in a split, vsplit or tab, clear), q or <Esc> closes. Leaving
+    the panel closes it.
+
+:UI slots edit [{n}]
+    Add a slot in the editor (a chooser for the kind, then a sheet with its
+    fields), or change slot {n}. Only the kinds a data file may hold are made
+    here; a cmd or lua slot, and a slot fixed in setup(), are not changed.
+
 :UI slots {n}
     Run slot {n}: open its file or address, copy its text, ...
 

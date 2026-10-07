@@ -590,8 +590,8 @@ describe("ui.slots bar", function()
       local names = vim.tbl_map(function(a)
         return a.label
       end, seen.items)
-      assert.same({ "Apply", "Copy", "Clear" }, names)
-      seen.on_select(seen.items[3])
+      assert.same({ "Apply", "Edit", "Copy", "Clear" }, names)
+      seen.on_select(seen.items[4])
       assert.is_nil(slots.get(2))
     end)
 

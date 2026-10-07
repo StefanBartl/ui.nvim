@@ -8,7 +8,8 @@
 ---
 ---   * `apply`  -- a pattern with one `%d`, e.g. `"<leader>%d"`: maps slots 1 to 9;
 ---   * `count`  -- one key that takes a count, `12<leader>s` applies slot 12;
----   * `add`    -- put the current file into the next free slot.
+---   * `add`    -- put the current file into the next free slot;
+---   * `panel`  -- open the slot panel.
 ---
 --- A value of `false` (or an absent key) maps nothing.
 
@@ -59,8 +60,8 @@ end
 function M.issues(keys)
   local out = {}
   for name, lhs in pairs(keys) do
-    if name ~= "apply" and name ~= "count" and name ~= "add" then
-      out[#out + 1] = ("keys.%s: unknown key (apply, count, add)"):format(tostring(name))
+    if name ~= "apply" and name ~= "count" and name ~= "add" and name ~= "panel" then
+      out[#out + 1] = ("keys.%s: unknown key (apply, count, add, panel)"):format(tostring(name))
     elseif lhs ~= false then
       if type(lhs) ~= "string" or lhs == "" then
         out[#out + 1] = ("keys.%s: %s is not a key sequence or false"):format(
@@ -75,7 +76,7 @@ function M.issues(keys)
   return out
 end
 
----@param api { apply: fun(n: integer, opts: table|nil), add: fun() }
+---@param api { apply: fun(n: integer, opts: table|nil), add: fun(), panel: fun() }
 function M.attach(api)
   M.detach()
   local cfg = config.get()
@@ -109,6 +110,12 @@ function M.attach(api)
     map(keys.add, function()
       api.add()
     end, "ui.slots: put the current file into the next free slot")
+  end
+
+  if type(keys.panel) == "string" and keys.panel ~= "" then
+    map(keys.panel, function()
+      api.panel()
+    end, "ui.slots: open the slot panel")
   end
 
   local group = autocmd.group(GROUP, true)
