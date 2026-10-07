@@ -6,10 +6,12 @@
 --- `getcompletion(frag, "file")` pays a file-system `stat` per match -- about a tenth
 --- of a millisecond each -- so a directory of five thousand files (a Downloads
 --- folder) froze the editor for half a second at every <Tab>, to fill a popup nobody
---- can read. With more than `MAX_PATH_MATCHES` matches the candidates are now built
---- from one directory listing, without a `stat` (a link, or a listing that does not say
---- what an entry is, costs at most one past the menu), sorted and cut to that many.
---- Everything else -- few matches, a pattern, another completion type, a directory
+--- can read. With more than `MAX_PATH_MATCHES` candidates (entries that start with the
+--- fragment, the files among them for completion = "dir") the list is now built from
+--- one directory listing, without a `stat` (a link, or a listing that does not say what
+--- an entry is, costs one until the menu is full), sorted and cut to that many; for
+--- "dir" it is the whole answer, however few directories there are among the files.
+--- Everything else -- few candidates, a pattern, another completion type, a directory
 --- that cannot be listed -- is `getcompletion()`'s as before; it is stubbed here, which
 --- is what tells the two paths apart.
 ---
@@ -159,12 +161,12 @@ describe("path completion in a big directory", function()
     assert.equals(1, shown_col, "complete() starts where the fragment began")
   end)
 
-  it("stats a link, or an entry of unknown type, only up to one past the menu", function()
+  it("stats a link, or an entry of unknown type, only until the menu is full", function()
     dir = make_dir(MAX + 100, 0)
     hide_entry_kinds()
     press_tab(dir .. "/item")
     assert.equals(0, getcompletion_calls, "getcompletion() is not asked")
-    assert.is_true(stat_calls <= MAX + 1, stat_calls .. " stats for " .. MAX + 100 .. " matches")
+    assert.is_true(stat_calls <= MAX, stat_calls .. " stats for " .. MAX + 100 .. " matches")
     assert.equals(MAX, #shown)
     assert.equals(dir .. "/item_000", shown[1])
     assert.equals(dir .. "/item_" .. ("%03d"):format(MAX - 1), shown[MAX])
@@ -199,28 +201,141 @@ describe("path completion in a big directory", function()
     assert.same(expected, shown)
   end)
 
-  it("takes an entry that cannot be stat'ed (a broken link) for a file", function()
+  --- `stat` as a broken link has it: no answer for the first ten items.
+  local function broken_first_ten()
+    uv.fs_stat = function(path)
+      stat_calls = stat_calls + 1
+      if path:match("/item_00%d$") then
+        return nil
+      end
+      return real_stat(path)
+    end
+  end
+
+  it(
+    "leaves out an entry that cannot be stat'ed (a broken link), as getcompletion() does",
+    function()
+      dir = make_dir(MAX + 20, 0)
+      hide_entry_kinds()
+      broken_first_ten()
+      press_tab(dir .. "/item")
+      assert.equals(0, getcompletion_calls, "the list is the answer")
+      assert.equals(MAX, #shown, "the broken ones do not fill the menu")
+      assert.equals(dir .. "/item_010", shown[1])
+      assert.equals(dir .. "/item_309", shown[MAX])
+    end
+  )
+
+  it("lists what is left when the broken links leave the menu short of full", function()
     dir = make_dir(MAX + 10, 0)
     hide_entry_kinds()
+    broken_first_ten()
+    press_tab(dir .. "/item")
+    assert.equals(0, getcompletion_calls, "every candidate has been looked at: the list is whole")
+    assert.equals(MAX, #shown)
+    assert.equals(dir .. "/item_010", shown[1])
+    assert.equals(dir .. "/item_309", shown[MAX])
+
     uv.fs_stat = function()
       stat_calls = stat_calls + 1
     end
     press_tab(dir .. "/item")
-    assert.equals(MAX, #shown)
-    for _, name in ipairs(shown) do
-      assert.is_nil(name:match("/$"), "a file: " .. name)
+    assert.equals(0, getcompletion_calls, "nothing to show is an answer too")
+    assert.is_nil(shown, "and no popup opens for it")
+
+    press_tab(dir .. "/", "dir")
+    assert.equals(0, getcompletion_calls, "no directory among them")
+    assert.is_nil(shown)
+  end)
+
+  --- A link whose target is gone (a junction on Windows, where a plain symlink needs a
+  --- privilege). false where this system lets the spec create none.
+  ---@param path string
+  ---@return boolean
+  local function make_dangling(path)
+    local target = path .. ".target"
+    vim.fn.mkdir(target, "p")
+    local linked = uv.fs_symlink(target, path, { dir = true, junction = true })
+    vim.fn.delete(target, "d")
+    return linked and real_stat(path) == nil or false
+  end
+
+  it("lists no broken link, as getcompletion() lists none, below and above the limit", function()
+    dir = make_dir(MAX + 20, 0)
+    local made = 0
+    for i = 1, 3 do
+      if make_dangling(("%s/brk%03d"):format(dir, i)) then
+        made = made + 1
+      end
     end
-
-    press_tab(dir .. "/", "dir")
-    assert.equals(1, getcompletion_calls, "no directory among them: getcompletion() has it")
+    if made == 0 then
+      pending("this system does not allow a link to be created here")
+      return
+    end
+    local expected = expected_list(dir .. "/")
+    assert.equals(MAX, #expected, "more than a menu holds: the big list runs")
+    assert.is_false(vim.tbl_contains(expected, dir .. "/brk001"), "getcompletion() has none")
+    press_tab(dir .. "/")
+    assert.equals(0, getcompletion_calls)
+    assert.same(expected, shown)
   end)
 
-  it("leaves few directories to getcompletion() when the listing gives no types", function()
+  it("answers completion = dir from the listing when many files hide a few directories", function()
+    -- getcompletion() stats every one of those files to find the three directories: 0.7 s
+    -- for five thousand. The listing says what a file is.
     dir = make_dir(MAX + 100, 3)
-    hide_entry_kinds()
     press_tab(dir .. "/", "dir")
-    assert.equals(1, getcompletion_calls, "three directories among all those files")
+    assert.equals(0, getcompletion_calls, "the listing has them")
+    assert.equals(0, stat_calls, "and nothing is stat'ed")
+    assert.same({ dir .. "/sub_000/", dir .. "/sub_001/", dir .. "/sub_002/" }, shown)
+    assert.same(
+      vim.tbl_map(function(name)
+        return (name:gsub("\\", "/"))
+      end, real_getcompletion(dir .. "/", "dir")),
+      shown,
+      "the directories getcompletion() lists"
+    )
   end)
+
+  it("counts the files among the candidates for completion = dir", function()
+    -- The limit is on what getcompletion() would have to look at, and that is every
+    -- entry the fragment starts, files included: it stats them all to find the directories.
+    -- Candidates for "<dir>/": MAX - 2 items, one directory and other.txt, exactly MAX ...
+    dir = make_dir(MAX - 2, 1)
+    press_tab(dir .. "/", "dir")
+    assert.equals(1, getcompletion_calls, "exactly MAX candidates are getcompletion()'s")
+
+    -- ... and one file more is the first list that is built from the listing.
+    dir = make_dir(MAX - 1, 1)
+    press_tab(dir .. "/", "dir")
+    assert.equals(0, getcompletion_calls)
+    assert.same({ dir .. "/sub_000/" }, shown)
+  end)
+
+  it("shows nothing, and asks getcompletion() nothing, when the files hold no directory", function()
+    dir = make_dir(MAX + 1, 0)
+    press_tab(dir .. "/", "dir")
+    assert.equals(0, getcompletion_calls, "the listing has the answer")
+    assert.is_nil(shown, "an empty list opens no popup")
+  end)
+
+  it(
+    "stats each entry of unknown type once, and has the whole answer for completion = dir",
+    function()
+      -- Links to files, in a directory of two directories: the walk has stat'ed every one of
+      -- them when it ends, so asking getcompletion() afterwards would pay for all of them again.
+      local files = 2 * MAX + 100
+      dir = make_dir(files, 2)
+      hide_entry_kinds()
+      press_tab(dir .. "/", "dir")
+      assert.equals(0, getcompletion_calls, "the walk's list is the answer")
+      assert.is_true(
+        stat_calls <= files + 3,
+        stat_calls .. " stats for " .. files + 3 .. " candidates"
+      )
+      assert.same({ dir .. "/sub_000/", dir .. "/sub_001/" }, shown)
+    end
+  )
 
   it("lists every file of the directory for an empty fragment, dot files left out", function()
     dir = make_dir(MAX + 50, 0)
@@ -367,12 +482,6 @@ describe("path completion in a big directory", function()
     press_tab(dir .. "/item_00")
     assert.equals(1, getcompletion_calls)
     assert.same({ "from-getcompletion" }, shown)
-  end)
-
-  it("leaves a directory with few directories to getcompletion() for completion = dir", function()
-    dir = make_dir(MAX + 100, 3)
-    press_tab(dir .. "/", "dir")
-    assert.equals(1, getcompletion_calls, "three directories among all those files")
   end)
 
   it("leaves a pattern, another type and a directory it cannot list to getcompletion()", function()

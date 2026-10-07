@@ -690,14 +690,17 @@ the selection instead of re-triggering, and `<CR>` accepts the highlighted
 candidate rather than submitting the whole prompt (a second `<CR>` — popup
 now closed — submits). `completion` accepts any type name `getcompletion()`
 does (`"dir"`, `"shellcmd"`, `"buffer"`, ...), not just `"file"`. For `"file"` and
-`"dir"`, a fragment with more than 300 matches gets its list from one directory
-listing, matched and sorted as `getcompletion()` does (case ignored under
-`'fileignorecase'` or `'wildignorecase'`, and always on Windows; ordered by
-upper case under `'fileignorecase'`) and cut to 300 (`getcompletion()` stats
-every match: half a second for a directory of five thousand files; this stats
-no file or directory, and a link or an entry the listing gives no type for at
-most 301 times); typing on narrows it. A fragment with a backtick in it is
-never completed:
+`"dir"`, a fragment that more than 300 entries start with (for `"dir"` the files
+among them count) gets its list from one directory listing, matched and sorted
+as `getcompletion()` does (case ignored under `'fileignorecase'` or
+`'wildignorecase'`, and always on Windows; ordered by upper case under
+`'fileignorecase'`) and cut to 300 (`getcompletion()` stats every candidate:
+half a second for a directory of five thousand files; this stats no file or
+directory, and a link or an entry the listing gives no type for only until 300
+are found, which for `"dir"` can be every link of the directory, once, as no link
+to a file is a directory; a link that leads nowhere is left out, as
+`getcompletion()` leaves it); typing on narrows it. A fragment with a backtick
+in it is never completed:
 `getcompletion()` runs the span between backticks through the shell, and the
 fragment may be pasted text.
 
