@@ -361,6 +361,7 @@ local NOT_YET = "the slot editor is not built yet; use :UI slots list, add, clea
 --- `:UI slots ...`. `args[1]` is "slots", the rest is what the user typed.
 ---@param args string[]
 function M.command(args)
+  local was_enabled = enabled
   ensure()
   local sub = args[2]
 
@@ -400,9 +401,11 @@ function M.command(args)
       bar.open()
     elseif sub == "close" then
       bar.close()
-    else
+    elseif was_enabled or not bar.wanted() then
       bar.toggle()
     end
+    -- (else: `show = true` opened the bar when this very command switched the
+    -- feature on -- that was the toggle.)
     if bar.wanted() and not bar.is_open() then
       say("the bar is on, and shows up with the first slot", vim.log.levels.INFO)
     end

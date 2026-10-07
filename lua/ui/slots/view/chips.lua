@@ -27,6 +27,12 @@
 --- also asks `pointer_on_bar()` before it opens. A press that began on the bar
 --- takes its drag and release with it.
 ---
+--- Two limits, both on the user's side: Neovim before 0.11 ignores the "" (a click
+--- on the bar then also reaches the code under it; a notice says so), and a mouse
+--- key that the user mapped to SEVERAL keys (`<RightMouse>` -> `<LeftMouse><Cmd>popup
+--- PopUp<CR>`) loses only its first key to the discard: the rest of the sequence
+--- arrives as typed input and runs.
+---
 --- No timer: the bar redraws on events (buffer and tab changes, saves, a slot
 --- changing, a resize), coalesced into one redraw per tick.
 
@@ -97,7 +103,9 @@ local STAT_TTL_MS = 1000
 ---@field bad_style table<string, boolean>
 ---@field pressed boolean            # a mouse press began on the bar and its release is still to come
 ---@field recolor boolean
+---@field themed boolean            # the Kit* groups were defined for this colour scheme
 ---@field bad_draw boolean
+---@field told_discard boolean
 local S = {
   want = false,
   win = nil,
@@ -114,7 +122,9 @@ local S = {
   bad_style = {},
   pressed = false,
   recolor = false,
+  themed = false,
   bad_draw = false,
+  told_discard = false,
 }
 
 -- Text helpers ----------------------------------------------------------
@@ -174,17 +184,19 @@ local function solid_group(hl)
     return name
   end
   local fg = api.nvim_get_hl(0, { name = hl, link = false }).fg
+  if not fg then
+    -- Not (yet) a colour: a group that is always there, and ask again next time.
+    return "Visual"
+  end
   local text = api.nvim_get_hl(0, { name = "NormalFloat", link = false }).bg
     or api.nvim_get_hl(0, { name = "Normal", link = false }).bg
   name = "UiSlotsSolid_" .. hl
   if fg and text then
     api.nvim_set_hl(0, name, { fg = text, bg = fg })
-  elseif fg then
+  else
     -- A transparent Normal has no background to use as the text colour: reverse
     -- video puts the text colour on the block and the terminal's own behind it.
     api.nvim_set_hl(0, name, { fg = fg, reverse = true })
-  else
-    api.nvim_set_hl(0, name, { link = "Visual" })
   end
   S.solid_groups[hl] = name
   return name
@@ -343,7 +355,30 @@ local function chip_width(descs)
       or 0
     want = math.max(want, vim.fn.strdisplaywidth(d.text) + 2 + sides)
   end
-  return math.min(want, cap)
+  -- A border glyph two cells wide (ambiwidth = "double") must divide the width
+  -- between the corners, or the right edge sits one cell off: up when the text
+  -- needs the cell, down when the cap does not allow it.
+  local gw, corners = 1, 0
+  for _, d in ipairs(descs) do
+    if d.h == 3 then
+      gw = math.max(1, vim.fn.strdisplaywidth(d.shape.t))
+      corners = vim.fn.strdisplaywidth(d.shape.tl) + vim.fn.strdisplaywidth(d.shape.tr)
+      break
+    end
+  end
+  local function aligned(width, up)
+    local rest = (width - corners) % gw
+    if rest == 0 then
+      return width
+    end
+    return up and width + (gw - rest) or width - rest
+  end
+  cap = math.max(cap, MIN_WIDTH)
+  local up = aligned(want, true)
+  if up <= cap then
+    return up
+  end
+  return math.max(aligned(cap, false), 1)
 end
 
 --- Which slots fit from `top` on, with a row kept for the counters that are
@@ -539,6 +574,15 @@ end
 function M.refresh()
   if not S.want then
     return
+  end
+  if not S.themed then
+    -- The `Kit*` groups the chips are drawn with exist from here on, before the first
+    -- chip is built (a solid chip reads their colours).
+    local theme = require("ui.kit.theme")
+    pcall(function()
+      theme.materialize(theme.resolve(nil))
+    end)
+    S.themed = true
   end
   local row0, avail = room()
   -- Under three free rows a bordered chip does not fit: one row per slot then.
@@ -746,7 +790,8 @@ local function on_pointer(base, item)
   end
 end
 
-local PRESS = { LeftMouse = true, RightMouse = true, MiddleMouse = true }
+local PRESS =
+  { LeftMouse = true, RightMouse = true, MiddleMouse = true, X1Mouse = true, X2Mouse = true }
 local FOLLOW = {
   LeftDrag = true,
   RightDrag = true,
@@ -754,6 +799,10 @@ local FOLLOW = {
   LeftRelease = true,
   RightRelease = true,
   MiddleRelease = true,
+  X1Drag = true,
+  X2Drag = true,
+  X1Release = true,
+  X2Release = true,
 }
 local WHEEL = {
   ScrollWheelUp = true,
@@ -811,6 +860,10 @@ local function on_key(key, typed)
 
   local line = bar_line()
   if not line then
+    if PRESS[base] then
+      -- A new press elsewhere: the release of an earlier one is not coming.
+      S.pressed = false
+    end
     return nil
   end
   if PRESS[base] then
@@ -892,6 +945,7 @@ local function attach()
 
   on("ColorScheme", function()
     S.solid_groups = {}
+    S.themed = false
     S.recolor = true
     schedule()
   end, "colours")
@@ -933,8 +987,23 @@ local function detach()
   autocmd.group(GROUP, true)
 end
 
+--- Can a key be taken away from Neovim by returning "" from `vim.on_key`? Since
+--- 0.11; on 0.10 the return value is ignored (replaceable for the specs).
+---@return boolean
+function M._discard_supported()
+  return vim.fn.has("nvim-0.11") == 1
+end
+
 --- Show the bar (and keep it up to date) until `close()`.
 function M.open()
+  if not S.told_discard and not M._discard_supported() then
+    S.told_discard = true
+    vim.notify(
+      "[ui.slots] Neovim 0.10 cannot take a click away from the editor: a click on the bar also "
+        .. "moves the cursor under it, and a right click also opens the native menu. 0.11+ does not.",
+      vim.log.levels.WARN
+    )
+  end
   S.want = true
   attach()
   M.refresh()
@@ -989,7 +1058,8 @@ function M.reset()
   M.close()
   S.top_n, S.focus_n = nil, nil
   S.render_cache, S.key_cache, S.solid_groups, S.bad_style = {}, {}, {}, {}
-  S.pending, S.pressed, S.recolor, S.bad_draw = false, false, false, false
+  S.pending, S.pressed, S.recolor, S.bad_draw, S.themed, S.told_discard =
+    false, false, false, false, false, false
 end
 
 return M
