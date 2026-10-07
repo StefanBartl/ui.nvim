@@ -150,11 +150,56 @@ function M.render(slot)
   }
 end
 
+--- The address and its host, which is all that is known without asking the
+--- page.
+---@param url string
+---@return string[]
+local function offline(url)
+  local host = url:match("^%a[%w+.%-]*://([^/%?#]+)")
+  return { url, "", host and ("host: " .. host) or "" }
+end
+
+--- What the page says, asked through hover.nvim: the preview shows the address
+--- and "loading ..." first, and the answer replaces it when it arrives (the
+--- pane drops an answer that is no longer wanted). Nothing is asked unless a
+--- preview is shown -- the bar never does, and the panel only on `K` or in
+--- `auto` mode -- and `preview.fetch = false` keeps it to the address. Without
+--- hover.nvim, or for `file:` and `mailto:`, it is the address and its host.
 ---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }|nil
 ---@return Ui.Slots.Preview
-function M.preview(slot)
-  local host = (slot.url or ""):match("^%a[%w+.%-]*://([^/%?#]+)")
-  return { lines = { slot.url or "", "", host and ("host: " .. host) or "" } }
+function M.preview(slot, ctx)
+  local url = M.text(slot, ctx or {})
+  if refuse(url) or not url:match("^[Hh][Tt][Tt][Pp][Ss]?://") then
+    return { lines = offline(url) }
+  end
+  local ok, hover = pcall(require, "hover")
+  local cfg = require("ui.slots.config").get().preview
+  if not (ok and type(hover) == "table" and type(hover.preview_target) == "function") then
+    return { lines = offline(url) }
+  end
+  local lines = offline(url)
+  if not cfg.fetch then
+    return { lines = lines }
+  end
+  return {
+    lines = { url, "", "loading ..." },
+    later = function(deliver)
+      local started, handle = pcall(hover.preview_target, url, function(content)
+        local out = type(content) == "table" and content.lines
+        if type(out) ~= "table" or #out == 0 then
+          deliver({ lines = lines })
+          return
+        end
+        deliver({ lines = out })
+      end, { fetch = true, max_lines = 60, max_width = 76 })
+      if not started then
+        deliver({ lines = vim.list_extend({ "(hover.nvim could not preview this)", "" }, lines) })
+        return nil
+      end
+      return handle
+    end,
+  }
 end
 
 return M

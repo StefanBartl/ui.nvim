@@ -23,7 +23,7 @@ local DEFAULTS = {
   persist = true,
   target = "current",
   clipboard = { "+", "*", '"' },
-  preview = { mode = "key", delay = 150, max_kb = 1536, max_lines = 4000 },
+  preview = { mode = "key", delay = 150, max_kb = 1536, max_lines = 4000, fetch = true },
   overflow = "accordion",
   keys = {},
   slots = {},
@@ -108,6 +108,9 @@ local function sanitize(cfg)
     if not valid_number(cfg.preview[key], min) then
       cfg.preview[key] = DEFAULTS.preview[key]
     end
+  end
+  if type(cfg.preview.fetch) ~= "boolean" then
+    cfg.preview.fetch = DEFAULTS.preview.fetch
   end
   local ok_clip = type(cfg.clipboard) == "table" and #cfg.clipboard > 0
   if ok_clip then
@@ -283,6 +286,9 @@ function M.issues(cfg)
     end
     for _, key in ipairs({ "delay", "max_kb", "max_lines" }) do
       check_number(pv, key, 0, issues)
+    end
+    if type(pv.fetch) ~= "boolean" then
+      issues[#issues + 1] = ("preview.fetch: %s is not a boolean"):format(vim.inspect(pv.fetch))
     end
   end
 
