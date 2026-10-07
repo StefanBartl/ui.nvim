@@ -492,11 +492,13 @@ and lib.nvim cannot require `ui.nvim` without inverting the dependency
 direction the whole fleet rests on. So both copies stay, and lib.nvim's is
 frozen: no new features, only what is here already.
 
-One opt-in feature went across anyway, on 2026-10-07: `kit.form`'s `back`
-navigation (and the `ui.kit.buttons` helper it shares with `kit.confirm`).
-The drift spec compares code, not intent, so a kit feature left on one side
-is a red CI run; the feature is off unless asked for, so lib.nvim's own call
-sites behave as before. Until the spec learns a way to name a deliberate
+Two opt-in features went across anyway, on 2026-10-07: `kit.form`'s `back`
+navigation (and the `ui.kit.buttons` helper it shares with `kit.confirm`),
+and the new `kit.sheet` (one float with every field of a form, inline
+validation; it shares two small helpers of `kit.input`, the secret mask and
+the completion popup). The drift spec compares code, not intent, so a kit
+feature left on one side is a red CI run; the features are off unless asked
+for, so lib.nvim's own call sites behave as before. Until the spec learns a way to name a deliberate
 difference, a kit feature has to be mirrored like a fix — see below.
 
 **"Frozen" does not mean "keeps known bugs", and for a while it did.** By
