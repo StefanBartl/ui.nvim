@@ -65,12 +65,19 @@ describe("ui.tabline.reopen", function()
 
     it("ignores a terminal buffer", function()
       local buf = vim.api.nvim_create_buf(true, false)
+      local job
       vim.api.nvim_buf_call(buf, function()
-        vim.fn.jobstart({ vim.v.progpath, "--version" }, { term = true })
+        job = vim.fn.jobstart({ vim.v.progpath, "--version" }, { term = true })
       end)
       vim.t.bufs = { buf }
       reopen.record(buf)
       assert.is_false(reopen.has_any())
+      -- The terminal's process must not outlive the case: stop it and wait
+      -- until it is gone before the buffer is dropped.
+      if job and job > 0 then
+        pcall(vim.fn.jobstop, job)
+        vim.fn.jobwait({ job }, 2000)
+      end
       pcall(vim.api.nvim_buf_delete, buf, { force = true })
     end)
 
