@@ -659,6 +659,16 @@ describe("kit.sheet", function()
       end)
     end)
 
+    it("does not flag a blank `live` field because of the TextChanged of opening", function()
+      local r = open({ { name = "n", label = "N", required = true, live = true } })
+      -- The writes that built the sheet fire one `TextChanged` once the loop runs.
+      api.nvim_exec_autocmds("TextChanged", { buffer = r.surf.bufnr })
+      assert.same({}, r.surf:state().errors)
+      type_into(r, 1, "x")
+      type_into(r, 1, "")
+      assert.same({ n = "required" }, r.surf:state().errors, "but a real edit is")
+    end)
+
     it("calls validate with the value on_submit will get (after expand_env)", function()
       vim.env.SHEET_SPEC_V = "42"
       local got
