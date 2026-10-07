@@ -12,6 +12,7 @@
 ---   a                     add a slot (the editor; the file you came from is the default)
 ---   dd                    clear the slot
 ---   y                     copy what the slot stands for
+---   K                     a preview pane beside the panel (follows the cursor; see `view.preview`)
 ---   <C-j> / <C-k>         move the slot down / up (swap with its neighbour)
 ---   right click           a menu for the slot under the pointer
 ---   q / <Esc>             close
@@ -42,6 +43,9 @@ local NS = api.nvim_create_namespace("ui_slots_panel")
 ---@field suspended boolean        # another float (editor, menu) is open on the panel's behalf
 ---@field typed string              # the digits typed since the cursor last moved some other way
 ---@field typed_line integer|nil    # the line the typed number put the cursor on
+---@field geom table|nil            # the panel's rectangle, for the preview pane
+---@field preview_on boolean         # the preview is wanted
+---@field deb table|nil              # debounces the preview of `auto`
 local S = {
   surf = nil,
   numbers = {},
@@ -51,6 +55,9 @@ local S = {
   suspended = false,
   typed = "",
   typed_line = nil,
+  geom = nil,
+  preview_on = false,
+  deb = nil,
 }
 
 ---@return boolean
@@ -67,6 +74,10 @@ local function current()
   local line = api.nvim_win_get_cursor(S.surf.winid)[1]
   return S.numbers[line]
 end
+
+--- Show, move or close the preview pane to follow the cursor (defined below).
+---@type fun()
+local update_preview
 
 --- One line per slot.
 ---@return string[] lines
@@ -132,11 +143,34 @@ local function redraw(keep)
     end
   end
   pcall(api.nvim_win_set_cursor, S.surf.winid, { math.min(line, #lines), 0 })
+  update_preview()
+end
+
+--- Show, move or close the preview pane to follow the cursor.
+update_preview = function()
+  local preview = require("ui.slots.view.preview")
+  if not (M.is_open() and S.preview_on) then
+    preview.close()
+    return
+  end
+  local n = current()
+  if not n then
+    preview.close()
+    return
+  end
+  preview.show(n, S.geom)
 end
 
 function M.close()
   local surf = S.surf
   S.surf = nil
+  if S.deb then
+    S.deb.cancel()
+    S.deb = nil
+  end
+  if package.loaded["ui.slots.view.preview"] then
+    package.loaded["ui.slots.view.preview"].close()
+  end
   if surf then
     surf:close()
   end
@@ -151,6 +185,9 @@ local function away(fn, keep)
   S.suspended = true
   local surf = S.surf
   S.surf = nil
+  if package.loaded["ui.slots.view.preview"] then
+    package.loaded["ui.slots.view.preview"].close()
+  end
   if surf then
     surf:close()
   end
@@ -407,6 +444,16 @@ local function attach_keys()
     end, n)
   end, "menu of the slot under the pointer")
 
+  map("K", function()
+    local mode = config.get().preview.mode
+    if mode == "off" then
+      require("ui.slots.util").notify('the preview is switched off (preview.mode = "off")')
+      return
+    end
+    S.preview_on = not S.preview_on
+    update_preview()
+  end, "show / hide the preview")
+
   map("q", M.close, "close")
   map("<Esc>", M.close, "close")
 end
@@ -461,6 +508,14 @@ function M.open(opts)
   S.surf = surf
   S.numbers = numbers
   S.typed = ""
+  S.geom = {
+    row = row0,
+    col = cfg.side == "left" and 0 or math.max(0, vim.o.columns - width - 2),
+    width = width + 2,
+    height = height,
+    side = cfg.side,
+  }
+  S.preview_on = cfg.preview.mode == "auto"
   surf:on_close(function()
     if S.surf == surf then
       S.surf = nil
@@ -502,6 +557,27 @@ function M.open(opts)
       redraw()
     end)
   end)
+
+  -- The preview follows the cursor: at once with `K`, after `preview.delay` in
+  -- `auto` mode (a cursor held down a list does not read a file per row).
+  local pv = cfg.preview
+  if pv.mode == "auto" and pv.delay > 0 then
+    S.deb = require("lib.nvim.debounce").new(update_preview, pv.delay)
+  end
+  require("lib.nvim.bindings.autocmd").create("CursorMoved", function()
+    if not S.preview_on then
+      return
+    end
+    if S.deb then
+      S.deb.call()
+    else
+      update_preview()
+    end
+  end, {
+    buffer = surf.bufnr,
+    record = false,
+    desc = "ui.slots panel: the preview follows the cursor",
+  })
 
   -- Leaving the panel closes it (the editor and the menu it opens itself are
   -- the exception: they come back to it).
