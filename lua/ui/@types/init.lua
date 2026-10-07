@@ -35,6 +35,7 @@
 ---@field toast? Ui.Kit.ToastConfig # size of the corner toasts: `width` (max, default "40%"), `min_width` (default 40), `padding` (default 1), `max_lines` (default 20); columns or "NN%" of the editor width -- see `ui.kit.toast`
 ---@field context? boolean|Ui.Context.Opts # explicit-only (not under `all`): the sticky code-context overlay (`ui.context`); `true` for the shipped tunables, a table to override them
 ---@field sticky? boolean|Ui.Context.Opts # the same switch as `context` under the name `:UI sticky` uses; wins when both are given. `false` leaves it off
+---@field slots? boolean|Ui.Slots.Opts # explicit-only (not under `all`): numbered action slots (`ui.slots`); `true` switches them on with the defaults, a table is their options and switches them on when it has `enabled = true`
 ---@field tasks? Ui.Tasks.Opts # explicit-only (not under `all`): options of the opt-in `tasks_counter` statusline segment (vault, area, source, ttl, ...); see `ui.statusline.modules.tasks_counter.config`
 ---@field menu? boolean|Ui.Menu.Opts # `false` disables `ui.contextmenu`'s renderer/trigger (opt-OUT); omitted or `true` leaves it at its already-working default; a TABLE configures and binds `ui.menu`, the right-click menu with the sister plugins' entries (explicit-only)
 

@@ -85,6 +85,16 @@ function M.validate(slot)
   return nil
 end
 
+--- The address this slot opens, placeholders put in.
+---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }
+---@return string
+function M.text(slot, ctx)
+  local url, unknown = address(slot, ctx.resolve)
+  util.warn_unknown(unknown, "url slot")
+  return url
+end
+
 ---@param slot table
 ---@param ctx { resolve?: Ui.Slots.Ctx }
 ---@return boolean ok

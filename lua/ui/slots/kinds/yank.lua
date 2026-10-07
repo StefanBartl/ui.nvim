@@ -25,17 +25,15 @@ function M.validate(slot)
   return nil
 end
 
----@param slot table
----@param ctx { resolve?: Ui.Slots.Ctx }
+--- Write `text` into the registers (the config's `clipboard` unless given).
+--- A register that refuses is skipped; fails only when none took it.
+---@param text string
+---@param registers string[]|nil
 ---@return boolean ok
 ---@return string|nil err
-function M.apply(slot, ctx)
-  local text, unknown = resolve.resolve(slot.text, ctx.resolve)
-  util.warn_unknown(unknown, "yank slot")
-
-  local registers = slot.register and { slot.register } or config.get().clipboard
+function M.put(text, registers)
   local done = {}
-  for _, reg in ipairs(registers) do
+  for _, reg in ipairs(registers or config.get().clipboard) do
     if pcall(vim.fn.setreg, reg, text) then
       done[#done + 1] = reg
     end
@@ -48,6 +46,23 @@ function M.apply(slot, ctx)
     vim.log.levels.INFO
   )
   return true
+end
+
+---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }
+---@return string
+function M.text(slot, ctx)
+  local text, unknown = resolve.resolve(slot.text, ctx.resolve)
+  util.warn_unknown(unknown, "yank slot")
+  return text
+end
+
+---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }
+---@return boolean ok
+---@return string|nil err
+function M.apply(slot, ctx)
+  return M.put(M.text(slot, ctx), slot.register and { slot.register } or nil)
 end
 
 ---@param slot table

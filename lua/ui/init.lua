@@ -49,6 +49,11 @@ local M = {}
 --- the shipped tunables, a `Ui.Context.Opts` table enables it with those
 --- overrides applied first. `opts.sticky` is the same switch under the name
 --- the `:UI sticky` command uses; when both are given, `sticky` wins.
+---
+--- `opts.slots` is explicit-only too: `true` switches the numbered action slots
+--- (`ui.slots`) on with the shipped defaults, a table is their options and
+--- switches them on when it has `enabled = true`. Without either, nothing is
+--- loaded or mapped until `:UI slots` / the Lua API is used.
 ---@param opts Ui.Modules|nil
 ---@return nil
 function M.setup(opts)
@@ -85,6 +90,20 @@ function M.setup(opts)
     end)
     if not ok then
       notify.error("context setup failed: " .. tostring(err))
+    end
+  end
+
+  if opts.slots then
+    local ok, err = pcall(function()
+      local slots = require("ui.slots")
+      if type(opts.slots) == "table" then
+        slots.setup(opts.slots)
+      else
+        slots.setup({ enabled = true })
+      end
+    end)
+    if not ok then
+      notify.error("slots setup failed: " .. tostring(err))
     end
   end
 
