@@ -138,7 +138,9 @@ describe("ui.slots", function()
     it("setup() while on picks up the new config", function()
       slots.setup({ data_dir = dir .. "/data", save_delay_ms = 0, keys = { count = "<leader>q" } })
       assert.is_true(slots.is_enabled())
-      assert.is_true(vim.tbl_contains(require("ui.slots.bindings").mapped(), "<leader>q"))
+      assert.is_true(
+        vim.tbl_contains(require("ui.slots.bindings").mapped(), (vim.g.mapleader or "\\") .. "q")
+      )
     end)
   end)
 
@@ -150,6 +152,14 @@ describe("ui.slots", function()
       assert.is_true((slots.apply(1)))
       assert.equals(path, current_name())
       assert.equals(1, slots.last_applied())
+    end)
+
+    it("refuses numbers outside 1 to MAX_N the same way as a string and as a number", function()
+      for _, bad in ipairs({ 0, "0", config.MAX_N + 1, "99999999999999999999", "00" }) do
+        local ok, err = slots.apply(bad)
+        assert.is_false(ok)
+        assert.equals("not a slot number", err, tostring(bad))
+      end
     end)
 
     it("accepts the number as a string and refuses anything else", function()
@@ -211,6 +221,21 @@ describe("ui.slots", function()
       assert.is_true(said("already in slot 1"))
     end)
 
+    it(
+      "stores a file name with braces escaped, so it opens again and is not added twice",
+      function()
+        local path = make_file("report {line}.md")
+        vim.cmd.edit(path)
+        assert.equals(1, slots.add())
+        assert.equals(path, vim.fs.normalize(registry.text(slots.get(1))))
+        vim.cmd("enew")
+        assert.is_true((slots.apply(1)))
+        assert.equals(path, current_name())
+        assert.equals(1, slots.add())
+        assert.equals(1, #slots.list())
+      end
+    )
+
     it("refuses a buffer without a file", function()
       vim.cmd("enew")
       local n, err = slots.add()
@@ -241,6 +266,20 @@ describe("ui.slots", function()
       slots.add({ kind = "yank", text = "3" })
       slots.clear(2)
       assert.equals(2, slots.add({ kind = "yank", text = "again" }))
+    end)
+  end)
+
+  describe("completion", function()
+    it("knows the slot numbers before anything switched the feature on", function()
+      slots.add({ kind = "yank", text = "x" })
+      store.flush()
+      slots.reset()
+      store.reset()
+      config.setup({ data_dir = dir .. "/data", save_delay_ms = 0 })
+      assert.is_false(slots.is_enabled())
+      local out = slots.complete("", nil, 1)
+      assert.is_true(vim.tbl_contains(out, "1"))
+      assert.is_false(slots.is_enabled())
     end)
   end)
 
@@ -390,6 +429,17 @@ describe("ui.slots", function()
       end
     )
 
+    it("removes the keymaps it made even when the leader changed in between", function()
+      local old = vim.g.mapleader
+      vim.g.mapleader = ","
+      start({ keys = { apply = "<leader>%d" } })
+      assert.is_not.equals("", vim.fn.maparg(",1", "n"))
+      vim.g.mapleader = ";"
+      slots.disable()
+      vim.g.mapleader = old
+      assert.equals("", vim.fn.maparg(",1", "n"))
+    end)
+
     it("removes its keymaps on disable and again on a second enable", function()
       start({ keys = { apply = "<leader>%d" } })
       assert.equals(9, #require("ui.slots.bindings").mapped())
@@ -418,6 +468,42 @@ describe("ui.slots", function()
       assert.equals(1, #slots.list())
       vim.cmd.cd(b)
       assert.equals("in b", slots.get(1).text)
+    end)
+
+    it("DirChanged keeps the slots of this session when nothing is persisted", function()
+      start({ persist = false })
+      slots.add({ kind = "yank", text = "session only" })
+      vim.cmd.cd(dir)
+      assert.equals("session only", slots.get(1).text)
+    end)
+
+    it("DirChanged inside the same project does not reload", function()
+      local proj = dir .. "/proj"
+      vim.fn.mkdir(proj .. "/.git", "p")
+      vim.fn.mkdir(proj .. "/sub", "p")
+      vim.cmd.cd(proj)
+      start({ save_delay_ms = 60000 })
+      slots.add({ kind = "yank", text = "unsaved" })
+      local reloads = 0
+      store.on_change(function(event)
+        if event == "reload" then
+          reloads = reloads + 1
+        end
+      end)
+      vim.cmd.cd(proj .. "/sub")
+      assert.equals(0, reloads)
+      assert.equals("unsaved", slots.get(1).text)
+    end)
+
+    it("VimLeavePre remembers the cursor of the file you quit from", function()
+      local path = make_file("a.txt", { "alpha", "beta", "gamma" })
+      slots.add({ kind = "file", path = path })
+      slots.apply(1)
+      vim.api.nvim_win_set_cursor(0, { 2, 2 })
+      vim.api.nvim_exec_autocmds("VimLeavePre", { group = "ui_slots" })
+      assert.equals(2, slots.get(1).line)
+      assert.equals(3, slots.get(1).col)
+      assert.equals(1, vim.fn.filereadable(store.path()))
     end)
 
     it("DirChanged leaves a global scope alone", function()
@@ -560,6 +646,8 @@ describe("ui.slots", function()
       config.setup({ data_dir = dir .. "/data" })
       require("ui").setup({ slots = true })
       assert.is_true(slots.is_enabled())
+      -- the options given before are still there
+      assert.equals(dir .. "/data", config.get().data_dir)
     end)
 
     it("a table configures them and switches them on only with enabled = true", function()

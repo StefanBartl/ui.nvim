@@ -44,11 +44,12 @@ end
 ---@param s any
 ---@return integer|nil
 local function number(s)
-  if type(s) == "number" and s == math.floor(s) and s >= 1 then
-    return s
-  end
+  local n = s
   if type(s) == "string" and s:match("^%d+$") then
-    return tonumber(s)
+    n = tonumber(s)
+  end
+  if type(n) == "number" and n == math.floor(n) and n >= 1 and n <= config.MAX_N then
+    return n
   end
   return nil
 end
@@ -179,17 +180,19 @@ function M.add(slot, n)
       say("this buffer has no file")
       return nil, "no file"
     end
-    slot = { kind = "file", path = vim.fs.normalize(name) }
+    local path = vim.fs.normalize(name)
+    -- Braces in a file name are written doubled: `{{` is a literal `{`.
+    slot = { kind = "file", path = (path:gsub("{", "{{"):gsub("}", "}}")) }
     -- Already there? Say which slot instead of adding a twin.
-    local key = require("lib.nvim.fs.normkey")(slot.path)
+    local normkey = require("lib.nvim.fs.normkey")
+    local key = normkey(path)
     for _, existing in ipairs(store.list()) do
-      if
-        existing.kind == "file"
-        and type(existing.path) == "string"
-        and require("lib.nvim.fs.normkey")(vim.fs.normalize(existing.path)) == key
-      then
-        say(("already in slot %d"):format(existing.n), vim.log.levels.INFO)
-        return existing.n
+      if existing.kind == "file" and type(existing.path) == "string" then
+        local text = registry.text(existing)
+        if text and normkey(text) == key then
+          say(("already in slot %d"):format(existing.n), vim.log.levels.INFO)
+          return existing.n
+        end
       end
     end
   end
@@ -386,6 +389,11 @@ local SUBCOMMANDS =
 ---@param index integer
 ---@return string[]
 function M.complete(arglead, sub, index)
+  -- The numbers come from the data file; reading it does not need the
+  -- keymaps and autocommands, so completion does not switch the feature on.
+  if not enabled then
+    store.reload()
+  end
   local out = {}
   if index == 1 then
     vim.list_extend(out, SUBCOMMANDS)

@@ -36,7 +36,9 @@ end
 ---@return string[] unknown
 local function target_path(slot, ctx)
   local resolved, unknown = resolve.resolve(slot.path, ctx)
-  return vim.fs.normalize(resolved), unknown
+  -- Absolute: a relative name that starts with "+" would be read by :edit as
+  -- a +cmd argument, and the position memory needs one spelling per file.
+  return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
 end
 
 ---@param slot table
@@ -151,6 +153,13 @@ function M.remember_current()
       end
     end
   end
+end
+
+--- Where the cursor was last left in `path` this session, or nil.
+---@param path string
+---@return { line: integer, col: integer }|nil
+function M.position(path)
+  return positions[key(path)]
 end
 
 --- Forget the session positions (tests).

@@ -47,6 +47,11 @@ describe("ui.slots.kinds", function()
     return vim.fs.normalize(path)
   end
 
+  ---@param path string
+  local function slots_add_file(path)
+    store.add({ kind = "file", path = path })
+  end
+
   ---@return string
   local function current_name()
     return vim.fs.normalize(vim.api.nvim_buf_get_name(0))
@@ -131,6 +136,17 @@ describe("ui.slots.kinds", function()
       local ok, err = registry.apply({ kind = "boom" })
       assert.is_false(ok)
       assert.is_truthy(err:find("kaboom", 1, true))
+    end)
+
+    it("apply() treats nil, err as a failure too", function()
+      registry.register("legacy", {
+        apply = function()
+          return nil, "went wrong"
+        end,
+      })
+      local ok, err = registry.apply({ kind = "legacy" })
+      assert.is_false(ok)
+      assert.equals("went wrong", err)
     end)
 
     it("apply() treats a kind that returns nothing as success", function()
@@ -310,14 +326,36 @@ describe("ui.slots.kinds", function()
     end)
 
     it("does not remember a buffer that is not a file", function()
-      local calls = 0
-      local id = store.on_change(function()
-        calls = calls + 1
-      end)
+      local path = make_file("a.txt")
+      slots_add_file(path)
       vim.cmd("enew")
+      vim.api.nvim_buf_set_name(0, "")
       file.remember_current()
-      store.off(id)
-      assert.equals(0, calls)
+      assert.is_nil(file.position(""))
+      vim.cmd("terminal")
+      file.remember_current()
+      assert.is_nil(file.position(vim.api.nvim_buf_get_name(0)))
+      vim.cmd("bwipeout!")
+    end)
+
+    it(
+      "opens a file whose relative name starts with '+' instead of reading it as a +cmd",
+      function()
+        local old = vim.fn.getcwd()
+        vim.cmd.cd(dir)
+        vim.fn.writefile({ "x" }, "+q")
+        local ok = registry.apply({ kind = "file", path = "+q" })
+        vim.cmd.cd(old)
+        assert.is_true(ok)
+        assert.equals("+q", vim.fs.basename(current_name()))
+      end
+    )
+
+    it("reads {{ and }} in a path as literal braces", function()
+      local path = make_file("report {line}.md")
+      local escaped = path:gsub("{", "{{"):gsub("}", "}}")
+      assert.is_true((registry.apply({ kind = "file", path = escaped })))
+      assert.equals(path, current_name())
     end)
 
     it("validates target, line and col", function()
@@ -326,6 +364,15 @@ describe("ui.slots.kinds", function()
       assert.is_truthy(registry.validate({ kind = "file", path = "x", col = 1.5 }))
       assert.is_truthy(registry.validate({ kind = "file", path = "" }))
       assert.is_nil(registry.validate({ kind = "file", path = "x", target = "tab", line = 3 }))
+    end)
+
+    it("renders icon and highlight too, and dims a file that is gone", function()
+      local path = make_file("notes.md")
+      local r = registry.render({ kind = "file", path = path })
+      assert.is_truthy(r.icon ~= "")
+      assert.equals("KitAccent", r.hl)
+      vim.fn.delete(path)
+      assert.equals("KitMuted", registry.render({ kind = "file", path = path }).hl)
     end)
 
     it("renders the file name, and marks a file that is gone", function()
@@ -402,6 +449,30 @@ describe("ui.slots.kinds", function()
       assert.is_truthy(registry.validate({ kind = "yank", text = 5 }))
       assert.is_truthy(registry.validate({ kind = "yank", text = "x", register = "ab" }))
       assert.is_nil(registry.validate({ kind = "yank", text = "" }))
+    end)
+
+    it("renders an icon and the muted highlight", function()
+      local r = registry.render({ kind = "yank", text = "x" })
+      assert.is_truthy(r.icon ~= "")
+      assert.equals("KitMuted", r.hl)
+    end)
+
+    it("does not count a clipboard register as written when there is no provider", function()
+      local kind = require("ui.slots.kinds.yank")
+      local original = kind.clipboard_available
+      kind.clipboard_available = function()
+        return false
+      end
+      config.setup({ clipboard = { "+", "*", "a" } })
+      vim.fn.setreg("a", "")
+      assert.is_true((registry.apply({ kind = "yank", text = "kept" })))
+      assert.equals("kept", reg("a"))
+      assert.is_truthy(table.concat(messages, "\n"):find("to a", 1, true))
+      assert.is_nil(table.concat(messages, "\n"):find("to + * a", 1, true))
+      local ok, err = registry.apply({ kind = "yank", text = "lost", register = "+" })
+      kind.clipboard_available = original
+      assert.is_false(ok)
+      assert.is_truthy(err:find("no register", 1, true))
     end)
 
     it("renders a one-line label and previews the resolved text", function()
@@ -504,6 +575,20 @@ describe("ui.slots.kinds", function()
       local slot = { kind = "url", url = "https://example.org/{word}" }
       registry.apply(slot, { resolve = { word = "../@evil.test" } })
       assert.equals("https://example.org/..%2F%40evil.test", opened[1])
+    end)
+
+    it("hands the address to a launcher that is no shell on Windows", function()
+      local kind = require("ui.slots.kinds.url")
+      assert.same({ cmd = { "rundll32", "url.dll,FileProtocolHandler" } }, kind.opener(true))
+      assert.is_nil(kind.opener(false))
+      local given
+      vim.ui.open = function(url, opts)
+        given = { url = url, opts = opts }
+        return {}, nil
+      end
+      registry.apply({ kind = "url", url = "https://example.org/?a=1&b=2" })
+      assert.equals("https://example.org/?a=1&b=2", given.url)
+      assert.same(kind.opener(), given.opts)
     end)
 
     it("passes on an error of the opener", function()
