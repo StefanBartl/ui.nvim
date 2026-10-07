@@ -2,6 +2,9 @@
 --- Placeholder substitution for slot payloads (`{file}`, `{dir}`, `{root}`,
 --- `{cwd}`, `{line}`, `{col}`, `{word}`, `{sel}`, `{clip}`, `{count}`).
 ---
+--- `{{` and `}}` stand for a literal `{` and `}` (a file called `report {line}.md`
+--- is written `report {{line}}.md`).
+---
 --- Plain text replacement and nothing else: a placeholder is a name between
 --- braces, never code, so there is no `loadstring`/`vim.fn.eval` here. A name
 --- this module does not know stays in the text unchanged and is reported in
@@ -97,6 +100,35 @@ function M.context(count)
   }
 end
 
+--- Walk `text` once, left to right, and call `emit("text", chars)` for literal
+--- text (a `{{` or `}}` is one literal brace) and `emit("name", word)` for
+--- every `{word}`. One pass, so `{{{file}}}` is `{`, the file, `}` -- doing
+--- the braces first and the names after would cut it in the wrong place.
+---@param text string
+---@param emit fun(kind: "text"|"name", value: string)
+local function scan(text, emit)
+  local i, n = 1, #text
+  while i <= n do
+    local two = text:sub(i, i + 1)
+    if two == "{{" then
+      emit("text", "{")
+      i = i + 2
+    elseif two == "}}" then
+      emit("text", "}")
+      i = i + 2
+    else
+      local name, after = text:match("^{(%w+)}()", i)
+      if name then
+        emit("name", name)
+        i = after
+      else
+        emit("text", text:sub(i, i))
+        i = i + 1
+      end
+    end
+  end
+end
+
 --- Substitute the placeholders of `text`.
 ---@param text string|nil
 ---@param ctx Ui.Slots.Ctx|nil     # defaults to `M.context()`
@@ -110,27 +142,32 @@ function M.resolve(text, ctx, opts)
   ctx = ctx or M.context()
   local escape = opts and opts.escape
   local unknown, seen = {}, {}
+  local out = {}
 
-  local out = text:gsub("{(%w+)}", function(name)
-    if not KNOWN[name] then
-      if not seen[name] then
-        seen[name] = true
-        unknown[#unknown + 1] = name
+  scan(text, function(kind, value)
+    if kind == "text" then
+      out[#out + 1] = value
+    elseif not KNOWN[value] then
+      -- Not ours: stays in the text exactly as written.
+      out[#out + 1] = "{" .. value .. "}"
+      if not seen[value] then
+        seen[value] = true
+        unknown[#unknown + 1] = value
       end
-      return nil
-    end
-    local value = eval(ctx[name])
-    value = value == nil and "" or tostring(value)
-    if escape then
-      local ok, escaped = pcall(escape, value, name)
-      if ok and type(escaped) == "string" then
-        value = escaped
+    else
+      local v = eval(ctx[value])
+      v = v == nil and "" or tostring(v)
+      if escape then
+        local ok, escaped = pcall(escape, v, value)
+        if ok and type(escaped) == "string" then
+          v = escaped
+        end
       end
+      out[#out + 1] = v
     end
-    return value
   end)
 
-  return out, unknown
+  return table.concat(out), unknown
 end
 
 --- The unknown placeholder names of `text`, without resolving anything (for
@@ -142,12 +179,12 @@ function M.unknown(text)
   if type(text) ~= "string" then
     return names
   end
-  for name in text:gmatch("{(%w+)}") do
-    if not KNOWN[name] and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
+  scan(text, function(kind, value)
+    if kind == "name" and not KNOWN[value] and not seen[value] then
+      seen[value] = true
+      names[#names + 1] = value
     end
-  end
+  end)
   return names
 end
 

@@ -673,6 +673,16 @@ function M.reload()
   emit("reload", nil)
 end
 
+--- Would `reload()` read another data file than the one that is loaded? False
+--- when nothing is persisted, and for a change of directory inside one project.
+---@return boolean
+function M.scope_changed()
+  if not config.get().persist then
+    return false
+  end
+  return (scope_path()) ~= S.path
+end
+
 --- Forget everything and stop the timer (tests, and a host disabling the
 --- feature). Pending changes are NOT written.
 function M.reset()

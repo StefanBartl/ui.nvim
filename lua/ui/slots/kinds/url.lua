@@ -31,6 +31,23 @@ local function refuse(url)
   return nil
 end
 
+--- How the address is handed to the system. On Windows `vim.ui.open` would run
+--- `cmd.exe /c start "" <url>`, where `&`, `|`, `^` and `%` are cmd syntax: an
+--- address with a query string would be cut at the first `&`, and one that comes
+--- from a placeholder could run a command. `rundll32 url.dll,FileProtocolHandler`
+--- is started without a shell and takes the address as one argument.
+---@param is_windows boolean|nil  # default: the platform we run on
+---@return { cmd: string[] }|nil
+function M.opener(is_windows)
+  if is_windows == nil then
+    is_windows = vim.fn.has("win32") == 1
+  end
+  if is_windows then
+    return { cmd = { "rundll32", "url.dll,FileProtocolHandler" } }
+  end
+  return nil
+end
+
 --- Placeholders whose value is a path: `/` and `:` stay readable in it.
 local PATH_LIKE = { file = true, dir = true, root = true, cwd = true }
 
@@ -106,7 +123,7 @@ function M.apply(slot, ctx)
   if why then
     return false, why
   end
-  local _, err = vim.ui.open(url)
+  local _, err = vim.ui.open(url, M.opener())
   if err then
     return false, tostring(err)
   end

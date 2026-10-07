@@ -25,6 +25,13 @@ function M.validate(slot)
   return nil
 end
 
+--- Is there a clipboard provider behind `+` and `*`? Replaceable (tests, a host
+--- with its own idea of "available").
+---@return boolean
+function M.clipboard_available()
+  return vim.fn.has("clipboard") == 1
+end
+
 --- Write `text` into the registers (the config's `clipboard` unless given).
 --- A register that refuses is skipped; fails only when none took it.
 ---@param text string
@@ -34,7 +41,9 @@ end
 function M.put(text, registers)
   local done = {}
   for _, reg in ipairs(registers or config.get().clipboard) do
-    if pcall(vim.fn.setreg, reg, text) then
+    -- `setreg("+")` without a provider does not raise, it just keeps nothing.
+    local usable = (reg ~= "+" and reg ~= "*") or M.clipboard_available()
+    if usable and pcall(vim.fn.setreg, reg, text) then
       done[#done + 1] = reg
     end
   end

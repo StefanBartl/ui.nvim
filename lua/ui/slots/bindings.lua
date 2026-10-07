@@ -30,8 +30,17 @@ local mapped = {}
 ---@param rhs function
 ---@param desc string
 local function map(lhs, rhs, desc)
-  vim.keymap.set("n", lhs, rhs, { desc = desc, silent = true })
-  mapped[#mapped + 1] = { mode = "n", lhs = lhs }
+  -- The leaders are put in now: `vim.keymap.del("<leader>1")` later would
+  -- look for whatever the leader is by then and miss the mapping.
+  local expanded = lhs
+    :gsub("<[Ll]eader>", function()
+      return vim.g.mapleader or "\\"
+    end)
+    :gsub("<[Ll]ocal[Ll]eader>", function()
+      return vim.g.maplocalleader or "\\"
+    end)
+  vim.keymap.set("n", expanded, rhs, { desc = desc, silent = true })
+  mapped[#mapped + 1] = { mode = "n", lhs = expanded }
 end
 
 --- What is wrong with the `keys` option, as strings.
@@ -97,13 +106,18 @@ function M.attach(api)
 
   -- The project scope follows the working directory.
   autocmd.create("DirChanged", function()
-    if config.get().scope == "project" then
+    -- Only when another project's file applies: not for :lcd inside the same
+    -- project, and not when nothing is persisted (a reload would drop the
+    -- slots of this session).
+    if config.get().scope == "project" and store.scope_changed() then
       store.reload()
     end
   end, { group = group, desc = "ui.slots: load the slots of the new project" })
 
   -- Pending changes reach the disk before Neovim goes.
   autocmd.create("VimLeavePre", function()
+    -- BufLeave does not fire on exit: the file you quit from is remembered here.
+    pcall(require("ui.slots.kinds.file").remember_current)
     store.flush()
   end, { group = group, desc = "ui.slots: write pending slot changes" })
 

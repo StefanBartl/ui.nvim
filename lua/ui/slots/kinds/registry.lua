@@ -176,7 +176,8 @@ function M.apply(slot, ctx)
   if not ok then
     return false, tostring(res)
   end
-  if res == false then
+  -- `false, err` and `nil, err` both say no; a bare `nil` means "done".
+  if res == false or (res == nil and apply_err ~= nil) then
     return false, apply_err or "the slot could not be applied"
   end
   return true

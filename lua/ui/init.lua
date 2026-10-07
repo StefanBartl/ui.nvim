@@ -99,7 +99,8 @@ function M.setup(opts)
       if type(opts.slots) == "table" then
         slots.setup(opts.slots)
       else
-        slots.setup({ enabled = true })
+        -- `true`: on, with whatever `slots.setup()` was given before.
+        slots.enable()
       end
     end)
     if not ok then
