@@ -494,6 +494,15 @@ kit.form({
   `on_submit` after the last field. Skipping a field again (`<Esc>`) resets it
   to its `default`, as it always did.
 - **Step indicator.** The title reads `Label (2/5)`; a one-field form has none.
+- **Back from the first field (`on_back`).** A form that is itself one step of a
+  longer flow (a number, then an area, then these fields) can pass
+  `on_back = function(values) end`. The first field then has a back as well — the
+  same keys, and a `[← Back]` button — which closes the form and calls `on_back`
+  with the answers so far (the first field's text as it stood, and any later
+  answers the user had typed and walked back from) instead of doing nothing.
+  Neither `on_submit` nor `on_cancel` fires; reopen the form with those answers
+  as `default`s when the flow comes forward again. Without `on_back` the first
+  field has no back, as above.
 - **Buttons.** A clickable row under the field: `[← Back]` (not on the first
   field), `[Skip]` (not on a `required` field — it is `<Esc>`, which aborts
   there) and `[Next ↵]` (`[Done ↵]` on the last field — it is `<CR>`). A left

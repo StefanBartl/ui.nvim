@@ -2350,6 +2350,76 @@ describe("kit.form back navigation", function()
       end
       assert.is_nil(r.cancelled)
     end)
+
+    it("gives the first field a back too when the form has an on_back", function()
+      local left
+      local r = open_back_form(THREE, {
+        on_back = function(values)
+          left = values
+        end,
+      })
+      assert.equals("[ ← Back ]  [ Skip ]  [ Next ↵ ]", button_row_text())
+      type_into_field("typed")
+      keys("<S-Tab>")
+      assert.same({ a = "typed" }, left, "on_back gets the answer as it stood")
+      assert.is_false(r.surf:is_valid(), "and the form is over")
+      assert.is_nil(r.values, "without a submit")
+      assert.is_nil(r.cancelled, "or a cancel")
+    end)
+
+    it("hands on_back everything typed so far, answers walked back from included", function()
+      local left
+      local r = open_back_form(THREE, {
+        on_back = function(values)
+          left = values
+        end,
+      })
+      type_into_field("one")
+      keys("<CR>")
+      type_into_field("two")
+      keys("<CR>")
+      keys("<S-Tab><S-Tab>") -- back to A
+      assert.equals("one", field_text())
+      type_into_field("ONE")
+      keys("<C-p>")
+      assert.same(
+        { a = "ONE", b = "two", c = "" },
+        left,
+        "the field walked back from is there, empty"
+      )
+      assert.is_nil(r.values)
+    end)
+
+    it("leaves through the [← Back] button of the first field, and <BS> on empty", function()
+      local calls = 0
+      local function count()
+        calls = calls + 1
+      end
+      open_back_form(THREE, { on_back = count })
+      keys("<Down>")
+      click_button("← Back")
+      assert.equals(1, calls)
+
+      open_back_form(THREE, { on_back = count })
+      type_into_field("")
+      with_clock(function()
+        keys("<BS>")
+      end)
+      assert.equals(2, calls)
+    end)
+
+    it("ignores on_back without back = true", function()
+      local calls = 0
+      local r = open_back_form(THREE, {
+        back = false,
+        on_back = function()
+          calls = calls + 1
+        end,
+      })
+      keys("<S-Tab>")
+      assert.equals(0, calls)
+      assert.is_true(r.surf:is_valid())
+    end)
   end)
 
   describe("going back", function()
