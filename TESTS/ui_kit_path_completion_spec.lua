@@ -7,7 +7,8 @@
 --- of a millisecond each -- so a directory of five thousand files (a Downloads
 --- folder) froze the editor for half a second at every <Tab>, to fill a popup nobody
 --- can read. With more than `MAX_PATH_MATCHES` matches the candidates are now built
---- from one directory listing, without a `stat`, sorted and cut to that many.
+--- from one directory listing, without a `stat` (a link, or a listing that does not say
+--- what an entry is, costs at most one past the menu), sorted and cut to that many.
 --- Everything else -- few matches, a pattern, another completion type, a directory
 --- that cannot be listed -- is `getcompletion()`'s as before; it is stubbed here, which
 --- is what tells the two paths apart.
@@ -42,7 +43,7 @@ end
 
 describe("path completion in a big directory", function()
   local dir ---@type string
-  local real_getcompletion, real_complete, real_stat
+  local real_getcompletion, real_complete, real_stat, real_scandir_next
   local getcompletion_calls, stat_calls, shown, shown_col
 
   --- A directory (forward slashes, long names: getcompletion() would choke on the
@@ -78,9 +79,18 @@ describe("path completion in a big directory", function()
     surf:close()
   end
 
+  --- The same listing, but it does not say what an entry is -- what a link, a junction
+  --- and a file system without `d_type` do: the code has to `stat` those.
+  local function hide_entry_kinds()
+    uv.fs_scandir_next = function(handle)
+      return (real_scandir_next(handle))
+    end
+  end
+
   before_each(function()
     getcompletion_calls, stat_calls = 0, 0
     real_getcompletion, real_complete, real_stat = vim.fn.getcompletion, vim.fn.complete, uv.fs_stat
+    real_scandir_next = uv.fs_scandir_next
     vim.fn.getcompletion = function()
       getcompletion_calls = getcompletion_calls + 1
       return { "from-getcompletion" }
@@ -96,6 +106,7 @@ describe("path completion in a big directory", function()
 
   after_each(function()
     vim.fn.getcompletion, vim.fn.complete, uv.fs_stat = real_getcompletion, real_complete, real_stat
+    uv.fs_scandir_next = real_scandir_next
     close_floats()
     if dir then
       vim.fn.delete(dir, "rf")
@@ -113,6 +124,69 @@ describe("path completion in a big directory", function()
     assert.equals(dir .. "/item_000", shown[1], "sorted, from the start")
     assert.equals(dir .. "/item_" .. ("%03d"):format(MAX - 1), shown[MAX])
     assert.equals(1, shown_col, "complete() starts where the fragment began")
+  end)
+
+  it("stats a link, or an entry of unknown type, only up to one past the menu", function()
+    dir = make_dir(MAX + 100, 0)
+    hide_entry_kinds()
+    press_tab(dir .. "/item")
+    assert.equals(0, getcompletion_calls, "getcompletion() is not asked")
+    assert.is_true(stat_calls <= MAX + 1, stat_calls .. " stats for " .. MAX + 100 .. " matches")
+    assert.equals(MAX, #shown)
+    assert.equals(dir .. "/item_000", shown[1])
+    assert.equals(dir .. "/item_" .. ("%03d"):format(MAX - 1), shown[MAX])
+  end)
+
+  it("stats nothing when too few entries match to need the list", function()
+    dir = make_dir(MAX - 50, 0)
+    hide_entry_kinds()
+    press_tab(dir .. "/item")
+    assert.equals(1, getcompletion_calls, "getcompletion() has the few")
+    assert.equals(0, stat_calls, "nothing was stat'ed on the way")
+  end)
+
+  it("tells a directory of unknown type from a file, for its slash and for 'dir'", function()
+    dir = make_dir(20, MAX + 20)
+    hide_entry_kinds()
+    press_tab(dir .. "/", "dir")
+    assert.equals(MAX, #shown)
+    for _, name in ipairs(shown) do
+      assert.is_truthy(name:match("^" .. vim.pesc(dir) .. "/sub_%d+/$"), "a directory: " .. name)
+    end
+
+    press_tab(dir .. "/", "file")
+    local expected = {}
+    for i = 0, 19 do
+      expected[#expected + 1] = ("%s/item_%03d"):format(dir, i)
+    end
+    expected[#expected + 1] = dir .. "/other.txt"
+    for i = 0, MAX - 22 do
+      expected[#expected + 1] = ("%s/sub_%03d/"):format(dir, i)
+    end
+    assert.same(expected, shown)
+  end)
+
+  it("takes an entry that cannot be stat'ed (a broken link) for a file", function()
+    dir = make_dir(MAX + 10, 0)
+    hide_entry_kinds()
+    uv.fs_stat = function()
+      stat_calls = stat_calls + 1
+    end
+    press_tab(dir .. "/item")
+    assert.equals(MAX, #shown)
+    for _, name in ipairs(shown) do
+      assert.is_nil(name:match("/$"), "a file: " .. name)
+    end
+
+    press_tab(dir .. "/", "dir")
+    assert.equals(1, getcompletion_calls, "no directory among them: getcompletion() has it")
+  end)
+
+  it("leaves few directories to getcompletion() when the listing gives no types", function()
+    dir = make_dir(MAX + 100, 3)
+    hide_entry_kinds()
+    press_tab(dir .. "/", "dir")
+    assert.equals(1, getcompletion_calls, "three directories among all those files")
   end)
 
   it("lists every file of the directory for an empty fragment, dot files left out", function()

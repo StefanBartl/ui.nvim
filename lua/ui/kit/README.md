@@ -691,10 +691,12 @@ candidate rather than submitting the whole prompt (a second `<CR>` — popup
 now closed — submits). `completion` accepts any type name `getcompletion()`
 does (`"dir"`, `"shellcmd"`, `"buffer"`, ...), not just `"file"`. For `"file"` and
 `"dir"`, a fragment with more than 300 matches gets its list from one directory
-listing, sorted and cut to 300 (`getcompletion()` stats every match: half a second
-for a directory of five thousand files); typing on narrows it. A fragment
-with a backtick in it is never completed: `getcompletion()` runs the span
-between backticks through the shell, and the fragment may be pasted text.
+listing, sorted and cut to 300 (`getcompletion()` stats every match: half a
+second for a directory of five thousand files; this stats no file or directory,
+and a link or an entry the listing gives no type for at most 301 times); typing
+on narrows it. A fragment with a backtick in it is never completed:
+`getcompletion()` runs the span between backticks through the shell, and the
+fragment may be pasted text.
 
 ```lua
 kit.input({
