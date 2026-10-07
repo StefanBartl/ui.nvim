@@ -16,8 +16,9 @@ local SCHEMES = { http = true, https = true, file = true, mailto = true }
 
 --- Why `url` may not be opened, or nil.
 ---@param url string
+---@param trusted boolean|nil  # the slot comes from setup()
 ---@return string|nil
-local function refuse(url)
+local function refuse(url, trusted)
   if url:find("[%c]") then
     return "the address contains a control character"
   end
@@ -27,6 +28,22 @@ local function refuse(url)
   end
   if not SCHEMES[scheme:lower()] then
     return ("the scheme '%s' is not opened (http, https, file, mailto)"):format(scheme)
+  end
+  -- A `file:` address is handed to the system's opener, which runs a program
+  -- (a script, an executable) as readily as it shows a document -- behind a
+  -- label of the slot's choosing. Only a slot the user wrote in setup() may.
+  if scheme:lower() == "file" and not trusted then
+    return "a file: address can only be set in setup() (use a file slot to open a file)"
+  end
+  return nil
+end
+
+--- A `file:` address does not come from a data file, the editor or the API.
+---@param slot table
+---@return string|nil
+function M.trusted_only(slot)
+  if type(slot.url) == "string" and slot.url:match("^%s*[Ff][Ii][Ll][Ee]:") then
+    return "a file: address can only be set in setup() (use a file slot to open a file)"
   end
   return nil
 end
@@ -97,7 +114,7 @@ function M.validate(slot)
   -- Without placeholders the address is known now; with one at the start it is
   -- only known when the slot runs (checked again in apply).
   if not slot.url:find("{", 1, true) then
-    return refuse(slot.url)
+    return refuse(slot.url, slot.fixed == true)
   end
   return nil
 end
@@ -119,7 +136,7 @@ end
 function M.apply(slot, ctx)
   local url, unknown = address(slot, ctx.resolve)
   util.warn_unknown(unknown, "url slot")
-  local why = refuse(url)
+  local why = refuse(url, slot.fixed == true)
   if why then
     return false, why
   end
@@ -175,7 +192,13 @@ end
 ---@return Ui.Slots.Preview
 function M.preview(slot, ctx)
   local url = M.text(slot, ctx or {})
-  if refuse(url) or not url:match("^[Hh][Tt][Tt][Pp][Ss]?://") then
+  if refuse(url, slot.fixed == true) or not url:match("^[Hh][Tt][Tt][Pp][Ss]?://") then
+    return { lines = offline(url) }
+  end
+  -- An address built from placeholders ({clip}, {file}, {word}, ...) puts the
+  -- user's own data into a request; that is never done by a cursor passing over
+  -- the row. Only an address that is written out is fetched.
+  if resolve.has_placeholder(slot.url) then
     return { lines = offline(url) }
   end
   local ok, hover = pcall(require, "hover")

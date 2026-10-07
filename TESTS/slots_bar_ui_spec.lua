@@ -306,6 +306,16 @@ describe("the slot bar in a real Neovim", function()
     assert.equals("n", lua([[return vim.api.nvim_get_mode().mode]]))
   end)
 
+  it("a right click in the editor still reaches the general menu", function()
+    open_bar(0)
+    vim.rpcrequest(chan, "nvim_input_mouse", "right", "press", "", 0, 2, 6)
+    vim.rpcrequest(chan, "nvim_input_mouse", "right", "release", "", 0, 2, 6)
+    expect(function()
+      return lua([[return _G.RIGHT.menu]]) == 1
+    end, "ui.menu answered a right click on the code")
+    assert.equals(0, lua([[return _G.RIGHT.select]]))
+  end)
+
   it("takes the bar away again, leaving nothing behind", function()
     open_bar(0)
     lua([[require("ui.slots").disable()]])

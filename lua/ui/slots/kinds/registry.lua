@@ -8,6 +8,10 @@
 ---
 ---   * `apply(slot, ctx)` -- required; returns `true`, or `false, err`;
 ---   * `validate(slot)` -- optional; returns an error string, or nil;
+---   * `trusted_only(slot)` -- optional; returns why this slot may only come
+---     from `setup()` (a `fixed` slot), or nil. A slot from a data file, the
+---     editor or the API is untrusted input: this is where a kind says what it
+---     will not take from there (a network path, a `file:` address);
 ---   * `render(slot)` -- optional; `{ label?, icon?, hl?, missing? }` for the
 ---     views (the slot's own `label`/`icon` always win);
 ---   * `preview(slot, ctx)` -- optional, used by the preview pane;
@@ -154,9 +158,31 @@ function M.validate(slot)
     if not ok then
       return ("validate raised: %s"):format(tostring(err))
     end
-    return err
+    if err then
+      return err
+    end
+  end
+  if slot.fixed ~= true then
+    return M.outside_setup(slot)
   end
   return nil
+end
+
+--- Why `slot` may not exist outside `setup()`, or nil: the `trusted_only` of its
+--- kind. Asked of every slot that does not come from `setup()` -- a data file's
+--- entry, the editor's, `add()`'s.
+---@param slot table
+---@return string|nil reason
+function M.outside_setup(slot)
+  local kind = type(slot) == "table" and M.get(slot.kind) or nil
+  if not (kind and kind.trusted_only) then
+    return nil
+  end
+  local ok, reason = pcall(kind.trusted_only, slot)
+  if not ok then
+    return ("trusted_only raised: %s"):format(tostring(reason))
+  end
+  return reason
 end
 
 --- Run a slot.

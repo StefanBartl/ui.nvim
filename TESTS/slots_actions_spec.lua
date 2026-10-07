@@ -328,7 +328,9 @@ describe("ui.slots action kinds", function()
       local reports = vim.tbl_filter(function(m)
         return m:find("may not hold", 1, true) ~= nil
       end, messages)
-      assert.equals(2, #reports)
+      -- one message for all the dropped entries, not one per entry
+      assert.equals(1, #reports)
+      assert.is_truthy(reports[1]:find("dropped 2 entries", 1, true))
     end)
   end)
 

@@ -477,7 +477,43 @@ describe("ui.slots.store", function()
       local dropped = vim.tbl_filter(function(m)
         return m:find("may not hold", 1, true) ~= nil
       end, messages)
-      assert.equals(2, #dropped)
+      assert.equals(1, #dropped)
+      assert.is_truthy(dropped[1]:find("dropped 2 entries", 1, true))
+    end)
+
+    it("drops a file: address and a network path, which only setup() may name", function()
+      seed({
+        { n = 1, kind = "file", path = "ok" },
+        { n = 2, kind = "url", url = "file:///C:/Users/x/payload.bat", label = "Docs" },
+        { n = 3, kind = "file", path = "//192.0.2.1/share/notes.md" },
+        { n = 4, kind = "file", path = [[\\192.0.2.1\share\notes.md]] },
+        { n = 5, kind = "url", url = "https://example.org" },
+      })
+      store.reload()
+      drain()
+      local numbers = vim.tbl_map(function(slot)
+        return slot.n
+      end, store.list())
+      assert.same({ 1, 5 }, numbers)
+      local dropped = vim.tbl_filter(function(m)
+        return m:find("dropped", 1, true) ~= nil
+      end, messages)
+      assert.equals(1, #dropped)
+      assert.is_truthy(dropped[1]:find("dropped 3 entries", 1, true))
+    end)
+
+    it("says one message for a file of many bad entries", function()
+      local entries = { { n = 1, kind = "file", path = "ok" } }
+      for i = 2, 200 do
+        entries[#entries + 1] = { n = i, kind = "cmd", cmd = "Evil" }
+      end
+      seed(entries)
+      store.reload()
+      drain()
+      local dropped = vim.tbl_filter(function(m)
+        return m:find("dropped", 1, true) ~= nil
+      end, messages)
+      assert.equals(1, #dropped)
     end)
 
     it("drops entries with bad numbers, missing kinds, or oversized strings", function()

@@ -30,6 +30,41 @@ local function key(path)
   return require("lib.nvim.fs.normkey")(path)
 end
 
+--- `key()` asks the file system (a real path), and the views ask for the key of
+--- every slot on a redraw: remembered for a moment, and bounded.
+local KEY_TTL_MS = 2000
+local KEY_MAX = 2048
+local key_cache, key_count = {}, 0
+
+---@param path string
+---@return string
+local function cached_key(path)
+  local now = uv.now()
+  local hit = key_cache[path]
+  if hit and now - hit.at < KEY_TTL_MS then
+    return hit.k
+  end
+  if key_count >= KEY_MAX then
+    key_cache, key_count = {}, 0
+  end
+  local k = key(path)
+  if not key_cache[path] then
+    key_count = key_count + 1
+  end
+  key_cache[path] = { k = k, at = now }
+  return k
+end
+
+--- A network (UNC) path: `\\host\share` or `//host/share`. Touching one is a
+--- synchronous connection to that host -- twenty seconds when it is gone, and
+--- on Windows a place the account's credentials are offered -- so only a slot
+--- from `setup()` may name one.
+---@param path any
+---@return boolean
+local function is_network(path)
+  return type(path) == "string" and path:match("^[\\/][\\/]") ~= nil
+end
+
 ---@param slot table
 ---@param ctx Ui.Slots.Ctx|nil
 ---@return string path
@@ -42,7 +77,21 @@ local function target_path(slot, ctx)
     -- Nothing to open (every placeholder was empty): not the current directory.
     return "", unknown
   end
+  if slot.fixed ~= true and is_network(resolved) then
+    -- Not even resolved to an absolute path: that is the first call to the host.
+    return "", unknown
+  end
   return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
+end
+
+--- A path on another machine only comes from `setup()` (see `is_network`).
+---@param slot table
+---@return string|nil
+function M.trusted_only(slot)
+  if is_network(slot.path) then
+    return "a network path (\\\\host\\share) can only be set in setup()"
+  end
+  return nil
 end
 
 ---@param slot table
@@ -219,7 +268,8 @@ function M.preview(slot, ctx)
     return { lines = { "not a regular file: " .. path } }
   end
   local lines = M._read(path, st)
-  local at = slot.line and { slot.line, slot.col or 1 } or nil
+  local line = type(slot.line) == "number" and slot.line or nil
+  local at = line and { line, type(slot.col) == "number" and slot.col or 1 } or nil
   if not at then
     local seen = positions[key(path)]
     at = seen and { seen.line, seen.col } or nil
@@ -240,14 +290,20 @@ function M.remember_current()
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line, col = cursor[1], cursor[2] + 1
-  local k = key(name)
+  local k = cached_key(name)
+  local before = positions[k]
   positions[k] = { line = line, col = col }
+  if before and before.line == line and before.col == col then
+    -- Left where it was last left (BufLeave fires on every window switch): the
+    -- slots already hold this position, and walking them all is for nothing.
+    return
+  end
 
   local store = require("ui.slots.store")
   for _, slot in ipairs(store.list()) do
     if slot.kind == "file" and not slot.fixed and type(slot.path) == "string" then
       local path = target_path(slot)
-      if key(path) == k and (slot.line ~= line or slot.col ~= col) then
+      if path ~= "" and cached_key(path) == k and (slot.line ~= line or slot.col ~= col) then
         store.update(slot.n, { line = line, col = col })
       end
     end
@@ -264,6 +320,7 @@ end
 --- Forget the session positions (tests).
 function M.forget_positions()
   positions = {}
+  key_cache, key_count = {}, 0
 end
 
 return M

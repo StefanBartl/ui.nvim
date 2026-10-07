@@ -264,6 +264,10 @@ local function read_entry(entry)
     return nil, ("slot %d: %s"):format(entry.n, problem)
   end
   slot.n = entry.n
+  local outside = require("ui.slots.kinds.registry").outside_setup(slot)
+  if outside then
+    return nil, ("slot %d: %s"):format(entry.n, outside)
+  end
   return slot
 end
 
@@ -303,6 +307,10 @@ local function load_file()
     return
   end
 
+  -- One message for all the entries that were dropped: a message per entry
+  -- (each with its own number) would be a notification per entry from a file
+  -- that has thousands.
+  local dropped, first_reason = 0, nil
   for _, entry in ipairs(data.slots) do
     local slot, reason = read_entry(entry)
     if slot then
@@ -312,8 +320,19 @@ local function load_file()
         S.dynamic[slot.n] = slot
       end
     else
-      say_once(("dropped an entry of %s: %s"):format(path, reason))
+      dropped = dropped + 1
+      first_reason = first_reason or reason
     end
+  end
+  if dropped > 0 then
+    say_once(
+      ("dropped %d entr%s of %s (first: %s)"):format(
+        dropped,
+        dropped == 1 and "y" or "ies",
+        path,
+        tostring(first_reason)
+      )
+    )
   end
 end
 

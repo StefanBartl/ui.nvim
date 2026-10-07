@@ -528,9 +528,26 @@ describe("ui.slots.kinds", function()
         "mailto:me@example.org",
         "HTTPS://example.org",
       }) do
-        assert.is_true((registry.apply({ kind = "url", url = url })), url)
+        -- fixed: a slot from setup(), the only kind that may name a file: address
+        assert.is_true((registry.apply({ kind = "url", url = url, fixed = true })), url)
       end
       assert.equals(5, #opened)
+    end)
+
+    it("refuses a file: address from anywhere but setup()", function()
+      local ok, err = registry.apply({ kind = "url", url = "file:///tmp/payload.bat" })
+      assert.is_false(ok)
+      assert.is_truthy(err:find("setup()", 1, true))
+      assert.equals(0, #opened)
+      -- also when the address only becomes a file: address through a placeholder
+      ok = registry.apply(
+        { kind = "url", url = "{clip}" },
+        { resolve = { clip = "file:///x.bat" } }
+      )
+      assert.is_false(ok)
+      assert.equals(0, #opened)
+      assert.is_truthy(registry.outside_setup({ kind = "url", url = " FILE:///x" }))
+      assert.is_nil(registry.outside_setup({ kind = "url", url = "https://example.org" }))
     end)
 
     it("refuses every other scheme, and an address without one", function()
@@ -565,7 +582,7 @@ describe("ui.slots.kinds", function()
 
     it("keeps the slashes of a path value readable", function()
       registry.apply(
-        { kind = "url", url = "file:///{file}" },
+        { kind = "url", url = "file:///{file}", fixed = true },
         { resolve = { file = "C:/dir/my file.txt" } }
       )
       assert.equals("file:///C:/dir/my%20file.txt", opened[1])
