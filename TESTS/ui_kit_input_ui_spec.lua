@@ -345,4 +345,107 @@ describe("kit.input in a real Neovim", function()
       assert.equals("n", state().mode)
     end)
   end)
+
+  describe("a secret typed into a prompt", function()
+    --- The `.` register in the child.
+    ---@return string
+    local function dot()
+      return lua([[return vim.fn.getreg(".")]])
+    end
+
+    --- What `.` does to a buffer with `hello` in it, in the child.
+    ---@return string
+    local function dot_repeat()
+      lua([[
+        vim.cmd("enew")
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { "hello" })
+        vim.cmd("normal! gg0")
+      ]])
+      input(".")
+      vim.wait(200)
+      return lua([[return vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] ]])
+    end
+
+    ---@param extra string  # more options for the prompt, as Lua
+    local function open_secret(extra)
+      lua(([[
+        _G.RESULT = nil
+        require("ui.kit").input(vim.tbl_extend("force", {
+          secret = true,
+          on_submit = function(v) _G.RESULT = v end,
+          on_cancel = function() _G.RESULT = "cancelled" end,
+        }, %s))
+      ]]):format(extra or "{}"))
+      expect(function(s)
+        return s.mode == "i"
+      end, "the secret prompt opens in Insert mode")
+    end
+
+    it("is gone from the . register and from what . replays once the prompt submits", function()
+      open_secret()
+      input("hunter2<CR>")
+      expect(function(s)
+        return s.result == "hunter2"
+      end, "the prompt hands the secret on")
+      vim.wait(300) -- the scrub runs once the Insert run has ended
+      assert.equals("", dot(), "nothing is left in the register")
+      assert.equals("hello", dot_repeat(), ". types nothing into another buffer")
+    end)
+
+    it("is gone once the prompt is cancelled", function()
+      open_secret()
+      input("hunt<Esc>")
+      expect(function(s)
+        return s.result == "cancelled"
+      end, "the prompt is cancelled")
+      vim.wait(300)
+      assert.equals("", dot())
+      assert.equals("hello", dot_repeat())
+    end)
+
+    it("is gone once a chain of prompts that began with it has ended", function()
+      -- The Insert run goes on into the next prompt: the scrub waits for its end.
+      lua([[
+        _G.RESULT = nil
+        _G.SECOND = nil
+        require("ui.kit").input({
+          secret = true,
+          on_submit = function(v)
+            _G.RESULT = v
+            require("ui.kit").input({ on_submit = function(w) _G.SECOND = w end })
+          end,
+        })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the secret prompt opens in Insert mode")
+      input("hunter2<CR>")
+      expect(function(s)
+        return s.result == "hunter2"
+      end, "the secret prompt is answered")
+      vim.wait(200)
+      assert.equals("i", state().mode, "and the next prompt is typed into")
+      input("abc<CR>")
+      vim.wait(400)
+      assert.equals("abc", lua([[return _G.SECOND]]), "its answer is untouched by the scrub")
+      assert.equals("", dot())
+      assert.equals("hello", dot_repeat())
+    end)
+
+    it("is no business of a prompt without a secret", function()
+      lua([[
+        _G.RESULT = nil
+        require("ui.kit").input({ on_submit = function(v) _G.RESULT = v end })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the prompt opens in Insert mode")
+      input("plain<CR>")
+      expect(function(s)
+        return s.result == "plain"
+      end, "the prompt is answered")
+      vim.wait(300)
+      assert.equals("plain", dot(), "the last Insert run is the user's own")
+    end)
+  end)
 end)
