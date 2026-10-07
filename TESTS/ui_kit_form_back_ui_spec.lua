@@ -69,6 +69,31 @@ local function input(keys)
   vim.rpcrequest(chan, "nvim_input", keys)
 end
 
+--- The second text row of the focused float (the button row) as it is drawn on
+--- screen, one entry per cell, with where it is: `row` and `left` are the 0-based
+--- screen row and first text column (what `nvim_input_mouse` takes) and `leftcol`
+--- is how far the window has scrolled sideways.
+---@return { cells: string[], row: integer, left: integer, leftcol: integer }
+local function screen_cells()
+  return lua([[
+    vim.cmd("redraw")
+    local win = vim.api.nvim_get_current_win()
+    -- win_screenpos() is the corner INCLUDING the border (1-based).
+    local pos = vim.fn.win_screenpos(win)
+    local cells = {}
+    for c = 1, vim.api.nvim_win_get_width(win) do
+      cells[c] = vim.fn.screenstring(pos[1] + 2, pos[2] + c)
+    end
+    return { cells = cells, row = pos[1] + 1, left = pos[2], leftcol = vim.fn.winsaveview().leftcol }
+  ]])
+end
+
+--- Pause long enough that the next `<BS>` is a new press, not the repeat of a
+--- key that is still held (`ui.kit.input` tells them apart by the gap: 300 ms).
+local function wait_past_a_held_key()
+  vim.wait(400)
+end
+
 --- Open a three-field form with `back = true` in the child.
 local function open_form()
   lua([[
@@ -100,12 +125,22 @@ describe("kit.form back navigation in a real Neovim", function()
       "-u",
       "NONE",
       "--cmd",
-      "set rtp^=" .. root_of("lua/lib/nvim/init.lua") .. " rtp^=" .. vim.fn.getcwd(),
-      "--cmd",
       "set mouse=a",
     }, { rpc = true })
     assert.is_true(chan > 0, "the child Neovim did not start")
     vim.rpcrequest(chan, "nvim_ui_attach", 100, 30, { rgb = true })
+    -- Over RPC, not as `--cmd "set rtp^=<dir>"`: `:set` splits at a space and at a
+    -- comma, and a checkout under `C:\Users\First Last\...` has the one.
+    vim.rpcrequest(
+      chan,
+      "nvim_exec_lua",
+      [[
+        local lib, ui = ...
+        vim.opt.rtp:prepend(lib)
+        vim.opt.rtp:prepend(ui)
+      ]],
+      { root_of("lua/lib/nvim/init.lua"), root_of("lua/ui/kit/init.lua") }
+    )
   end)
 
   after_each(function()
@@ -147,6 +182,7 @@ describe("kit.form back navigation in a real Neovim", function()
       return x.lines[1] == ""
     end, "<BS> empties the field")
     assert.equals("B (2/3)", state().title)
+    wait_past_a_held_key()
     input("<BS>")
     s = expect(function(x)
       return x.title == "A (1/3)"
@@ -157,6 +193,35 @@ describe("kit.form back navigation in a real Neovim", function()
       return x.lines[1] == "ab"
     end, "and the first field has nowhere to go back to")
     assert.equals("A (1/3)", state().title)
+  end)
+
+  it("does not walk back through the earlier fields while <BS> is held down", function()
+    open_form()
+    input("<CR>") -- A -> B, which shows "xy"
+    expect(function(x)
+      return x.title == "B (2/3)"
+    end, "on field B")
+    input("<CR>") -- B -> C, empty
+    expect(function(x)
+      return x.title == "C (3/3)"
+    end, "on field C")
+    input("zz") -- two characters, so the run has something to delete first
+    -- A held key is a burst of presses with no pause between them: more than
+    -- enough of them to delete the text, walk back and delete the previous
+    -- field's answer as well, were each one taken for a new press.
+    input(string.rep("<BS>", 30))
+    expect(function(x)
+      return x.lines[1] == ""
+    end, "the held key deletes what is in the field")
+    vim.wait(100)
+    assert.equals("C (3/3)", state().title, "and stops there")
+    -- Let go, press again: now it is a deliberate press.
+    wait_past_a_held_key()
+    input("<BS>")
+    local s = expect(function(x)
+      return x.title == "B (2/3)"
+    end, "a fresh <BS> goes back")
+    assert.equals("xy", s.lines[1], "to an answer that is still there")
   end)
 
   it("moves onto the buttons with <Down>, and <CR> there presses the focused one", function()
@@ -223,6 +288,63 @@ describe("kit.form back navigation in a real Neovim", function()
       return x.title == "A (1/3)"
     end, "a click on [ ← Back ] goes back")
     assert.equals("abc", s.lines[1])
+  end)
+
+  it("keeps the buttons in view, and clickable, while a long answer scrolls the field", function()
+    open_form()
+    -- A shows "abc"; 70 more characters are far wider than the 40-column box.
+    input(string.rep("x", 70))
+    expect(function(x)
+      return #x.lines[1] == 73
+    end, "the whole answer is in the field")
+    local drawn
+    local ok = vim.wait(3000, function()
+      drawn = screen_cells()
+      return table.concat(drawn.cells):find("Next", 1, true) ~= nil
+    end, 20)
+    assert.is_true(ok, "the button row is on screen: " .. vim.inspect(drawn))
+    assert.is_true(drawn.leftcol > 0, "the window did scroll sideways")
+    -- Click it where it is DRAWN.
+    local col
+    for c = 1, #drawn.cells - 3 do
+      if table.concat(drawn.cells, "", c, c + 3) == "Next" then
+        col = drawn.left + c - 1
+        break
+      end
+    end
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "press", "", 0, drawn.row, col)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "release", "", 0, drawn.row, col)
+    expect(function(x)
+      return x.title == "B (2/3)"
+    end, "a click on [ Next ↵ ] submits the long answer")
+    input("<S-Tab>")
+    local back = expect(function(x)
+      return x.title == "A (1/3)"
+    end, "and back again")
+    assert.equals("abc" .. string.rep("x", 70), back.lines[1], "with all of it")
+  end)
+
+  it("keeps a one-line field and its button row when a paste carries a newline", function()
+    open_form()
+    -- What a copied line usually brings along.
+    vim.rpcrequest(chan, "nvim_paste", "some/path\n", true, -1)
+    local s = expect(function(x)
+      return x.lines[1] == "abcsome/path" and #x.lines == 2
+    end, "the paste is one line again, with the row right under it")
+    assert.is_truthy(s.lines[2]:find("Next", 1, true))
+    assert.equals("i", s.mode)
+    local drawn = screen_cells()
+    assert.is_truthy(table.concat(drawn.cells):find("Next", 1, true), "and the row is on screen")
+    -- Several lines are joined, not dropped.
+    vim.rpcrequest(chan, "nvim_paste", "one\ntwo", true, -1)
+    expect(function(x)
+      return x.lines[1] == "abcsome/pathone two" and #x.lines == 2
+    end, "a paste of two lines is joined with a space")
+    input("<Down>")
+    input("<CR>")
+    expect(function(x)
+      return x.title == "B (2/3)"
+    end, "and the buttons still work")
   end)
 
   it("lets a click on blank space or on the text change nothing but the cursor", function()
