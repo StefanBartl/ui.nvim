@@ -369,6 +369,39 @@ describe("kit.sheet in a real Neovim", function()
     end, "a click on [ Cancel ] cancels")
   end)
 
+  it("leaves the field a refused click on [ Submit ] returns to in Insert mode", function()
+    open_sheet()
+    -- Insert mode on the blank, required number: submitting is refused, and the focus
+    -- goes back to that field -- which has to be typed into, not commanded.
+    assert.equals("i", state().mode)
+    local at = assert(find_on_screen("Submit"), "the Submit button is on screen")
+    click(at.row, at.col)
+    local s = expect(function(x)
+      return x.sheet.errors.number ~= nil
+    end, "the click is refused: the blank required field is flagged")
+    assert.is_nil(s.result)
+    assert.equals("number", s.sheet.focus)
+    vim.wait(150) -- the click's own stopinsert, were there one, lands after the mapping returns
+    assert.equals("i", state().mode, "the field is in Insert mode")
+    input("abc")
+    expect(function(x)
+      return x.lines[1] == "abc"
+    end, "what is typed goes into the field (in Normal mode the first key would be a command)")
+
+    -- The same from a select row (Normal mode): the control, which always worked.
+    input("<BS><BS><BS><Tab>")
+    expect(function(x)
+      return x.sheet.focus == "area" and x.mode == "n" and x.lines[1] == ""
+    end, "the number is blank again and the focus is on the select row")
+    -- A second click within 'mousetime' (500 ms) of the first would be a double click.
+    vim.wait(600)
+    at = assert(find_on_screen("Submit"))
+    click(at.row, at.col)
+    expect(function(x)
+      return x.sheet.focus == "number" and x.mode == "i"
+    end, "a refused click from a select row lands in the field in Insert mode")
+  end)
+
   it("keeps the buttons on screen, and clickable, under a long value that wraps", function()
     open_sheet()
     input("1<Tab><Tab>" .. string.rep("word ", 30))
