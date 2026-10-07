@@ -37,7 +37,7 @@ the session.
 
 | `kind` | Payload | Does | Kept in the data file |
 | --- | --- | --- | --- |
-| `file` | `path`, `line?`, `col?`, `target?` | opens the file (a missing one is reported, never created); a network path (`\host\share`) only from `setup()` | yes |
+| `file` | `path`, `line?`, `col?`, `target?` | opens the file (a missing one is reported, never created); a network path (`\\host\share`) only from `setup()` | yes |
 | `url` | `url` | opens `http`, `https` or `mailto` addresses with the system opener; `file:` only from `setup()` (the opener would run a program as readily as show a document) | yes |
 | `yank` | `text`, `register?` | puts the text into the clipboard registers | yes |
 | `mark` | `index` | the n-th mark of sessions.nvim | yes (the index only) |
