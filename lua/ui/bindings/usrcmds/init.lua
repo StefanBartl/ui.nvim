@@ -838,6 +838,8 @@ local function ui_help(_args)
 │                                                      │
 │  :UI slots                  List the slots           │
 │  :UI slots toggle           Show/hide the slot bar   │
+│  :UI slots panel            Slot panel (work in it)  │
+│  :UI slots edit [n]         Add / change a slot      │
 │  :UI slots <n>              Run slot n               │
 │  :UI slots add [n]          Current file -> slot     │
 │  :UI slots yank <n>         Copy what slot n is      │

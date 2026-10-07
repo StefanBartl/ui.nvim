@@ -83,6 +83,9 @@ function M.enable()
     add = function()
       return M.add()
     end,
+    panel = function()
+      return M.panel()
+    end,
   })
 end
 
@@ -326,6 +329,35 @@ function M.move(from, to)
   return ok, err
 end
 
+--- Open the slot panel (the working view), or close it.
+---@return boolean now_open
+function M.panel()
+  ensure()
+  return require("ui.slots.view.panel").toggle()
+end
+
+--- Add a slot in the editor (`n` nil), or change slot `n`.
+---@param n integer|string|nil
+---@param opts { kind?: string }|nil
+function M.edit(n, opts)
+  ensure()
+  local num = n ~= nil and number(n) or nil
+  if n ~= nil and not num then
+    say(("%s is not a slot number"):format(vim.inspect(n)))
+    return
+  end
+  local path = nil
+  local name = vim.api.nvim_buf_get_name(0)
+  if not num and name ~= "" and vim.bo.buftype == "" then
+    path = vim.fs.normalize(name)
+  end
+  require("ui.slots.view.editor").open({
+    n = num,
+    kind = opts and opts.kind or nil,
+    defaults = path and { path = path } or nil,
+  })
+end
+
 --- Register a kind (see `ui.slots.kinds.registry`).
 ---@param name string
 ---@param kind Ui.Slots.Kind
@@ -355,8 +387,6 @@ function M.describe()
   end
   return lines
 end
-
-local NOT_YET = "the slot editor is not built yet; use :UI slots list, add, clear, move"
 
 --- `:UI slots ...`. `args[1]` is "slots", the rest is what the user typed.
 ---@param args string[]
@@ -395,6 +425,20 @@ function M.command(args)
     M.move(args[3], args[4])
   elseif sub == "kinds" then
     say("kinds: " .. table.concat(registry.names(), ", "), vim.log.levels.INFO)
+  elseif sub == "panel" then
+    M.panel()
+  elseif sub == "edit" then
+    M.edit(args[3])
+  elseif
+    (sub == "toggle" or sub == "open" or sub == "close") and config.get().layout == "panel"
+  then
+    -- layout = "panel": the working view instead of the bar.
+    local panel = require("ui.slots.view.panel")
+    if sub == "close" then
+      panel.close()
+    elseif sub == "open" and not panel.is_open() or sub == "toggle" then
+      panel.toggle()
+    end
   elseif sub == "toggle" or sub == "open" or sub == "close" then
     local bar = require("ui.slots.view.chips")
     if sub == "open" then
@@ -409,15 +453,24 @@ function M.command(args)
     if bar.wanted() and not bar.is_open() then
       say("the bar is on, and shows up with the first slot", vim.log.levels.INFO)
     end
-  elseif sub == "edit" then
-    say(NOT_YET, vim.log.levels.INFO)
   else
     say(("unknown subcommand '%s'"):format(sub))
   end
 end
 
-local SUBCOMMANDS =
-  { "list", "add", "yank", "clear", "move", "kinds", "toggle", "open", "close", "edit" }
+local SUBCOMMANDS = {
+  "list",
+  "add",
+  "yank",
+  "clear",
+  "move",
+  "kinds",
+  "toggle",
+  "open",
+  "close",
+  "panel",
+  "edit",
+}
 
 --- Completion for `:UI slots`. `parts` is the command line split into words
 --- (`UI`, `slots`, ...), `index` the position of the word being completed
@@ -443,7 +496,7 @@ function M.complete(arglead, sub, index)
     for _, slot in ipairs(store.list()) do
       out[#out + 1] = tostring(slot.n)
     end
-  elseif sub == "yank" or sub == "move" then
+  elseif sub == "yank" or sub == "move" or sub == "edit" then
     for _, slot in ipairs(store.list()) do
       out[#out + 1] = tostring(slot.n)
     end

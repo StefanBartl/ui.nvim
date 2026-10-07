@@ -729,40 +729,10 @@ function M.pointer_on_bar()
   return bar_line() ~= nil
 end
 
---- What a right click on a chip offers.
+--- What a right click on a chip offers: the menu the panel has, too.
 ---@param n integer
 local function slot_menu(n)
-  local slots = require("ui.slots")
-  local actions = {
-    {
-      label = "Apply",
-      run = function()
-        slots.apply(n)
-      end,
-    },
-    {
-      label = "Copy",
-      run = function()
-        slots.yank(n)
-      end,
-    },
-    {
-      label = "Clear",
-      run = function()
-        slots.clear(n)
-      end,
-    },
-  }
-  require("ui.kit.select").open({
-    title = ("slot %d"):format(n),
-    items = actions,
-    format_item = function(a)
-      return a.label
-    end,
-    on_select = function(a)
-      a.run()
-    end,
-  })
+  require("ui.slots.view.panel").menu(n)
 end
 
 --- Answer a click, a right click or a wheel turn on the bar.

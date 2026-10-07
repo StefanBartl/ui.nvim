@@ -623,9 +623,16 @@ describe("ui.slots", function()
       assert.is_true(said("cmd, file, lua, mark, url, yank"))
     end)
 
-    it("says that the slot editor is not built, instead of failing", function()
+    it("opens the editor for edit", function()
+      local select = require("ui.kit.select")
+      local original = select.open
+      local seen
+      select.open = function(opts)
+        seen = opts
+      end
       vim.cmd("UI slots edit")
-      assert.is_true(said("editor is not built yet"))
+      select.open = original
+      assert.equals("Kind of slot", seen.title)
     end)
 
     it("reports an unknown subcommand", function()
