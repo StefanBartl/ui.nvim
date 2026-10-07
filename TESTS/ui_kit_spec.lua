@@ -2132,6 +2132,22 @@ local function close_floats()
   end
 end
 
+--- Run `fn(tick)` with the clock `ui.kit.input` reads for its `<BS>` guard
+--- stopped at 0: `tick(ms)` moves it, so "a moment later" is a number, not a sleep.
+---@param fn fun(tick: fun(ms: number))
+local function with_clock(fn)
+  local real = vim.uv.hrtime
+  local now_ms = 0
+  vim.uv.hrtime = function()
+    return now_ms * 1e6
+  end
+  local ok, err = pcall(fn, function(ms)
+    now_ms = now_ms + ms
+  end)
+  vim.uv.hrtime = real
+  assert(ok, err)
+end
+
 ---@param fields table[]
 ---@param extra? table
 ---@return table result  # { surf, values, cancelled }
@@ -2262,19 +2278,70 @@ describe("kit.form back navigation", function()
     end)
 
     it("goes back on <BS> only once the field is empty", function()
-      open_back_form(THREE)
-      type_into_field("one")
-      keys("<CR>")
-      type_into_field("xy")
-      vim.api.nvim_win_set_cursor(0, { 1, 1 })
-      keys("<BS>")
-      assert.equals("B (2/3)", title_now(), "<BS> on a field with text is not back")
-      assert.equals("xy", field_text())
-      assert.equals(0, vim.api.nvim_win_get_cursor(0)[2], "it is still the native <BS>")
-      type_into_field("")
-      keys("<BS>")
-      assert.equals("A (1/3)", title_now())
-      assert.equals("one", field_text())
+      with_clock(function(tick)
+        open_back_form(THREE)
+        type_into_field("one")
+        keys("<CR>")
+        type_into_field("xy")
+        vim.api.nvim_win_set_cursor(0, { 1, 1 })
+        keys("<BS>")
+        assert.equals("B (2/3)", title_now(), "<BS> on a field with text is not back")
+        assert.equals("xy", field_text())
+        assert.equals(0, vim.api.nvim_win_get_cursor(0)[2], "it is still the native <BS>")
+        type_into_field("")
+        tick(1000) -- a deliberate press, not a held key repeating
+        keys("<BS>")
+        assert.equals("A (1/3)", title_now())
+        assert.equals("one", field_text())
+      end)
+    end)
+
+    it("goes back on the very first <BS> of a field that opened empty", function()
+      with_clock(function()
+        open_back_form(THREE)
+        keys("<CR>")
+        assert.equals("", field_text())
+        keys("<BS>") -- no earlier <BS>, nothing to take for a repeat
+        assert.equals("A (1/3)", title_now())
+      end)
+    end)
+
+    it("does not walk back through the fields while <BS> is held down", function()
+      with_clock(function(tick)
+        open_back_form(THREE)
+        type_into_field("1")
+        keys("<CR>")
+        type_into_field("2")
+        keys("<CR>")
+        type_into_field("z")
+        keys("<BS>") -- in Normal mode the key itself deletes nothing: the line is emptied by hand
+        type_into_field("")
+        -- The rest of a held key: one repeat every ~30 ms, however long it lasts.
+        for _ = 1, 40 do
+          tick(30)
+          keys("<BS>")
+          assert.equals("C (3/3)", title_now(), "a repeat is not a press")
+        end
+        -- Released; a press after a pause goes back, to an answer that is still there.
+        tick(400)
+        keys("<BS>")
+        assert.equals("B (2/3)", title_now())
+        assert.equals("2", field_text())
+      end)
+    end)
+
+    it("gives each field its own clock for <BS>", function()
+      with_clock(function(tick)
+        open_back_form(THREE)
+        keys("<CR>")
+        keys("<CR>")
+        keys("<BS>") -- C is empty: back to B
+        assert.equals("B (2/3)", title_now())
+        type_into_field("")
+        tick(50) -- well inside the guard, but the <BS> before it belonged to field C
+        keys("<BS>")
+        assert.equals("A (1/3)", title_now())
+      end)
     end)
   end)
 
@@ -2402,6 +2469,47 @@ describe("kit.form back navigation", function()
       vim.api.nvim_win_set_cursor(0, { 2, 3 })
       vim.cmd("doautocmd <nomodeline> CursorMoved")
       assert.equals(1, vim.api.nvim_win_get_cursor(0)[1], "the cursor goes back to the field")
+    end)
+
+    it("puts the row back under a field that a paste split in two", function()
+      open_back_form(THREE)
+      local row = vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]
+      -- What pasting "some/path\n" leaves: the text, then a new empty line, then the row.
+      vim.api.nvim_buf_set_lines(0, 0, 1, false, { "some/path", "" })
+      assert.equals(3, vim.api.nvim_buf_line_count(0))
+      vim.cmd("doautocmd <nomodeline> TextChanged")
+      assert.same({ "some/path", row }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+      assert.equals(2, vim.api.nvim_win_get_height(0))
+      -- Text on several lines is joined into the one, not dropped.
+      vim.api.nvim_buf_set_lines(0, 0, 1, false, { "one", "two", "" })
+      vim.cmd("doautocmd <nomodeline> TextChanged")
+      assert.same({ "one two", row }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+      -- And the row is not touched when nothing is wrong.
+      vim.cmd("doautocmd <nomodeline> TextChanged")
+      assert.same({ "one two", row }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    end)
+
+    it("lays the row out again, shifted, once a long answer scrolled the window", function()
+      open_back_form(THREE)
+      local row = vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]
+      type_into_field(string.rep("x", 80))
+      vim.fn.winrestview({ leftcol = 30 }) -- what typing past the right edge does
+      vim.cmd("doautocmd <nomodeline> CursorMovedI")
+      assert.equals(string.rep(" ", 30) .. row, vim.api.nvim_buf_get_lines(0, 1, 2, false)[1])
+      -- The click ranges are byte columns of the line, so they moved with it.
+      click_button("Next ↵")
+      assert.equals("B (2/3)", title_now())
+    end)
+
+    it("moves the row back when the window scrolls home", function()
+      open_back_form(THREE)
+      local row = vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]
+      type_into_field(string.rep("x", 80))
+      vim.fn.winrestview({ leftcol = 30 })
+      vim.cmd("doautocmd <nomodeline> CursorMovedI")
+      vim.fn.winrestview({ leftcol = 0 })
+      vim.cmd("doautocmd <nomodeline> CursorMovedI")
+      assert.equals(row, vim.api.nvim_buf_get_lines(0, 1, 2, false)[1])
     end)
   end)
 

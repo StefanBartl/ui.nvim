@@ -456,6 +456,10 @@ kit.form({
   `<Esc>` keeps its meaning (skips an optional field, aborts on a `required`
   one) on every field, one reached by going back included. The first field has
   no back: those keys do nothing there and the `[← Back]` button is not drawn.
+  A `<BS>` held down never walks back through the earlier answers: a `<BS>`
+  that comes less than 300 ms after the previous one, on a field that is empty,
+  is the held key repeating and is ignored; press it again after a pause to go
+  back.
 - **The previous answer is the editable text.** Going back shows that field's
   answer again, cursor at the end, so only the correction has to be typed. A
   field left half-typed keeps its text for when the user comes back to it, so
@@ -472,6 +476,9 @@ kit.form({
   `<CR>` presses the focused button, `<Esc>` still cancels, and `<Up>`/`k`/`i`/
   `a` (or a click on the text) return to the field. The labels are read-only
   while the buttons have focus. Mouse needs `:set mouse=a`, as it always does.
+  The row stays in view when a long answer scrolls the field sideways, and a
+  paste that carries a newline (a copied line usually does) stays one line: its
+  lines are joined with a space and the row remains under the field.
 - **`kit.input` underneath.** `back` is `kit.input`'s two opt-in options, which
   can be used on their own: `on_back = function(line) end` (the keys above; it
   gets the line as it stood) and `buttons = { { id = "back" | "skip" |
