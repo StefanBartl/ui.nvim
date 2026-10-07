@@ -117,7 +117,16 @@ describe("ui.slots bar", function()
     vim.notify = function(msg)
       messages[#messages + 1] = msg
     end
-    saved = { lines = vim.o.lines, columns = vim.o.columns }
+    saved = {
+      lines = vim.o.lines,
+      columns = vim.o.columns,
+      cmdheight = vim.o.cmdheight,
+      laststatus = vim.o.laststatus,
+      showtabline = vim.o.showtabline,
+      ambiwidth = vim.o.ambiwidth,
+      normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false }),
+      normal_float = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false }),
+    }
     vim.o.lines, vim.o.columns = 30, 100
     vim.cmd("silent! %bwipeout!")
     start()
@@ -130,6 +139,10 @@ describe("ui.slots bar", function()
     registry.reset()
     config.reset()
     vim.o.lines, vim.o.columns = saved.lines, saved.columns
+    vim.o.cmdheight, vim.o.laststatus = saved.cmdheight, saved.laststatus
+    vim.o.showtabline, vim.o.ambiwidth = saved.showtabline, saved.ambiwidth
+    vim.api.nvim_set_hl(0, "Normal", saved.normal)
+    vim.api.nvim_set_hl(0, "NormalFloat", saved.normal_float)
     vim.notify = original_notify
     vim.cmd("silent! tabonly")
     vim.cmd("silent! only")
@@ -530,6 +543,33 @@ describe("ui.slots bar", function()
       assert.equals("", vim.fn.getreg("a"))
     end)
 
+    it("takes the side buttons of the mouse away from the code below, too", function()
+      assert.equals("", key_at("<X1Mouse>", 2))
+      assert.equals("", key_at("<X1Drag>", 2))
+      assert.equals("", key_at("<X1Release>", 2))
+      assert.equals("", key_at("<X2Mouse>", 2))
+      assert.equals("", key_at("<X2Release>", 2))
+    end)
+
+    it("forgets a press that never got its release as soon as another press comes", function()
+      assert.equals("", key_at("<LeftMouse>", 2))
+      -- the bar is gone before the release; the next press is in the editor
+      with_pointer(
+        { winid = vim.api.nvim_get_current_win(), line = 1, screenrow = 1, screencol = 1 },
+        function()
+          assert.is_nil(
+            chips._on_key("", vim.api.nvim_replace_termcodes("<LeftMouse>", true, true, true))
+          )
+          assert.is_nil(
+            chips._on_key("", vim.api.nvim_replace_termcodes("<LeftDrag>", true, true, true))
+          )
+          assert.is_nil(
+            chips._on_key("", vim.api.nvim_replace_termcodes("<LeftRelease>", true, true, true))
+          )
+        end
+      )
+    end)
+
     it("takes the middle click and the sideways wheel away from the code below", function()
       assert.equals("", key_at("<MiddleMouse>", 2))
       assert.equals("", key_at("<ScrollWheelLeft>", 2))
@@ -668,6 +708,46 @@ describe("ui.slots bar", function()
         assert.equals(width, vim.fn.strdisplaywidth(l), l)
       end
       vim.o.ambiwidth = original
+    end)
+
+    it("has the Kit colours ready before the first solid chip is built", function()
+      pcall(vim.api.nvim_set_hl, 0, "KitAccent", {})
+      start({ style = "solid" })
+      add_yanks(1)
+      chips.open()
+      local g = vim.api.nvim_get_hl(0, { name = "UiSlotsSolid_KitMuted", link = false })
+      local v = vim.api.nvim_get_hl(0, { name = "UiSlotsSolid_KitAccent", link = false })
+      assert.is_true(g.bg ~= nil or g.reverse == true)
+      assert.is_true(v.bg ~= nil or v.reverse == true or next(v) == nil)
+    end)
+
+    it("keeps the border straight with odd widths and two-cell box characters", function()
+      vim.o.ambiwidth = "double"
+      start({ width = 17 })
+      slots.add({ kind = "yank", text = "abcdefghijk" })
+      slots.add({ kind = "yank", text = "abcdefghijkl" })
+      chips.open()
+      local width = vim.api.nvim_win_get_width(chips.state().win)
+      for _, l in ipairs(lines()) do
+        assert.equals(width, vim.fn.strdisplaywidth(l), l)
+      end
+      assert.equals(0, (width - 2 * vim.fn.strdisplaywidth("╭")) % vim.fn.strdisplaywidth("─"))
+    end)
+
+    it("warns once on a Neovim that cannot discard a key", function()
+      local original = chips._discard_supported
+      chips._discard_supported = function()
+        return false
+      end
+      add_yanks(1)
+      chips.open()
+      chips.close()
+      chips.open()
+      chips._discard_supported = original
+      local told = vim.tbl_filter(function(m)
+        return m:find("0.10 cannot take a click", 1, true) ~= nil
+      end, messages)
+      assert.equals(1, #told)
     end)
 
     it("draws a solid chip even when the editor has no background colour", function()
@@ -817,6 +897,24 @@ describe("ui.slots bar", function()
       require("ui.bindings.usrcmds").setup()
       vim.cmd("UI slots open")
       assert.is_truthy(table.concat(messages, "\n"):find("first slot", 1, true))
+    end)
+
+    it("the first :UI slots toggle with show = true leaves the bar open, not shut", function()
+      require("ui.bindings.usrcmds").setup()
+      slots.reset()
+      store.reset()
+      chips.reset()
+      slots.setup({ data_dir = dir .. "/data", save_delay_ms = 0, show = true })
+      assert.is_false(slots.is_enabled())
+      slots.add({ kind = "yank", text = "x" })
+      slots.disable()
+      chips.reset()
+      vim.cmd("UI slots toggle")
+      flush()
+      assert.is_true(chips.wanted())
+      assert.is_true(chips.is_open())
+      vim.cmd("UI slots toggle")
+      assert.is_false(chips.wanted())
     end)
 
     it("opens by itself with show = true, and closes with disable()", function()

@@ -37,3 +37,5 @@ segment rather than a segment of its own.
 Which preset actually wires which of these in is
 [modules.md](modules.md); a segment listed here but not in your preset's
 `order` costs nothing either way.
+
+- **The slot bar** (`ui.slots`) works on Neovim 0.10, but takes a click away from the editor only on 0.11+ (`vim.on_key` can discard a key by returning `""` since then); on 0.10 a click on the bar also moves the cursor under it.
