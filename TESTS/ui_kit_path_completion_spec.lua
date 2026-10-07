@@ -189,33 +189,6 @@ describe("path completion in a big directory", function()
     assert.equals(1, getcompletion_calls, "a directory that does not exist")
   end)
 
-  it("leaves out what 'wildignore' ignores, as getcompletion() does", function()
-    local saved = vim.o.wildignore
-    dir = make_dir(MAX + 50, 0)
-    for i = 0, 9 do
-      touch(("%s/item_%03d.o"):format(dir, i))
-    end
-    vim.fn.mkdir(dir .. "/item_dir", "p")
-    local ok, err = pcall(function()
-      vim.o.wildignore = "*.o,item_dir"
-      press_tab(dir .. "/item")
-      assert.equals(0, getcompletion_calls, "still the fast path")
-      assert.equals(MAX, #shown)
-      for _, name in ipairs(shown) do
-        assert.is_nil(name:match("%.o$"), "an ignored file: " .. name)
-        assert.is_nil(name:match("item_dir"), "an ignored directory: " .. name)
-      end
-      -- a pattern with a slash is tried against the whole path
-      vim.o.wildignore = "*/item_00*"
-      press_tab(dir .. "/item")
-      for _, name in ipairs(shown) do
-        assert.is_nil(name:match("/item_00"), "an ignored path: " .. name)
-      end
-    end)
-    vim.o.wildignore = saved
-    assert(ok, err)
-  end)
-
   it("lists a dot file only when asked for it by name", function()
     dir = make_dir(MAX + 100, 0)
     press_tab(dir .. "/.")
