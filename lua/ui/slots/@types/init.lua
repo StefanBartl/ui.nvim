@@ -101,4 +101,5 @@
 ---@field validate? fun(slot: table): string|nil
 ---@field render? fun(slot: table): Ui.Slots.RenderInfo
 ---@field preview? fun(slot: table, ctx: table): Ui.Slots.Preview|nil
+---@field text? fun(slot: table, ctx: table): string  # what `:UI slots yank` copies
 ---@field persist? boolean    # may a data file hold slots of this kind

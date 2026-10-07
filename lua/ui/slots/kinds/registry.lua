@@ -204,6 +204,33 @@ function M.render(slot)
   }
 end
 
+--- The text a slot stands for (its path, address or text), or nil plus a
+--- reason when its kind has none.
+---@param slot table
+---@param ctx { count?: integer, resolve?: Ui.Slots.Ctx }|nil
+---@return string|nil text
+---@return string|nil err
+function M.text(slot, ctx)
+  local kind = M.get(slot.kind)
+  if not kind then
+    return nil, ("unknown kind '%s'"):format(tostring(slot.kind))
+  end
+  if not kind.text then
+    return nil, ("a '%s' slot has nothing to copy"):format(slot.kind)
+  end
+  local err = M.validate(slot)
+  if err then
+    return nil, err
+  end
+  ctx = ctx or {}
+  ctx.resolve = ctx.resolve or resolve.context(ctx.count)
+  local ok, res = pcall(kind.text, slot, ctx)
+  if not ok then
+    return nil, tostring(res)
+  end
+  return res
+end
+
 --- The preview of a slot (kind-specific), or nil when its kind has none.
 ---@param slot table
 ---@param ctx table|nil

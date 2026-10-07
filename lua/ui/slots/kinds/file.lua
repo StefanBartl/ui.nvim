@@ -83,6 +83,16 @@ local function jump(slot, path)
   pcall(vim.api.nvim_win_set_cursor, 0, { line, zero_col })
 end
 
+--- The path this slot opens, placeholders put in.
+---@param slot table
+---@param ctx { resolve?: Ui.Slots.Ctx }
+---@return string
+function M.text(slot, ctx)
+  local path, unknown = target_path(slot, ctx.resolve)
+  util.warn_unknown(unknown, "file slot")
+  return path
+end
+
 ---@param slot table
 ---@param ctx { resolve?: Ui.Slots.Ctx }
 ---@return boolean ok

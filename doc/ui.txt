@@ -151,6 +151,28 @@ Theme overrides go to `ui.config.setup`, not here: >lua
     Current theme, transparency state, statusline variant and tabline
     style.
 
+:UI slots
+    List the numbered action slots (see docs/BINDINGS.md).
+
+:UI slots {n}
+    Run slot {n}: open its file or address, copy its text, ...
+
+:UI slots add [{n}]
+    Put the current file into the next free slot, or into slot {n}
+    when that one is free.
+
+:UI slots yank {n}
+    Copy what slot {n} stands for (its path, address or text).
+
+:UI slots clear {n}|all
+    Empty a slot, or every slot that is not fixed in setup().
+
+:UI slots move {from} {to}
+    Move a slot to another number; the two swap when {to} is taken.
+
+:UI slots kinds
+    List the kinds a slot can be.
+
 :UI help
     The subcommand list, in a float.
 

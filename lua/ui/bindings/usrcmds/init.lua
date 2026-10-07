@@ -221,6 +221,13 @@ local function ui_keys_cmd(args)
   end
 end
 
+---Handle slots command -- numbered action slots (`ui.slots`). Loaded on the
+---first use, so a session that never types it never loads the module.
+---@param args string[]
+local function ui_slots_cmd(args)
+  require("ui.slots").command(args)
+end
+
 ---@param s string|nil
 ---@return integer|nil # `s` as a whole number, nil for anything else
 local function whole_number(s)
@@ -829,6 +836,14 @@ local function ui_help(_args)
 │                                                      │
 │  :UI keys [prefix]          Mappings under a prefix  │
 │                                                      │
+│  :UI slots                  List the slots           │
+│  :UI slots <n>              Run slot n               │
+│  :UI slots add [n]          Current file -> slot     │
+│  :UI slots yank <n>         Copy what slot n is      │
+│  :UI slots clear <n>|all    Empty a slot / all       │
+│  :UI slots move <a> <b>     Move or swap two slots   │
+│  :UI slots kinds            List the slot kinds      │
+│                                                      │
 │  :UI theme                  Show the current theme   │
 │  :UI theme <name>           Set a theme              │
 │  :UI themes                 List all themes          │
@@ -877,6 +892,7 @@ local SUBCOMMANDS = {
   { name = "winpick", fn = ui_winpick },
   { name = "notify", fn = ui_notify_cmd },
   { name = "keys", fn = ui_keys_cmd },
+  { name = "slots", fn = ui_slots_cmd },
   { name = "theme", fn = ui_theme },
   { name = "themes", fn = ui_themes },
   { name = "variant", fn = ui_variant },
@@ -980,6 +996,10 @@ local function complete(arglead, cmdline, _cursorpos)
       return filter(arglead, { "on", "off", "history", "clear" })
     end
 
+    if subcmd == "slots" then
+      return require("ui.slots").complete(arglead, nil, 1)
+    end
+
     if subcmd == "theme" then
       return filter(arglead, theme.list_themes())
     end
@@ -1000,6 +1020,11 @@ local function complete(arglead, cmdline, _cursorpos)
     if subcmd == "kit-preset" then
       return filter(arglead, require("ui.kit.theme").presets())
     end
+  end
+
+  -- Slots take up to two more words (`move 1 3`).
+  if parts[2] == "slots" and num_args >= 3 then
+    return require("ui.slots").complete(arglead, parts[3], num_args - 1)
   end
 
   -- Complete third argument: only `sticky` has one, its `depth` level and the
