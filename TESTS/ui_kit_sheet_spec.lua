@@ -504,6 +504,32 @@ describe("kit.sheet", function()
       assert.equals(#before, #lines_of(r))
     end)
 
+    it("keeps what was typed into a row that was left before its TextChanged fired", function()
+      -- Keys that arrive in one go (a macro, a paste with a tab in it) move the focus
+      -- before the row they typed into got its `TextChanged`. The repair copy of that
+      -- row was stale then, and the next layout repair wrote it back over the text.
+      local r = open(THREE)
+      api.nvim_buf_set_lines(r.surf.bufnr, 0, 1, false, { "typed" }) -- no TextChanged
+      keys("<Tab>")
+      assert.equals("b", r.surf:state().focus)
+      api.nvim_buf_set_lines(r.surf.bufnr, 1, 2, false, { "pasted", "twice" })
+      api.nvim_exec_autocmds("TextChanged", { buffer = r.surf.bufnr })
+      assert.equals("typed", lines_of(r)[1])
+      assert.equals("pasted twice", lines_of(r)[2])
+    end)
+
+    it("puts the layout right before it moves on, and lands on the intended row", function()
+      local r = open(THREE)
+      local before = lines_of(r)
+      api.nvim_buf_set_lines(r.surf.bufnr, 0, 1, false, { "one", "two" }) -- no TextChanged
+      keys("<Tab>")
+      local after = lines_of(r)
+      assert.equals(#before, #after)
+      assert.equals("one two", after[1])
+      assert.equals("b", r.surf:state().focus)
+      assert.equals(2, api.nvim_win_get_cursor(r.surf.winid)[1])
+    end)
+
     it("puts the rows back when a line was deleted", function()
       local r = open({
         { name = "a", label = "A", default = "keep" },
