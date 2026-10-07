@@ -89,13 +89,16 @@ describe("the slot bar in a real Neovim", function()
 
   --- Child with the bar open and `extra` slots after the two fixed ones.
   ---@param extra integer
-  local function open_bar(extra)
+  ---@param menu boolean|nil  # bind the general right-click menu too (default true)
+  local function open_bar(extra, menu)
     lua(
       [[
-      local file, data, extra = ...
+      local file, data, extra, menu = ...
       local slots = require("ui.slots")
       -- the right-click menu is bound, as in a real setup: the bar must win
-      require("ui").setup({ menu = {} })
+      if menu then
+        require("ui").setup({ menu = {} })
+      end
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "code one", "code two", "code three" })
       slots.setup({
         data_dir = data, persist = false, show = true, clipboard = { "a" },
@@ -120,7 +123,7 @@ describe("the slot bar in a real Neovim", function()
       menu.open = function(...) _G.RIGHT.menu = _G.RIGHT.menu + 1 end
       _G.MAIN = vim.api.nvim_get_current_win()
     ]],
-      { file, dir .. "/data", extra }
+      { file, dir .. "/data", extra, menu ~= false }
     )
     expect(function()
       return bar().win ~= nil
@@ -182,8 +185,13 @@ describe("the slot bar in a real Neovim", function()
       return lua([[return vim.fn.getreg("a")]]) == "from the bar"
     end, "the yank slot copied its text")
     local after = bar()
-    assert.is_false(after.current_is_bar, "the focus went back")
+    assert.is_false(after.current_is_bar, "the focus never moved")
     assert.equals(before.current, after.current)
+    assert.same(
+      { 1, 0 },
+      lua([[return vim.api.nvim_win_get_cursor(0)]]),
+      "the click did not reach the code below"
+    )
   end)
 
   it("a real left click on the file chip opens the file in the editor window", function()
@@ -250,6 +258,63 @@ describe("the slot bar in a real Neovim", function()
     assert.equals("slot 2", lua([[return _G.RIGHT.title]]))
     assert.equals(0, lua([[return _G.RIGHT.menu]]), "ui.menu stayed out of it")
     assert.is_false(bar().current_is_bar)
+    assert.is_false(vim.rpcrequest(chan, "nvim_get_mode").blocking, "no native popup menu")
+  end)
+
+  it("a right click needs no ui.menu: the native popup menu stays shut", function()
+    open_bar(0, false)
+    click("right", 5)
+    expect(function()
+      return lua([[return _G.RIGHT.select]]) == 1
+    end, "the slot menu of the bar opened")
+    assert.is_false(vim.rpcrequest(chan, "nvim_get_mode").blocking, "no native popup menu")
+    assert.is_false(bar().current_is_bar)
+  end)
+
+  it("the window cycle never enters the bar", function()
+    open_bar(0)
+    lua([[vim.cmd.vsplit()]])
+    local bar_win = bar().win
+    for _ = 1, 4 do
+      vim.rpcrequest(chan, "nvim_input", "<C-w>w")
+      vim.wait(80)
+      assert.is_not.equals(bar_win, bar().current)
+    end
+  end)
+
+  it("a fast second click on the same chip counts as a click again", function()
+    open_bar(0)
+    click("left", 5)
+    expect(function()
+      return lua([[return vim.fn.getreg("a")]]) == "from the bar"
+    end, "the first click applied the slot")
+    lua([[vim.fn.setreg("a", "")]])
+    click("left", 5) -- within 'mousetime' and on the same cell: Neovim sends <2-LeftMouse>
+    expect(function()
+      return lua([[return vim.fn.getreg("a")]]) == "from the bar"
+    end, "the second click counted as a click, too")
+  end)
+
+  it("a press on the bar dragged into the code starts no selection", function()
+    open_bar(0)
+    local b = bar()
+    local row, col = b.row + 1, b.col + 3
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "press", "", 0, row, col)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "drag", "", 0, 1, 4)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "release", "", 0, 1, 4)
+    vim.wait(200)
+    assert.equals("n", lua([[return vim.api.nvim_get_mode().mode]]))
+  end)
+
+  it("a selection dragged from the code over the bar goes on as usual", function()
+    open_bar(0)
+    local b = bar()
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "press", "", 0, 0, 2)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "drag", "", 0, 1, 4)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "drag", "", 0, b.row + 1, b.col + 3)
+    vim.rpcrequest(chan, "nvim_input_mouse", "left", "release", "", 0, b.row + 1, b.col + 3)
+    vim.wait(200)
+    assert.equals("v", lua([[return vim.api.nvim_get_mode().mode]]))
   end)
 
   it("a right click in the editor still reaches the general menu", function()
