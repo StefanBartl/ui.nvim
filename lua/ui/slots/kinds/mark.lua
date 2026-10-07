@@ -14,7 +14,15 @@ local M = {}
 ---@return string|nil err
 local function marks()
   local ok, mod = pcall(require, "sessions.marks")
-  if not ok or type(mod) ~= "table" then
+  if not ok then
+    -- Not there at all is one thing; installed but broken is another, and the
+    -- reason must not be thrown away.
+    if tostring(mod):find("module 'sessions.marks' not found", 1, true) then
+      return nil, "sessions.nvim is not installed"
+    end
+    return nil, "sessions.marks failed to load: " .. tostring(mod):match("[^\n]*")
+  end
+  if type(mod) ~= "table" then
     return nil, "sessions.nvim is not installed"
   end
   return mod

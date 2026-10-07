@@ -668,8 +668,32 @@ function M.reload()
     say("changes to the slots of the previous scope could not be saved and are lost")
   end
 
+  -- Slots of a kind that never reaches a file (`cmd`, `lua`) were added by the
+  -- host in this session: they belong to the session, not to a project, so a
+  -- change of project must not make them vanish.
+  local carry = {}
+  for n, slot in pairs(S.dynamic) do
+    if not persistable(slot.kind) then
+      carry[n] = slot
+    end
+  end
+
   S.dirty = false
   load_file()
+
+  for n, slot in pairs(carry) do
+    if S.fixed[n] or S.dynamic[n] then
+      -- What is saved wins: writing over it would lose it from the file.
+      say(
+        ("slot %d (%s, this session only) was replaced by the one saved for this project"):format(
+          n,
+          slot.kind
+        )
+      )
+    else
+      S.dynamic[n] = slot
+    end
+  end
   emit("reload", nil)
 end
 
