@@ -44,7 +44,9 @@ describe("ui.slots.kinds", function()
   local function make_file(name, lines)
     local path = dir .. "/" .. name
     vim.fn.writefile(lines or { "one", "two", "three" }, path)
-    return vim.fs.normalize(path)
+    -- The canonical spelling: Neovim names a buffer by it (on macOS /var is a
+    -- link to /private/var), so a test must compare in that one spelling.
+    return require("lib.nvim.fs.normkey")(path)
   end
 
   ---@param path string
@@ -54,7 +56,7 @@ describe("ui.slots.kinds", function()
 
   ---@return string
   local function current_name()
-    return vim.fs.normalize(vim.api.nvim_buf_get_name(0))
+    return require("lib.nvim.fs.normkey")(vim.api.nvim_buf_get_name(0))
   end
 
   describe("registry", function()
