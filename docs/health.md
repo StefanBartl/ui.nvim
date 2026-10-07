@@ -166,6 +166,30 @@ typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and hel
 
 ---
 
+## Slots
+
+Looks at the session without starting the feature: a module that was never
+required is reported as off, not loaded to be asked. When `ui.slots` is loaded,
+this section lists what the last `setup()` rejected (the options are replaced by
+their defaults, so the feature stays usable) and checks the placeholders of the
+slots written in `setup({ slots = ... })`.
+
+| Line | Means |
+| --- | --- |
+| INFO `ui.slots is not loaded (off until asked: ...)` | Nothing asked for the slots in this session; nothing to check |
+| INFO `ui.slots is on` / `is configured but not switched on` | `enabled` (or a `:UI slots` call) has started it, or only `setup()` ran |
+| OK `no rejected options from the last setup() call` | Every option validated |
+| WARN `<option>: ...` (one per finding) | That option was wrong (an unknown name, a value outside its set, a negative number, a bad `keys` entry) and the default is used |
+| OK `N slot(s) in setup(), every placeholder is a known one` | No `{name}` in a path, address, text or command is unknown |
+| WARN `slot N: unknown placeholder {name} in 'field'` | The name is not one of `{file} {dir} {root} {cwd} {line} {col} {word} {sel} {clip} {count}`; it stays in the text. Write `{{` and `}}` for literal braces |
+| INFO `no slots in setup({ slots = ... })` | Nothing fixed; slots made while working are in the data file and are checked when it is loaded |
+| ERROR `ui.slots failed while being checked` | The check itself raised; the message says why |
+
+`hover.nvim` (the page preview of an address) and `sessions.marks` (slots of
+kind `mark`) are listed under "Optional integrations".
+
+---
+
 ## Optional integrations
 
 Which foreign modules this plugin probes, and which of them resolve right

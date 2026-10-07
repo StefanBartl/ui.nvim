@@ -463,6 +463,74 @@ local function check_screenkey()
   end
 end
 
+--- The slots: what the last `setup()` rejected, and placeholders in the slots
+--- that no slot can fill. Looks at the session without starting the feature: a
+--- module that was never required is reported as off, not loaded to be asked.
+---@return nil
+local function check_slots()
+  health.start("Slots")
+
+  if not package.loaded["ui.slots"] then
+    health.info("ui.slots is not loaded (off until asked: ui.setup({ slots = true }) or :UI slots)")
+    return
+  end
+
+  local ok, err = pcall(function()
+    local slots = require("ui.slots")
+    local cfg = require("ui.slots.config")
+    local resolve = require("ui.slots.resolve")
+
+    health.info(
+      slots.is_enabled() and "ui.slots is on" or "ui.slots is configured but not switched on"
+    )
+
+    local issues = cfg.issues()
+    if #issues == 0 then
+      health.ok("no rejected options from the last setup() call")
+    else
+      for _, issue in ipairs(issues) do
+        health.warn(issue)
+      end
+    end
+
+    -- The slots written in `setup({ slots = ... })`: the ones whose text is
+    -- the user's own. Those of a data file are checked when it is loaded.
+    local numbers = {}
+    for n in pairs(cfg.get().slots) do
+      numbers[#numbers + 1] = n
+    end
+    table.sort(numbers)
+    local unknown = 0
+    for _, n in ipairs(numbers) do
+      local slot = cfg.get().slots[n]
+      for _, field in ipairs({ "path", "url", "text", "cmd", "args" }) do
+        local value = type(slot) == "table" and slot[field] or nil
+        local texts = type(value) == "table" and value or { value }
+        for _, text in ipairs(texts) do
+          for _, name in ipairs(resolve.unknown(text)) do
+            unknown = unknown + 1
+            health.warn(
+              ("slot %d: unknown placeholder {%s} in '%s' (it stays in the text; write {{ and }} for literal braces)"):format(
+                n,
+                name,
+                field
+              )
+            )
+          end
+        end
+      end
+    end
+    if #numbers == 0 then
+      health.info("no slots in setup({ slots = ... })")
+    elseif unknown == 0 then
+      health.ok(("%d slot(s) in setup(), every placeholder is a known one"):format(#numbers))
+    end
+  end)
+  if not ok then
+    health.error("ui.slots failed while being checked: " .. tostring(err))
+  end
+end
+
 ---@return nil
 local function check_soft_dependencies()
   health.start("Optional integrations")
@@ -521,6 +589,7 @@ function M.check()
   check_winbar()
   check_context()
   check_screenkey()
+  check_slots()
   check_soft_dependencies()
 end
 

@@ -144,6 +144,7 @@ Start at [docs/README.md](docs/README.md), which says what is where.
 
 **The Rest**
 
+- [Slots](lua/ui/slots/README.md) — numbered slots that open files and addresses, copy text, run commands; chips or panel, with previews.
 - [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
 - [Credits & the NvChad migration record](docs/nvchad-migration.md) — where this started, and the step-by-step decision record of how the NvChad/base46 coupling was replaced.
 - [Feedback](https://github.com/StefanBartl/ui.nvim/issues)

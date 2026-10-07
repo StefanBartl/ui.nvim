@@ -36,6 +36,8 @@ require("ui").setup({
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
+  slots = true,    -- numbered action slots (bar, panel, previews); or a table of options
+                   -- (lua/ui/slots/README.md). Explicit-only, like notify
   tasks = {        -- options of the opt-in tasks_counter statusline segment (explicit-only;
                    -- see docs/modules.md): vault, area, areas, source, statuses, ttl_ms,
                    -- prefix, hide_zero, breakdown, urgent_prio, watch_writes, max_files
@@ -268,6 +270,11 @@ that to `all = true`. `true` installs `ui.notify` with the shipped tunables;
 a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 { [vim.log.levels.ERROR] = 8000 }, titles = { ... } }`) overrides them.
 `:UI notify off` puts the previous handler back.
+
+`slots` is explicit-only as well: `all = true` does not switch it on. `true`
+is `{ enabled = true }`; a table sets the options listed in
+[`lua/ui/slots/README.md`](../lua/ui/slots/README.md) (fixed slots, keys, the
+bar's style and side, the preview). Nothing is mapped unless `keys` asks.
 
 `toast` only tunes the look of the top-right corner toasts and replaces
 nothing, so it is applied whenever given. A toast is as wide as its text plus

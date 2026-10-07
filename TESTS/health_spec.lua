@@ -83,6 +83,49 @@ describe("ui.health", function()
     assert.is_false(has(capture(), "error", "HARD dependency"))
   end)
 
+  describe("the slots section", function()
+    local saved
+
+    before_each(function()
+      saved = package.loaded["ui.slots"]
+    end)
+
+    after_each(function()
+      package.loaded["ui.slots"] = saved
+      require("ui.slots.config").reset()
+      require("ui.slots.store").reset()
+    end)
+
+    it("says it is off, and does not load the feature, when it was never required", function()
+      package.loaded["ui.slots"] = nil
+      local calls = capture()
+      assert.is_true(has(calls, "info", "ui.slots is not loaded"))
+      assert.is_nil(package.loaded["ui.slots"])
+    end)
+
+    it("reports a rejected option and an unknown placeholder, and a clean setup as ok", function()
+      local slots = require("ui.slots")
+      slots.reset()
+      slots.setup({
+        layout = "sideways",
+        slots = {
+          [1] = { kind = "file", path = "{dir}/ok.md" },
+          [2] = { kind = "file", path = "{nonsense}/x" },
+        },
+      })
+      local calls = capture()
+      assert.is_true(has(calls, "warn", "layout"))
+      assert.is_true(has(calls, "warn", "unknown placeholder {nonsense}"))
+      assert.is_false(has(calls, "warn", "unknown placeholder {dir}"))
+
+      slots.reset()
+      slots.setup({ slots = { [1] = { kind = "file", path = "{dir}/ok.md" } } })
+      calls = capture()
+      assert.is_true(has(calls, "ok", "no rejected options"))
+      assert.is_true(has(calls, "ok", "every placeholder is a known one"))
+    end)
+  end)
+
   it("runs every section even with NvChad absent", function()
     -- Nothing below "Dependencies" needs NvChad any more, so a missing
     -- NvChad must not cut the report short the way it used to.
@@ -103,6 +146,7 @@ describe("ui.health", function()
       "Winbar",
       "Context",
       "Screenkey",
+      "Slots",
       "Optional integrations",
     }, starts)
   end)

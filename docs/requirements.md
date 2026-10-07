@@ -39,3 +39,4 @@ Which preset actually wires which of these in is
 `order` costs nothing either way.
 
 - **The slot bar** (`ui.slots`) works on Neovim 0.10, but takes a click away from the editor only on 0.11+ (`vim.on_key` can discard a key by returning `""` since then); on 0.10 a click on the bar also moves the cursor under it.
+- **Slots and their optional plugins:** `hover.nvim` gives a `url` slot a page preview (without it: the address and host), `sessions.nvim` provides the marks behind `mark` slots (without it they show as missing). Neither is needed otherwise; `:checkhealth ui` lists both.
