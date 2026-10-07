@@ -569,6 +569,110 @@ describe("ui.slots panel and editor", function()
     end)
   end)
 
+  describe("a long list", function()
+    local COUNT = 600
+
+    --- Slots whose files are not there, named in the order of their numbers.
+    ---@param n integer
+    local function add_missing_files(n)
+      for i = 1, n do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+    end
+
+    it(
+      "shows every slot, looks closely only at the rows in view, and the rest on arrival",
+      function()
+        start()
+        add_missing_files(COUNT)
+        local uv = vim.uv or vim.loop
+        local original = uv.fs_stat
+        local stats = 0
+        uv.fs_stat = function(path)
+          if tostring(path):find("/gone/", 1, true) then
+            stats = stats + 1
+          end
+          return original(path)
+        end
+        panel.open()
+        uv.fs_stat = original
+
+        local lines = panel.lines()
+        assert.equals(COUNT, #lines)
+        -- in view: the full render says the file is not there
+        assert.is_truthy(lines[1]:find("✗", 1, true))
+        -- far away: only the name as written, no file system asked for it yet
+        assert.is_nil(lines[COUNT]:find("✗", 1, true))
+        assert.is_truthy(lines[COUNT]:find("file" .. COUNT .. ".txt", 1, true))
+        assert.is_true(stats < 150, "stat'ed " .. stats .. " files while opening")
+
+        -- the cursor comes there: the row gets its full render
+        vim.cmd("normal! G")
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_get_current_buf() })
+        assert.is_truthy(panel.lines()[COUNT]:find("✗", 1, true))
+        assert.equals(COUNT, #panel.lines())
+      end
+    )
+
+    it("redraws once for a change the panel made itself", function()
+      start()
+      add_missing_files(60)
+      panel.open()
+      local calls = 0
+      local original = store.list
+      store.list = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+      press("dd")
+      store.list = original
+      assert.equals(1, calls)
+      assert.equals(59, #panel.lines())
+    end)
+
+    it("redraws once for several changes made behind its back", function()
+      start()
+      add_missing_files(30)
+      panel.open()
+      local cheap_rows = 0
+      local original = registry.render
+      registry.render = function(slot, opts)
+        if opts and opts.cheap then
+          cheap_rows = cheap_rows + 1
+        end
+        return original(slot, opts)
+      end
+      slots.add({ kind = "yank", text = "one" })
+      slots.add({ kind = "yank", text = "two" })
+      slots.add({ kind = "yank", text = "three" })
+      flush()
+      registry.render = original
+      -- one build of the 33 rows, not one per add
+      assert.equals(33, cheap_rows)
+      assert.equals(33, #panel.lines())
+    end)
+
+    it(
+      "finds the slot of the file you came from, also in a list too long to check exactly",
+      function()
+        start()
+        add_missing_files(300)
+        local path = dir .. "/mine.txt"
+        vim.fn.writefile({ "x" }, path)
+        store.add({ kind = "file", path = path })
+        vim.cmd.edit(path)
+        panel.open()
+        assert.equals(301, panel.current())
+      end
+    )
+
+    it("draws the empty list with its hint", function()
+      start()
+      panel.open()
+      assert.same({ " no slots yet -- press a to add one" }, panel.lines())
+    end)
+  end)
+
   describe("the panel and a window that is gone", function()
     it("opens from the current window when the one it came from was closed", function()
       add_yanks(1)

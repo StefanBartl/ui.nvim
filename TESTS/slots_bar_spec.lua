@@ -821,6 +821,44 @@ describe("ui.slots bar", function()
     end)
   end)
 
+  describe("a long list", function()
+    it("asks the file system only about the chips that are drawn", function()
+      start()
+      for i = 1, 500 do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+      local uv = vim.uv or vim.loop
+      local original = uv.fs_stat
+      local stats = 0
+      uv.fs_stat = function(path)
+        if tostring(path):find("/gone/", 1, true) then
+          stats = stats + 1
+        end
+        return original(path)
+      end
+      chips.open()
+      flush()
+      uv.fs_stat = original
+      -- the chips in view are the real thing: the file is not there
+      assert.is_truthy(text():find("✗", 1, true))
+      -- 30 rows of editor: a few chips, not five hundred
+      assert.is_true(stats < 40, "stat'ed " .. stats .. " files for the first draw")
+    end)
+
+    it("scrolls to a chip far down and draws that one in full", function()
+      start()
+      for i = 1, 300 do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+      chips.open()
+      flush()
+      chips.set_focus(250)
+      flush()
+      assert.is_truthy(text():find("file250.txt", 1, true))
+      assert.is_truthy(text():find("✗", 1, true))
+    end)
+  end)
+
   describe("focus", function()
     it("never lets the bar into the window cycle", function()
       add_yanks(2)

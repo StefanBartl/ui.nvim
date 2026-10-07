@@ -171,7 +171,13 @@ end
 
 ---@param slot table
 ---@return { label: string, icon: string, hl: string, missing: boolean }
-function M.render(slot)
+function M.render(slot, opts)
+  if opts and opts.cheap and type(slot.path) == "string" and not slot.path:find("{", 1, true) then
+    -- The name as written: no placeholder to put in, no absolute path to make,
+    -- no stat -- the row is corrected when it comes into view.
+    local base = slot.path:match("([^/\\]+)[/\\]*$")
+    return { label = base or slot.path, icon = "󰈔", hl = "KitAccent", missing = false }
+  end
   local path = target_path(slot)
   local missing = not uv.fs_stat(path)
   return {

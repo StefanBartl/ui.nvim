@@ -280,48 +280,88 @@ local function one_line(v)
   return (v:gsub("%c", " "))
 end
 
---- One entry per slot, ascending: what to show and how tall it is.
+--- The text of one chip.
+---@param slot table
+---@param r table  # `registry.render`
+---@param current boolean
+---@param dirty boolean  # the file has unsaved changes
+---@return string
+local function chip_text(slot, r, current, dirty)
+  local icon = one_line(r.icon)
+  local parts = { current and "• " or "  ", tostring(slot.n) }
+  if icon ~= "" then
+    parts[#parts + 1] = " " .. icon
+  end
+  parts[#parts + 1] = " " .. one_line(r.label)
+  if dirty then
+    parts[#parts + 1] = " +"
+  end
+  if r.missing then
+    parts[#parts + 1] = " ✗"
+  end
+  return table.concat(parts)
+end
+
+--- One entry per slot, ascending, made without asking the file system anything:
+--- what a chip would say as written, and how tall it is. A list may hold ten
+--- thousand slots and this runs on every redraw; the chips that are drawn get
+--- their real text (is the file there, is it the current one, is it modified)
+--- from `materialize`.
 ---@param flat boolean|nil  # one row per slot whatever the style says (no room for borders)
----@return { n: integer, text: string, hl: string, current: boolean, missing: boolean, shape: table, shape_name: string, h: integer }[]
+---@return { n: integer, slot: table, full: boolean, text: string, hl: string, current: boolean, missing: boolean, shape: table, shape_name: string, h: integer }[]
 local function describe(flat)
-  local normkey = require("lib.nvim.fs.normkey")
-  local name = api.nvim_buf_get_name(0)
-  local here = (name ~= "" and vim.bo.buftype == "") and normkey(name) or nil
-  local dirty = modified_keys()
   local cfg = config.get()
   local out = {}
   for _, slot in ipairs(store.list()) do
-    local r = render(slot)
-    local key = file_key(slot)
+    local r = registry.render(slot, { cheap = true })
     local shape_name, shape = shape_of(slot.style or cfg.style)
     if flat then
       shape_name, shape = "minimal", SHAPES.minimal
     end
-    local current = here ~= nil and key == here
-    local icon = one_line(r.icon)
-    local parts = { current and "• " or "  ", tostring(slot.n) }
-    if icon ~= "" then
-      parts[#parts + 1] = " " .. icon
-    end
-    parts[#parts + 1] = " " .. one_line(r.label)
-    if key and dirty[key] then
-      parts[#parts + 1] = " +"
-    end
-    if r.missing then
-      parts[#parts + 1] = " ✗"
-    end
     out[#out + 1] = {
       n = slot.n,
-      text = table.concat(parts),
+      slot = slot,
+      full = false,
+      text = chip_text(slot, r, false, false),
       hl = type(r.hl) == "string" and r.hl or "KitMuted",
-      current = current,
-      missing = r.missing,
+      current = false,
+      missing = false,
       shape = shape,
       shape_name = shape_name,
       h = shape.h,
     }
   end
   return out
+end
+
+--- Give the entries `first` to `last` their real text.
+---@param descs table[]
+---@param first integer
+---@param last integer
+local function materialize(descs, first, last)
+  local todo = {}
+  for i = first, math.min(last, #descs) do
+    if not descs[i].full then
+      todo[#todo + 1] = descs[i]
+    end
+  end
+  if #todo == 0 then
+    return
+  end
+  local normkey = require("lib.nvim.fs.normkey")
+  local name = api.nvim_buf_get_name(0)
+  local here = (name ~= "" and vim.bo.buftype == "") and normkey(name) or nil
+  local dirty = modified_keys()
+  for _, d in ipairs(todo) do
+    local slot = d.slot
+    local r = render(slot)
+    local key = file_key(slot)
+    d.current = here ~= nil and key == here
+    d.missing = r.missing == true
+    d.hl = type(r.hl) == "string" and r.hl or "KitMuted"
+    d.text = chip_text(slot, r, d.current, key ~= nil and dirty[key] == true)
+    d.full = true
+  end
 end
 
 -- Geometry --------------------------------------------------------------
@@ -349,11 +389,19 @@ local function chip_width(descs)
   end
   cap = math.max(MIN_WIDTH, math.min(math.floor(cap), vim.o.columns - 2))
   local want = MIN_WIDTH
+  local side_width = {}
   for _, d in ipairs(descs) do
-    local sides = d.shape.l
-        and (vim.fn.strdisplaywidth(d.shape.l) + vim.fn.strdisplaywidth(d.shape.r))
-      or 0
-    want = math.max(want, vim.fn.strdisplaywidth(d.text) + 2 + sides)
+    local sides = side_width[d.shape]
+    if sides == nil then
+      sides = d.shape.l and (vim.fn.strdisplaywidth(d.shape.l) + vim.fn.strdisplaywidth(d.shape.r))
+        or 0
+      side_width[d.shape] = sides
+    end
+    -- A text is never wider in cells than it is long in bytes: only a chip that
+    -- could be the widest is measured (a long list is not measured one by one).
+    if #d.text + 2 + sides > want then
+      want = math.max(want, vim.fn.strdisplaywidth(d.text) + 2 + sides)
+    end
   end
   -- A border glyph two cells wide (ambiwidth = "double") must divide the width
   -- between the corners, or the right edge sits one cell off: up when the text
@@ -592,7 +640,6 @@ function M.refresh()
     return
   end
 
-  local width = chip_width(descs)
   local top = index_from(descs, S.top_n)
   top = settle(descs, top, avail)
   if S.focus_n then
@@ -600,6 +647,8 @@ function M.refresh()
   end
   local first, last = M._range(descs, top, avail)
   S.top_n = descs[first].n
+  materialize(descs, first, last)
+  local width = chip_width(descs)
 
   local lines, marks, rows = build(descs, first, last, width, true)
   if #lines > avail then
