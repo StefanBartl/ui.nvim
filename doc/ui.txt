@@ -171,8 +171,9 @@ Theme overrides go to `ui.config.setup`, not here: >lua
     then 2 for slot 12), e edits it, a adds one, dd clears it, y copies what it stands for,
     K shows a preview of it beside the panel (a file: its lines up to
     `preview.max_kb`/`preview.max_lines`, at the position it was last left
-    at; an address: its page as hover.nvim shows it, "loading ..." first --
-    only when hover.nvim is installed, and not with `preview.fetch` = false;
+    at; an address: its host, or with `preview.fetch` = true (off by
+    default: it is a request to that host) its page as hover.nvim shows it,
+    "loading ..." first;
     `preview.mode` = "auto" opens it by itself after `preview.delay`
     ms, "off" switches it off), <C-j>/<C-k> move it down/up, a right click opens a menu (apply, edit, copy,
     open a file in a split, vsplit or tab, clear), q or <Esc> closes. Leaving

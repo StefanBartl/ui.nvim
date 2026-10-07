@@ -70,9 +70,11 @@ reported by `:checkhealth ui`. In an address a value is percent-encoded.
   `<C-j>`/`<C-k>` move, `K` the preview, `q`/`<Esc>` close.
 - **The preview** (`K`): a file shows its lines at the position it was last left
   at (capped by `preview.max_kb` and `preview.max_lines`); a directory its
-  entries; an address its page as [hover.nvim](https://github.com/StefanBartl/hover.nvim)
-  shows it, "loading ..." first. `preview.mode` is `key` (default), `auto` or
-  `off`; `preview.fetch = false` keeps an address to its host.
+  entries; an address its host -- or, with `preview.fetch = true`, its page as
+  [hover.nvim](https://github.com/StefanBartl/hover.nvim) shows it, "loading ..."
+  first. Fetching is a request to that host, so it is off by default, and once on
+  it happens for the slot under the cursor whenever the preview is shown (also
+  while it follows the cursor). `preview.mode` is `key` (default), `auto` or `off`.
 - **The editor** (`a`/`e`, `:UI slots edit`): pick the kind, fill a form.
 
 ## Options
@@ -87,7 +89,7 @@ reported by `:checkhealth ui`. In an address a value is percent-encoded.
 | `persist` | `true` | keep the dynamic slots in `stdpath("data")/ui/slots/` |
 | `target` | `"current"` | where a file opens: `current`, `split`, `vsplit`, `tab` |
 | `clipboard` | `{ "+", "*", '"' }` | registers a `yank` slot writes |
-| `preview` | `{ mode = "key", delay = 150, max_kb = 1536, max_lines = 4000, fetch = true }` | see above |
+| `preview` | `{ mode = "key", delay = 150, max_kb = 1536, max_lines = 4000, fetch = false }` | see above |
 | `keys` | `{}` | `apply` (one `%d`, for 1 to 9), `count`, `add`, `panel`; nothing is mapped by default |
 | `slots` | `{}` | fixed slots, `[n] = { kind = ..., ... }` |
 | `kinds` | `{}` | kinds of your own |

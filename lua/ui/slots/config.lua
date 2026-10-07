@@ -23,7 +23,7 @@ local DEFAULTS = {
   persist = true,
   target = "current",
   clipboard = { "+", "*", '"' },
-  preview = { mode = "key", delay = 150, max_kb = 1536, max_lines = 4000, fetch = true },
+  preview = { mode = "key", delay = 150, max_kb = 1536, max_lines = 4000, fetch = false },
   overflow = "accordion",
   keys = {},
   slots = {},

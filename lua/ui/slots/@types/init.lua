@@ -19,7 +19,7 @@
 ---@field delay integer         # ms before `auto` opens the preview
 ---@field max_kb integer        # a larger file is cut here and says so
 ---@field max_lines integer
----@field fetch boolean         # a url slot's preview may fetch the page (through hover.nvim)
+---@field fetch boolean         # a url slot's preview fetches the page (through hover.nvim); off by default: it is a request to that host
 
 --- Resolved configuration (`ui.slots.config.get()`).
 ---@class Ui.Slots.Config
