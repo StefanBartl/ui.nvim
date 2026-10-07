@@ -4,10 +4,11 @@ Every command, keymap and autocommand this plugin registers. Read by
 `:Bindings` out of the installed plugin directory, so this file is the source
 of truth rather than a copy of one.
 
-Nothing here is registered until `require("ui").setup({ all = true })` runs,
-**except `:KitPreview`** (see Commands below): `ui.kit`'s module load
-registers it unconditionally, so any sibling plugin doing
-`require("ui.kit")` turns it on regardless of whether `ui.setup()` ever runs.
+Nothing here is registered until `require("ui").setup({ all = true })` runs.
+Requiring `ui.kit` (or any of its modules) registers nothing: `:KitPreview`
+comes in with the commands (`usrcmds`) or with `require("ui.kit").setup()` or
+`require("ui.kit").preview()`, and the toast's `VimResized` autocommand
+(group `lib_kit_toast_resize`) is created when the first toast opens.
 
 ---
 
@@ -51,10 +52,10 @@ theme list.
 **`:KitPreview`** (`ui.kit`'s own command, not a `:UI` subcommand) opens the
 live theme playground: a tab split with an editable Lua config buffer on the
 left and a rendered widget gallery on the right that restyles as the config
-settles (`lua/ui/kit/preview.lua`). Registered as soon as `ui.kit`'s module
-loads — `require("ui.kit")` from any plugin, not just this one's own
-`setup()` — so it is reachable even in a host that never calls
-`ui.setup()`. The config buffer's contents are evaluated as Lua a short,
+settles (`lua/ui/kit/preview.lua`). Registered by `ui.setup({ all = true })`
+(or `usrcmds = true`) and by `require("ui.kit").setup()`; loading `ui.kit`
+alone does not register it (`require("ui.kit").preview()` still opens the
+playground and registers the command on the way). The config buffer's contents are evaluated as Lua a short,
 debounced delay after the last keystroke, not on every one (see the
 in-buffer reference block, or `EVAL_DEBOUNCE_MS` in `preview.lua`).
 

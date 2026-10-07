@@ -1047,6 +1047,10 @@ end
 
 ---@return nil
 function M.setup()
+  -- `ui.kit` registers nothing when required (LUA-92), so its playground
+  -- command comes in with the rest of the commands.
+  pcall(require("ui.kit.preview").ensure_command)
+
   usercmd.create("UI", dispatcher, {
     nargs = "*",
     complete = complete,

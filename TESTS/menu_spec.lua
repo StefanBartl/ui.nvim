@@ -1025,8 +1025,25 @@ describe("ui.menu", function()
 
   describe("prewarm start", function()
     local real_prewarm, calls
+    local real_v = vim.v
 
     before_each(function()
+      -- Whether the editor has started is not for the spec to assume: in a
+      -- `-c` child `v:vim_did_enter` is still 0, in an embedded warm-pool
+      -- member it is already 1 and the chain would start inside `setup()`.
+      -- These cases are about the chain that waits for VimEnter, so the
+      -- variable reads 0 for their duration (`enter()` is the VimEnter).
+      vim.v = setmetatable({}, {
+        __index = function(_, key)
+          if key == "vim_did_enter" then
+            return 0
+          end
+          return real_v[key]
+        end,
+        __newindex = function(_, key, value)
+          real_v[key] = value
+        end,
+      })
       real_prewarm, calls = contributors.prewarm, 0
       contributors.prewarm = function()
         calls = calls + 1
@@ -1038,9 +1055,10 @@ describe("ui.menu", function()
     after_each(function()
       contributors.prewarm = real_prewarm
       menu.setup({ mouse = false, key = false, prewarm = false })
+      vim.v = real_v
     end)
 
-    -- While the suite runs `v:vim_did_enter` is still 0, so the chain waits for
+    -- `v:vim_did_enter` reads 0 here (see before_each), so the chain waits for
     -- VimEnter: firing it here is what an editor that has started would already
     -- have done.
     local function enter()
