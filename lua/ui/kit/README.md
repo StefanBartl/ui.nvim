@@ -526,7 +526,13 @@ kit.form({
   none of these keys.
 
 Every field of a chain opens in Insert mode, the one reached by going back
-included.
+included. So does whatever else a callback opens to be typed into -- a `kit.sheet`
+(whose first row is text), a `kit.picker`, a `kit.live_input` or a `kit.compare`
+opened from an `on_submit` -- and a prompt that was opened from a window that
+was already there leaves that window in the mode it was in. A component of your
+own that opens a window and asks for Insert mode with `:startinsert` counts itself
+with `require("ui.kit.input").mark_opened()` so that the prompt closing under it
+does not stop Insert mode.
 
 ### Sheet (every field at once)
 
