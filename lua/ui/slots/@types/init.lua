@@ -23,6 +23,7 @@
 --- Resolved configuration (`ui.slots.config.get()`).
 ---@class Ui.Slots.Config
 ---@field enabled boolean
+---@field show boolean         # open the bar when the feature is switched on
 ---@field layout "chips"|"panel"
 ---@field side "left"|"right"
 ---@field width number          # fraction of the editor width (<= 1) or columns (> 1)
@@ -45,6 +46,7 @@
 --- What `setup()` accepts: every field optional.
 ---@class Ui.Slots.Opts
 ---@field enabled? boolean
+---@field show? boolean
 ---@field layout? "chips"|"panel"
 ---@field side? "left"|"right"
 ---@field width? number

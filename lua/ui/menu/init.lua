@@ -80,6 +80,13 @@ function M.on_right_click()
     return
   end
 
+  -- The slot bar answers its own right click (a menu of that slot). Only asked
+  -- when the bar was ever loaded: this must not load it.
+  local slot_bar = package.loaded["ui.slots.view.chips"]
+  if slot_bar and slot_bar.pointer_on_bar() then
+    return
+  end
+
   -- Not text either: a window's winbar reports `line == 0`. Its own click
   -- handler (a breadcrumb, say) answers the native right click, as it always
   -- did; a left click would run the handler's *navigate* action instead.

@@ -73,6 +73,9 @@ function M.enable()
     say(err)
   end
   store.reload()
+  if config.get().show then
+    require("ui.slots.view.chips").open()
+  end
   require("ui.slots.bindings").attach({
     apply = function(n, opts)
       return M.apply(n, opts)
@@ -91,6 +94,10 @@ function M.disable()
   end
   enabled = false
   store.flush()
+  local bar = package.loaded["ui.slots.view.chips"]
+  if bar then
+    bar.close()
+  end
   require("ui.slots.bindings").detach()
 end
 
@@ -100,6 +107,9 @@ end
 ---@return Ui.Slots.Config
 function M.setup(opts)
   local was_enabled = enabled
+  -- A setup() in the middle of a session must not close a bar the user opened.
+  local bar = package.loaded["ui.slots.view.chips"]
+  local bar_was_open = bar ~= nil and bar.wanted()
   if was_enabled then
     M.disable()
   end
@@ -109,6 +119,9 @@ function M.setup(opts)
   end
   if cfg.enabled or was_enabled then
     M.enable()
+    if bar_was_open then
+      require("ui.slots.view.chips").open()
+    end
   end
   return cfg
 end
@@ -158,6 +171,10 @@ function M.apply(n, opts)
     return false, err
   end
   last_applied = num
+  local bar = package.loaded["ui.slots.view.chips"]
+  if bar then
+    bar.set_focus(num)
+  end
   return true
 end
 
@@ -339,8 +356,7 @@ function M.describe()
   return lines
 end
 
-local NOT_YET =
-  "the slot bar and the editor are not built yet; use :UI slots list, add, clear, move"
+local NOT_YET = "the slot editor is not built yet; use :UI slots list, add, clear, move"
 
 --- `:UI slots ...`. `args[1]` is "slots", the rest is what the user typed.
 ---@param args string[]
@@ -378,7 +394,19 @@ function M.command(args)
     M.move(args[3], args[4])
   elseif sub == "kinds" then
     say("kinds: " .. table.concat(registry.names(), ", "), vim.log.levels.INFO)
-  elseif sub == "toggle" or sub == "open" or sub == "close" or sub == "edit" then
+  elseif sub == "toggle" or sub == "open" or sub == "close" then
+    local bar = require("ui.slots.view.chips")
+    if sub == "open" then
+      bar.open()
+    elseif sub == "close" then
+      bar.close()
+    else
+      bar.toggle()
+    end
+    if bar.wanted() and not bar.is_open() then
+      say("the bar is on, and shows up with the first slot", vim.log.levels.INFO)
+    end
+  elseif sub == "edit" then
     say(NOT_YET, vim.log.levels.INFO)
   else
     say(("unknown subcommand '%s'"):format(sub))
@@ -427,6 +455,10 @@ end
 --- Forget the session state (tests).
 function M.reset()
   M.disable()
+  local bar = package.loaded["ui.slots.view.chips"]
+  if bar then
+    bar.reset()
+  end
   last_applied = nil
   enabled = false
 end

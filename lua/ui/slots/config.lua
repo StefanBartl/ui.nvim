@@ -14,6 +14,7 @@ local M = {}
 ---@type Ui.Slots.Config
 local DEFAULTS = {
   enabled = false,
+  show = false,
   layout = "chips",
   side = "right",
   width = 0.25,
@@ -84,7 +85,7 @@ local function sanitize(cfg)
       cfg[key] = DEFAULTS[key]
     end
   end
-  for _, key in ipairs({ "enabled", "persist" }) do
+  for _, key in ipairs({ "enabled", "show", "persist" }) do
     if type(cfg[key]) ~= "boolean" then
       cfg[key] = DEFAULTS[key]
     end
@@ -243,7 +244,7 @@ function M.issues(cfg)
   for key in pairs(ENUMS) do
     check_enum(cfg, key, issues)
   end
-  for _, key in ipairs({ "enabled", "persist" }) do
+  for _, key in ipairs({ "enabled", "show", "persist" }) do
     if type(cfg[key]) ~= "boolean" then
       issues[#issues + 1] = ("%s: %s is not a boolean"):format(key, vim.inspect(cfg[key]))
     end

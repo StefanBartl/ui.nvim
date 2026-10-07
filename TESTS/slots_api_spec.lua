@@ -623,12 +623,9 @@ describe("ui.slots", function()
       assert.is_true(said("cmd, file, lua, mark, url, yank"))
     end)
 
-    it("says that the bar and the editor are not built, instead of failing", function()
-      for _, sub in ipairs({ "toggle", "open", "close", "edit" }) do
-        messages = {}
-        vim.cmd("UI slots " .. sub)
-        assert.is_true(said("not built yet"), sub)
-      end
+    it("says that the slot editor is not built, instead of failing", function()
+      vim.cmd("UI slots edit")
+      assert.is_true(said("editor is not built yet"))
     end)
 
     it("reports an unknown subcommand", function()
