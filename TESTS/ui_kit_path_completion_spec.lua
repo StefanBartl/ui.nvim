@@ -25,6 +25,9 @@ local uv = vim.uv or vim.loop
 
 local MAX = 300
 
+--- 'fileignorecase' and 'wildignorecase', in every combination.
+local CASE_OPTIONS = { { true, false }, { false, false }, { false, true }, { true, true } }
+
 ---@param path string
 local function touch(path)
   -- Not `io.open`: on Windows LuaJIT's takes the ANSI code page, which turns a file name
@@ -120,6 +123,58 @@ describe("path completion in a big directory", function()
     local ok, err = pcall(fn)
     vim.o.fileignorecase, vim.o.wildignorecase = saved_fic, saved_wic
     assert(ok, err)
+  end
+
+  --- <Tab> on `frag`, under every combination of the case options, has to give what the
+  --- real `getcompletion()` gives: its list cut to what a menu holds when it has more than
+  --- that (and then it is not asked), `getcompletion()` itself otherwise. With
+  --- `via_getcompletion` it is `getcompletion()` that has to answer however long its list
+  --- is -- names the big list cannot order the way it does.
+  ---@param frag string
+  ---@param via_getcompletion? boolean
+  local function check_like_getcompletion(frag, via_getcompletion)
+    for _, case in ipairs(CASE_OPTIONS) do
+      with_case_options(case[1], case[2], function()
+        local label = ("%s with 'fileignorecase' %s, 'wildignorecase' %s"):format(
+          vim.inspect(frag:sub(#dir + 2)),
+          tostring(case[1]),
+          tostring(case[2])
+        )
+        local full = vim.tbl_map(function(name)
+          return (name:gsub("\\", "/"))
+        end, real_getcompletion(frag, "file"))
+        press_tab(frag)
+        if via_getcompletion or #full <= MAX then
+          assert.equals(1, getcompletion_calls, label .. ": getcompletion() answers")
+        else
+          assert.equals(0, getcompletion_calls, label .. ": the big list answers")
+          assert.same(vim.list_slice(full, 1, MAX), shown, label)
+        end
+      end)
+    end
+  end
+
+  --- Whether the directory lists each of `names` as it was created (a file system that
+  --- normalizes Unicode -- HFS+ -- does not, and the spec has nothing to say there).
+  ---@param d string
+  ---@param names string[]
+  ---@return boolean
+  local function listed_verbatim(d, names)
+    local at = {}
+    local handle = real_scandir(d)
+    while handle do
+      local entry = real_scandir_next(handle)
+      if not entry then
+        break
+      end
+      at[entry] = true
+    end
+    for _, name in ipairs(names) do
+      if not at[name] then
+        return false
+      end
+    end
+    return true
   end
 
   before_each(function()
@@ -394,7 +449,7 @@ describe("path completion in a big directory", function()
     return d
   end
 
-  for _, case in ipairs({ { true, false }, { false, false }, { false, true }, { true, true } }) do
+  for _, case in ipairs(CASE_OPTIONS) do
     local fic, wic = case[1], case[2]
     it(
       ("lists what getcompletion() does, in its order: 'fileignorecase' %s, 'wildignorecase' %s"):format(
@@ -514,6 +569,81 @@ describe("path completion in a big directory", function()
     vim.o.wildignore = saved
     assert(ok, err)
   end)
+
+  it("matches a name by Neovim's own case folding, not by upper-casing it", function()
+    -- toupper() turns U+0131 (dotless i) into "I", which Neovim's folding does not, and
+    -- leaves the Kelvin sign (U+212A) alone, which Neovim folds to "k".
+    dir = new_dir()
+    local dotless, kelvin = vim.fn.nr2char(0x131), vim.fn.nr2char(0x212A)
+    local lone = { dir .. "/itemIa", dir .. "/itemia" }
+    for i = 0, MAX do
+      touch(("%s/item%sx%03d"):format(dir, dotless, i))
+      touch(("%s/item%sx%03d"):format(dir, kelvin, i))
+    end
+    for _, path in ipairs(lone) do
+      touch(path)
+    end
+    for _, frag in ipairs({
+      "itemI",
+      "itemi",
+      "item" .. dotless,
+      "itemk",
+      "itemK",
+      "item" .. kelvin,
+    }) do
+      check_like_getcompletion(dir .. "/" .. frag)
+    end
+    -- the cases above must not all end at getcompletion(): the dotless i is no "I"...
+    with_case_options(true, true, function()
+      assert.is_true(#real_getcompletion(dir .. "/item" .. dotless, "file") > MAX)
+    end)
+  end)
+
+  it("does not take a combining mark after the fragment for part of the name", function()
+    -- "U" is no prefix of "U" + U+0308 (an umlaut written as two characters, as macOS
+    -- writes them): getcompletion() lists the four plain names, the bytes would list 305.
+    dir = new_dir()
+    local names = { "Ua", "Ub", "Uber", "Ubz" }
+    for i = 0, MAX do
+      names[#names + 1] = ("U%sz%03d"):format(vim.fn.nr2char(0x308), i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/U")
+    check_like_getcompletion(dir .. "/u")
+  end)
+
+  it(
+    "leaves names with a combining mark to getcompletion(), which orders them its own way",
+    function()
+      -- pathcmp() skips the combining mark, so "Abe" + U+0308 + "x" sorts beside "Abex";
+      -- ordered by bytes it would come behind "Abez". Not worth reproducing: it is
+      -- getcompletion()'s, however many names match.
+      dir = new_dir()
+      local names = { "Abex", "Abey", "Abez", "Abe\204\136x", "Abe\204\136y" } -- U+0308 is CC 88
+      for i = 0, MAX do
+        names[#names + 1] = ("Abz%03d"):format(i)
+      end
+      for _, name in ipairs(names) do
+        touch(dir .. "/" .. name)
+      end
+      if not listed_verbatim(dir, names) then
+        pending("this file system normalizes the names")
+        return
+      end
+      with_case_options(true, false, function()
+        assert.is_true(#real_getcompletion(dir .. "/Ab", "file") > MAX, "more than a menu holds")
+      end)
+      check_like_getcompletion(dir .. "/Ab", true)
+      -- the same names, none with a combining mark among the candidates: the big list again
+      check_like_getcompletion(dir .. "/Abz")
+    end
+  )
 
   it("leaves a fragment with a NUL byte to getcompletion() instead of raising", function()
     -- No file name holds a NUL. The fold of a non-ASCII name goes through `toupper()`, and a
