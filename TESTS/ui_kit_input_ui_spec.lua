@@ -432,6 +432,42 @@ describe("kit.input in a real Neovim", function()
       assert.equals("hello", dot_repeat())
     end)
 
+    it("is gone after a chain whose next prompt was left for a <C-o> command", function()
+      -- <C-o> fires InsertLeave and carries the Insert run on all the same: the scrub
+      -- must wait for the end of the run, not for that first InsertLeave.
+      lua([[
+        _G.RESULT = nil
+        _G.SECOND = nil
+        require("ui.kit").input({
+          secret = true,
+          on_submit = function(v)
+            _G.RESULT = v
+            require("ui.kit").input({ on_cancel = function() _G.SECOND = "cancelled" end })
+          end,
+        })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the secret prompt opens in Insert mode")
+      input("hunter2<CR>")
+      expect(function(s)
+        return s.result == "hunter2"
+      end, "the secret prompt is answered")
+      vim.wait(200)
+      input("abc<C-o>")
+      expect(function(s)
+        return s.mode:sub(1, 2) == "ni"
+      end, "the next prompt waits for a command")
+      vim.wait(300) -- the scrub, were it armed on the first InsertLeave, runs now
+      input("<Esc>") -- the prompt's own <Esc>: cancels it, and the run ends
+      expect(function()
+        return lua([[return _G.SECOND == "cancelled"]])
+      end, "the next prompt is cancelled")
+      vim.wait(400)
+      assert.equals("", dot(), "nothing of the run is left once it has ended")
+      assert.equals("hello", dot_repeat())
+    end)
+
     it("is no business of a prompt without a secret", function()
       lua([[
         _G.RESULT = nil
