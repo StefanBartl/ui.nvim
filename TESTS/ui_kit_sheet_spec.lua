@@ -188,6 +188,15 @@ describe("kit.sheet", function()
       assert.equals("c", r.surf:state().focus)
     end)
 
+    it("opening on another field does not check the first, which was never visited", function()
+      local r = open({
+        { name = "n", label = "N", required = true },
+        { name = "m", label = "M" },
+      }, { focus = "m" })
+      assert.equals("m", r.surf:state().focus)
+      assert.same({}, r.surf:state().errors)
+    end)
+
     it("opens on the first field by default, or the one given by position", function()
       assert.equals("a", open(THREE).surf:state().focus)
       close_floats()
@@ -582,6 +591,72 @@ describe("kit.sheet", function()
       local r = open({ { name = "n", label = "N", validate = digits, live = true } })
       type_into(r, 1, "x")
       assert.same({ n = "digits only" }, r.surf:state().errors)
+    end)
+
+    describe("a field that depends on another", function()
+      -- A number that has to be free in the chosen area.
+      local taken = { one = "100", two = "200" }
+
+      ---@return table r
+      local function open_number_and_area()
+        local r
+        r = open({
+          {
+            name = "n",
+            label = "N",
+            depends_on = "area",
+            validate = function(v)
+              local area = r.surf:state().values.area
+              return taken[area] ~= v, "taken in " .. area
+            end,
+          },
+          { name = "area", label = "Area", kind = "select", choices = { "one", "two" } },
+        })
+        return r
+      end
+
+      it("is checked again when the field it names changes", function()
+        local r = open_number_and_area()
+        type_into(r, 1, "100")
+        keys("<Tab>") -- leaving the number: taken in `one`
+        assert.same({ n = "taken in one" }, r.surf:state().errors)
+        keys("l") -- area -> two: 100 is free there
+        assert.same({}, r.surf:state().errors, "the message went with the area change")
+        keys("h") -- area -> one: taken again
+        assert.same({ n = "taken in one" }, r.surf:state().errors)
+        assert.same({ "✗ taken in one" }, shown_errors(r))
+      end)
+
+      it("stays quiet while it is blank and untouched", function()
+        local r = open({
+          { name = "n", label = "N", required = true, depends_on = "area" },
+          { name = "area", label = "Area", kind = "select", choices = { "one", "two" } },
+        }, { focus = "area" })
+        keys("l")
+        assert.same({}, r.surf:state().errors, "no message before the number was filled in")
+      end)
+
+      it("is checked again when the text field it names is edited", function()
+        local r
+        r = open({
+          { name = "a", label = "A" },
+          {
+            name = "b",
+            label = "B",
+            depends_on = { "a" },
+            validate = function(v)
+              return v ~= r.surf:state().values.a, "same as A"
+            end,
+          },
+        })
+        type_into(r, 2, "x")
+        type_into(r, 1, "y")
+        assert.same({}, r.surf:state().errors)
+        type_into(r, 1, "x")
+        assert.same({ b = "same as A" }, r.surf:state().errors)
+        type_into(r, 1, "z")
+        assert.same({}, r.surf:state().errors)
+      end)
     end)
 
     it("calls validate with the value on_submit will get (after expand_env)", function()
