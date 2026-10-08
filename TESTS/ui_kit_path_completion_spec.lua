@@ -852,6 +852,39 @@ describe("path completion in a big directory", function()
     check_like_getcompletion(dir .. "/" .. CYRILLIC)
   end)
 
+  for _, format in ipairs({ { "a right-to-left mark", 0x200F }, { "a zero-width space", 0x200B } }) do
+    it(("orders a mark behind %s as getcompletion() does"):format(format[1]), function()
+      -- A format character does not take a combining mark behind it into its own character, as
+      -- far as Neovim's character counting goes, and getcompletion() orders by that mark:
+      -- "Q", the format character, U+0301 and "X" are four characters. split() folds the mark
+      -- into the format character instead. The list used to take every name apart with split()
+      -- as soon as ANY name of the directory had a mark, and so lost this one's (here the mark of
+      -- "QE" + U+0301 + "Z" is what asks); a name is rewritten only when the count says it holds
+      -- a mark, and this one does not. The bulk sorts behind the Q names (U+3042 is above
+      -- U+200F), so all of them are among the first 300.
+      local nr2char = vim.fn.nr2char
+      local invisible, mark = nr2char(format[2]), nr2char(0x301)
+      dir = new_dir()
+      local names = {
+        "Q" .. invisible .. mark .. "X",
+        "Q" .. invisible .. "Y",
+        "Q" .. invisible .. "W",
+        "QE" .. mark .. "Z",
+      }
+      for i = 0, MAX + 19 do
+        names[#names + 1] = ("Q%s%03d"):format(nr2char(0x3042), i)
+      end
+      for _, name in ipairs(names) do
+        touch(dir .. "/" .. name)
+      end
+      if not listed_verbatim(dir, names) then
+        pending("this file system normalizes the names")
+        return
+      end
+      check_like_getcompletion(dir .. "/Q")
+    end)
+  end
+
   it("lets a mark right behind the separator belong to it, as getcompletion() does", function()
     -- In what pathcmp() compares, "<dir>/" is followed by U+0301 and "a_first", and the mark
     -- joins the "/" before it: the name sorts as "a_first" and comes first. Ordered by its
