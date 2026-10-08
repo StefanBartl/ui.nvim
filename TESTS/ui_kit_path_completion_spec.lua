@@ -962,6 +962,97 @@ describe("path completion in a big directory", function()
     end
   )
 
+  --- A directory of `count_latin1` names with the Latin-1 byte E4 (an a-umlaut written in
+  --- another encoding than UTF-8) and `count_utf8` with the UTF-8 pair C3 A4, after "item_".
+  --- Needs a file system that keeps a name's bytes, whatever they are: not Windows (names are
+  --- UTF-16 there, and case is folded anyway) and not one that normalizes or refuses them.
+  ---@param count_latin1 integer
+  ---@param count_utf8 integer
+  ---@return boolean made  # false: pending has been called
+  local function make_mixed_encoding_dir(count_latin1, count_utf8)
+    dir = new_dir()
+    local names = {}
+    for i = 0, count_latin1 - 1 do
+      names[#names + 1] = ("item_\228%03d"):format(i)
+    end
+    for i = 0, count_utf8 - 1 do
+      names[#names + 1] = ("item_\195\164%03d"):format(i)
+    end
+    local created = vim.fn.has("win32") == 0
+    for _, name in ipairs(names) do
+      if not created then
+        break
+      end
+      created = pcall(touch, dir .. "/" .. name)
+    end
+    if not created or not listed_verbatim(dir, names) then
+      pending("this file system does not keep the bytes of a name that is not valid UTF-8")
+      return false
+    end
+    return true
+  end
+
+  --- What `names` of `shown` are, by the encoding of the a-umlaut in them.
+  ---@param list string[]
+  ---@return integer latin1
+  ---@return integer utf8_names
+  local function count_encodings(list)
+    local latin1, utf8_names = 0, 0
+    for _, name in ipairs(list) do
+      if name:find("item_\228", 1, true) then
+        latin1 = latin1 + 1
+      elseif name:find("item_\195\164", 1, true) then
+        utf8_names = utf8_names + 1
+      end
+    end
+    return latin1, utf8_names
+  end
+
+  it(
+    "judges a name written in another encoding than the fragment by Neovim's regex, not the bytes",
+    function()
+      -- A lone byte E4 is read as U+00E4, so for Neovim "item_" and that byte is a prefix of
+      -- "item_" and the a-umlaut written C3 A4 as well, and the other way round. Where the
+      -- bytes decide -- no case folding, so not on Windows -- the big list kept only the names
+      -- that agree with the fragment byte by byte: 300 of 440 with none of the UTF-8 names in
+      -- them, or, for a fragment that is valid UTF-8, none of the Latin-1 ones (and, with too few
+      -- of the agreeing ones, a trip to getcompletion() for what the list could have done).
+      -- The order of the two spellings among themselves is the bytes' (getcompletion() orders
+      -- by code point), so the list is judged by what it holds, not by its order.
+      local cases = {
+        { "Latin-1 fragment, both spellings", 320, 120, "item_\228", 120 },
+        { "UTF-8 fragment, both spellings", 320, 40, "item_\195\164", 40 },
+        { "Latin-1 fragment, UTF-8 names only", 0, 320, "item_\228", 300 },
+      }
+      for _, case in ipairs(cases) do
+        local label, count_latin1, count_utf8, frag, want_utf8 = unpack(case)
+        if not make_mixed_encoding_dir(count_latin1, count_utf8) then
+          return
+        end
+        local real = {}
+        with_case_options(false, false, function()
+          for _, name in ipairs(real_getcompletion(dir .. "/" .. frag, "file")) do
+            real[name] = true
+          end
+        end)
+        assert.is_true(vim.tbl_count(real) > MAX, label .. ": getcompletion() has more than a menu")
+        with_case_options(false, false, function()
+          press_tab(dir .. "/" .. frag)
+        end)
+        assert.equals(0, getcompletion_calls, label .. ": the big list answers")
+        assert.equals(MAX, #shown, label)
+        for _, name in ipairs(shown) do
+          assert.is_true(real[name], label .. ": getcompletion() lists " .. vim.inspect(name))
+        end
+        local latin1, utf8_names = count_encodings(shown)
+        assert.equals(want_utf8, utf8_names, label .. ": the UTF-8 names in the list")
+        assert.equals(MAX - want_utf8, latin1, label .. ": the Latin-1 names in the list")
+        vim.fn.delete(dir, "rf")
+        dir = nil
+      end
+    end
+  )
+
   --- More plain names than a menu holds that start with "U", and five that start with "U" and
   --- a combining mark (an umlaut written as two characters): "U" is a prefix of the plain
   --- ones only, and the marked ones would sort first ("Uy000" before "Uz000") were they let in.
