@@ -599,6 +599,79 @@ describe("path completion in a big directory", function()
     end)
   end)
 
+  it("takes a name that merely holds a non-ASCII fragment for no match", function()
+    -- Neovim's regex says where in a name the fragment is; "starts with" is the question. Left
+    -- unanchored it answers yes for every name that has the fragment anywhere: three names
+    -- begin with an e-acute, 306 more only have one behind an "x", and getcompletion() lists
+    -- the three (so few that it is the one asked), where the regex alone offered 300.
+    local e_acute = "\195\169" -- U+E9
+    dir = new_dir()
+    local names = {}
+    for i = 0, 2 do
+      names[#names + 1] = ("%s%03d"):format(e_acute, i)
+    end
+    for i = 0, MAX + 5 do
+      names[#names + 1] = ("x%s%03d"):format(e_acute, i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/" .. e_acute)
+  end)
+
+  it("keeps the case of a non-ASCII fragment where Neovim keeps it", function()
+    -- Without 'fileignorecase' and 'wildignorecase' (and off Windows) "ITEM_" and a capital
+    -- a-umlaut is no "item_" and a small one: three names have the small letter, 306 the capital
+    -- ones. The regex says `\C` outright; left to 'ignorecase' it took the capital names in as
+    -- well. Where the case is folded both spellings are a match, and the list is as long as
+    -- getcompletion()'s.
+    local small, capital = "\195\164", "\195\132" -- U+E4, U+C4
+    dir = new_dir()
+    local names = {}
+    for i = 0, 2 do
+      names[#names + 1] = ("item_%s%03d"):format(small, i)
+    end
+    for i = 0, MAX + 5 do
+      names[#names + 1] = ("ITEM_%s%03d"):format(capital, i + 10)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/item_" .. small)
+  end)
+
+  it("reads a non-ASCII fragment as text, not as a pattern", function()
+    -- A dot is a character of its own in a name, not "any character": 150 files begin with
+    -- "resume" (with the accents) and a dot, 306 more with the same letters and an "X" where
+    -- the dot is. Read as a pattern the dot took the second kind in as well, and the regex
+    -- offered 300 names of a list getcompletion() makes of 150.
+    local stem = "r\195\169sum\195\169"
+    dir = new_dir()
+    local names = {}
+    for i = 0, 149 do
+      names[#names + 1] = ("%s.pdf%03d"):format(stem, i)
+    end
+    for i = 0, MAX + 5 do
+      names[#names + 1] = ("%sX%03d"):format(stem, i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/" .. stem .. ".")
+  end)
+
   it("does not take a combining mark after the fragment for part of the name", function()
     -- "U" is no prefix of "U" + U+0308 (an umlaut written as two characters, as macOS
     -- writes them): getcompletion() lists the four plain names, the bytes would list 305.
