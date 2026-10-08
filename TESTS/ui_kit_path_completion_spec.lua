@@ -675,6 +675,110 @@ describe("path completion in a big directory", function()
     assert.equals(dir .. "/" .. marked, shown[7], "after item_005")
   end)
 
+  --- <Tab> on `line` with `vim.fn.split` and `vim.fn.strchars` counted: only the calls whose
+  --- text holds a byte that `pattern` matches (the prompt itself asks others). These two are
+  --- what the question for combining marks costs, so counting them tells whether a name was
+  --- asked about, or taken apart, that did not have to be -- which no result shows: a name
+  --- without a mark comes out of the walk with the key it went in with.
+  ---@param line string
+  ---@param pattern string  # a Lua pattern for the bytes that make a call one of ours
+  ---@return integer splits
+  ---@return integer asked
+  local function press_tab_counting(line, pattern)
+    local real_split, real_strchars = vim.fn.split, vim.fn.strchars
+    local splits, asked = 0, 0
+    vim.fn.split = function(s, ...)
+      if type(s) == "string" and s:find(pattern) then
+        splits = splits + 1
+      end
+      return real_split(s, ...)
+    end
+    vim.fn.strchars = function(s, ...)
+      if type(s) == "string" and s:find(pattern) then
+        asked = asked + 1
+      end
+      return real_strchars(s, ...)
+    end
+    local ok, err = pcall(press_tab, line)
+    vim.fn.split, vim.fn.strchars = real_split, real_strchars
+    assert(ok, err)
+    return splits, asked
+  end
+
+  --- More Cyrillic names than a menu holds (every one has a byte from CC on, so every one is
+  --- a candidate for a combining mark), none of them with a mark, and optionally one more
+  --- that is written the macOS way.
+  local CYRILLIC = "\208\186\208\184\209\128_" -- U+43A U+438 U+440
+  local CYRILLIC_BYTES = "[\208\209]" -- what the names and the keys made of them are written in
+  local MARKED_CYRILLIC = CYRILLIC .. "00\204\1815x" -- U+0301 is CC 81, after kir_005
+
+  ---@param with_mark boolean
+  ---@return boolean made  # false where the file system normalizes the names
+  local function make_cyrillic_dir(with_mark)
+    dir = new_dir()
+    local names = {}
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("%s%03d"):format(CYRILLIC, i)
+    end
+    if with_mark then
+      names[#names + 1] = MARKED_CYRILLIC
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return false
+    end
+    return true
+  end
+
+  it("asks once about the marks of a big directory of names that have none", function()
+    -- Cyrillic and CJK names all have a byte from CC on, but no mark: one pair of strchars()
+    -- for the whole directory says so, and no name is taken apart. Asked per name, or not
+    -- asked at all, every <Tab> would pay a split() per name (20 us each) for keys that come
+    -- out as they went in -- 60 ms at five thousand names instead of 17.
+    if not make_cyrillic_dir(false) then
+      return
+    end
+    for _, case in ipairs(CASE_OPTIONS) do
+      with_case_options(case[1], case[2], function()
+        local splits, asked = press_tab_counting(dir .. "/" .. CYRILLIC, CYRILLIC_BYTES)
+        local label = ("'fileignorecase' %s, 'wildignorecase' %s"):format(
+          tostring(case[1]),
+          tostring(case[2])
+        )
+        assert.equals(0, getcompletion_calls, label .. ": the big list answers")
+        assert.equals(MAX, #shown, label)
+        assert.equals(0, splits, label .. ": no name was taken apart")
+        assert.is_true(asked <= 2, label .. ": " .. asked .. " questions for the whole directory")
+      end)
+    end
+  end)
+
+  it("takes apart only the name with a mark when it is the only one among many", function()
+    -- The question for the whole set says that a mark exists, not which name holds it. One
+    -- name written the macOS way among five thousand Cyrillic ones used to send every one of
+    -- them through split(): 140 ms per <Tab> instead of 35, for 4 999 keys that stay as they
+    -- are. Only the marked name is taken apart, and it still sorts by its base characters.
+    if not make_cyrillic_dir(true) then
+      return
+    end
+    for _, case in ipairs(CASE_OPTIONS) do
+      with_case_options(case[1], case[2], function()
+        local splits = press_tab_counting(dir .. "/" .. CYRILLIC, CYRILLIC_BYTES)
+        local label = ("'fileignorecase' %s, 'wildignorecase' %s"):format(
+          tostring(case[1]),
+          tostring(case[2])
+        )
+        assert.equals(0, getcompletion_calls, label .. ": the big list answers")
+        assert.equals(1, splits, label .. ": the marked name alone was taken apart")
+        assert.equals(dir .. "/" .. MARKED_CYRILLIC, shown[7], label .. ": after kir_005")
+      end)
+    end
+    check_like_getcompletion(dir .. "/" .. CYRILLIC)
+  end)
+
   --- A base character with combining marks after it, in the scripts that write them.
   for _, script in ipairs({
     { name = "Thai", base = 0x0E01, marks = { 0x0E34, 0x0E48 } },
