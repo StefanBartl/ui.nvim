@@ -212,3 +212,83 @@ describe("a NUL byte in a secret or a title", function()
     surf:close()
   end)
 end)
+
+--- `opts.mask` is text for `conceal`, and anything else is the default.
+---
+--- A number, `true` or a table (a value handed on from a config) went to
+--- `nvim_buf_set_extmark` as it was: it raised "Invalid 'conceal': Expected Lua string" -- out of
+--- `open()` itself for a prompt with a default, with the window already open and no key mapped, and
+--- out of the `TextChanged` handler for one without, after `apply_mask` had cleared the marks. The
+--- password stood on screen, with an error for every key. `kit.sheet` already took a string only.
+describe("a mask that is not a string", function()
+  after_each(function()
+    for _, w in ipairs(api.nvim_list_wins()) do
+      if api.nvim_win_is_valid(w) and api.nvim_win_get_config(w).relative ~= "" then
+        pcall(api.nvim_win_close, w, true)
+      end
+    end
+  end)
+
+  --- The marks on the prompt's line: how many, and the text each conceals with.
+  ---@param surf Ui.Kit.Surface
+  ---@return integer count
+  ---@return string[] conceals
+  local function secret_marks(surf)
+    local ns = api.nvim_create_namespace("lib_kit_input_secret_" .. surf.bufnr)
+    local conceals = {}
+    for _, m in ipairs(api.nvim_buf_get_extmarks(surf.bufnr, ns, 0, -1, { details = true })) do
+      conceals[#conceals + 1] = m[4].conceal
+    end
+    return #conceals, conceals
+  end
+
+  for label, bad in pairs({ number = 5, boolean = true, table = {} }) do
+    it(
+      ("masks with the default when it is a %s, from the start and while typing"):format(label),
+      function()
+        local surf
+        local ok, err = pcall(function()
+          surf = kit.input({ secret = true, mask = bad, default = "hunter2", relative = "editor" })
+        end)
+        assert.is_true(ok, "the prompt opens instead of raising: " .. tostring(err))
+        if not surf then
+          return
+        end
+        local count, conceals = secret_marks(surf)
+        assert.equals(7, count, "all of the default is masked")
+        assert.same(vim.fn["repeat"]({ "*" }, 7), conceals, "with the default mask")
+
+        api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "hunter22" })
+        api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+        count, conceals = secret_marks(surf)
+        assert.equals(8, count, "and what is typed on top of it")
+        assert.same(vim.fn["repeat"]({ "*" }, 8), conceals)
+        surf:close()
+      end
+    )
+  end
+
+  it("masks with the default while typing into an empty prompt", function()
+    local surf = kit.input({ secret = true, mask = 5, relative = "editor" })
+    api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "hunter2" })
+    api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+    local count, conceals = secret_marks(surf)
+    assert.equals(7, count, "the marks are there, not cleared and left unset")
+    assert.same(vim.fn["repeat"]({ "*" }, 7), conceals)
+    surf:close()
+  end)
+
+  it("still masks with a string the caller chose, an empty one included", function()
+    local surf = kit.input({ secret = true, mask = "•", default = "abc", relative = "editor" })
+    local _, conceals = secret_marks(surf)
+    assert.same({ "•", "•", "•" }, conceals)
+    surf:close()
+
+    surf = kit.input({ secret = true, mask = "", default = "abc", relative = "editor" })
+    local count
+    count, conceals = secret_marks(surf)
+    assert.equals(3, count)
+    assert.same({ "", "", "" }, conceals, "an empty string is a string: the characters are hidden")
+    surf:close()
+  end)
+end)
