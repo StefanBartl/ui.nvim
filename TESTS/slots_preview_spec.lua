@@ -769,7 +769,7 @@ describe("ui.slots preview", function()
     it("finds the slot of a file also for a relative path as written", function()
       local path = write("rel.txt", "x\n")
       local cwd = vim.fn.getcwd()
-      vim.cmd.cd(dir)
+      vim.cmd.cd(vim.fs.dirname(path))
       local list = {}
       for i = 1, 300 do
         list[i] = { n = i, kind = "file", path = "other" .. i .. ".txt" }
