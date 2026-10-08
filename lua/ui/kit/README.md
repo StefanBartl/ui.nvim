@@ -702,9 +702,10 @@ to a file is a directory; a link that leads nowhere is left out, as
 `getcompletion()` leaves it); typing on narrows it. Where a non-ASCII character
 is involved, Neovim's own regex engine decides whether a name starts with the
 fragment (its case folding is not `toupper()`, and it does not split a character
-from a combining mark that follows), and a candidate with a combining mark
-(`é` written as `e` plus U+0301) leaves the whole list to `getcompletion()`,
-which orders such names its own way. A fragment with a backtick
+from a combining mark that follows), and a name with a combining mark (`é`
+written as `e` plus U+0301, or most names in Thai, Hindi or Arabic) is ordered
+by its base characters, as `getcompletion()` does: such a name no longer sends
+the whole list back to it. A fragment with a backtick
 in it is never completed:
 `getcompletion()` runs the span between backticks through the shell, and the
 fragment may be pasted text.
