@@ -766,6 +766,134 @@ describe("ui.slots preview", function()
       file_kind.forget_positions()
     end)
 
+    it("does not follow a network path that only an empty placeholder makes", function()
+      local uv = vim.uv or vim.loop
+      local original = uv.fs_stat
+      local seen = {}
+      uv.fs_stat = function(path)
+        if tostring(path):find("evil.example", 1, true) then
+          seen[#seen + 1] = path
+        end
+        return nil
+      end
+      -- {dir} is empty in an unnamed buffer: "/{dir}/evil.example/..." becomes "//evil.example/..."
+      local empty = { resolve = { dir = "", file = "" } }
+      local a = file_kind.preview({ kind = "file", path = "/{dir}/evil.example/share/x.md" }, empty)
+      local b =
+        file_kind.preview({ kind = "file", path = "{file}//evil.example/share/y.md" }, empty)
+      local found = file_kind.matching(
+        "/some/file.md",
+        { { n = 1, kind = "file", path = "/{dir}/evil.example/share/x.md" } },
+        { ctx = empty.resolve }
+      )
+      uv.fs_stat = original
+      assert.equals(0, #seen)
+      assert.is_truthy(a.lines[1]:find("network path", 1, true))
+      assert.is_truthy(b.lines[1]:find("network path", 1, true))
+      assert.same({}, found)
+    end)
+
+    it("does not raise for a path the file system functions refuse", function()
+      local list = {
+        { n = 1, kind = "file", path = "/x/a\0b.txt" },
+        { n = 2, kind = "file", path = "/x/ok.txt" },
+      }
+      local found
+      assert.has_no.errors(function()
+        found = file_kind.matching("/x/ok.txt", list, { first_only = true })
+      end)
+      assert.equals(2, found[1] and found[1].n)
+    end)
+
+    it(
+      "starts the panel on the slot of the file you came from although another slot raises",
+      function()
+        slots.add({ kind = "file", path = "/x/a\0b.txt" })
+        local path = write("start.txt", "x\n")
+        slots.add({ kind = "file", path = path })
+        vim.cmd.edit(path)
+        assert.has_no.errors(function()
+          panel.open()
+        end)
+        assert.equals(2, panel.current())
+      end
+    )
+
+    it("works without a working directory to read relative paths against", function()
+      local uv = vim.uv or vim.loop
+      local original = uv.cwd
+      uv.cwd = function()
+        return nil, "ENOENT"
+      end
+      local ok, found = pcall(file_kind.matching, "/x/ok.txt", {
+        { n = 1, kind = "file", path = "relative.txt" },
+        { n = 2, kind = "file", path = "/x/ok.txt" },
+      }, { first_only = true })
+      uv.cwd = original
+      assert.is_true(ok, found)
+      assert.equals(2, found[1] and found[1].n)
+    end)
+
+    it("asks a slot with a placeholder by real path even behind many plain slots", function()
+      local list = {}
+      for i = 1, 100 do
+        list[i] = { n = i, kind = "file", path = "/elsewhere/file" .. i .. ".txt" }
+      end
+      local path = write("behind.txt", "x\n")
+      list[101] = { n = 101, kind = "file", path = "{dir}/behind.txt" }
+      local found = file_kind.matching(path, list, {
+        first_only = true,
+        ctx = {
+          dir = function()
+            return vim.fs.dirname(path)
+          end,
+        },
+      })
+      assert.equals(101, found[1] and found[1].n)
+    end)
+
+    it("finds a file whose name has a brace, which the slot writes doubled", function()
+      local path = write("a{b}.txt", "x\n")
+      local escaped = vim.fs.dirname(path) .. "/a{{b}}.txt"
+      local found = file_kind.matching(path, { { n = 1, kind = "file", path = escaped } })
+      assert.equals(1, found[1] and found[1].n)
+    end)
+
+    it("takes the trust of fixed slots into account when it remembers a position", function()
+      local path = write("fixedpos.txt", "a\nb\nc\n")
+      slots.setup({ slots = { [1] = { kind = "file", path = path } } })
+      vim.cmd.edit(path)
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      file_kind.remember_current()
+      assert.is_nil(store.get(1).line)
+      file_kind.forget_positions()
+    end)
+
+    it("does not walk the slots again for a leave that changes nothing", function()
+      local path = write("same.txt", "a\nb\n")
+      slots.add({ kind = "file", path = path })
+      vim.cmd.edit(path)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      file_kind.remember_current()
+      local calls = 0
+      local original = store.list
+      store.list = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+      file_kind.remember_current()
+      file_kind.remember_current()
+      store.list = original
+      assert.equals(0, calls)
+      file_kind.forget_positions()
+    end)
+
+    it("says a slot is needed when add gets something else", function()
+      local number, why = slots.add("not a slot")
+      assert.is_nil(number)
+      assert.is_truthy(why and why:find("slot", 1, true))
+    end)
+
     it("finds the slot of a file also for a relative path as written", function()
       local path = write("rel.txt", "x\n")
       local cwd = vim.fn.getcwd()
@@ -775,7 +903,8 @@ describe("ui.slots preview", function()
         list[i] = { n = i, kind = "file", path = "other" .. i .. ".txt" }
       end
       list[301] = { n = 301, kind = "file", path = "rel.txt" }
-      local hit = file_kind.matching(path, list, true, 0)[1]
+      local hit =
+        file_kind.matching(path, list, { first_only = true, exact_max = 0, link_max = 0 })[1]
       vim.cmd.cd(cwd)
       assert.equals(301, hit and hit.n)
     end)

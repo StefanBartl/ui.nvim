@@ -524,6 +524,52 @@ describe("ui.slots.store", function()
       assert.equals(1, #vim.fn.glob(dirpath .. "/*.dropped-*", false, true))
     end)
 
+    it("keeps a copy too when a fixed slot takes the number of a saved one", function()
+      fresh({ slots = { [1] = { kind = "file", path = "fixed" } } })
+      local path = store.path()
+      vim.fn.mkdir(vim.fs.dirname(path), "p")
+      vim.fn.writefile({
+        vim.json.encode({
+          format = "ui.slots",
+          slots = {
+            { n = 1, kind = "file", path = "saved-keep-me" },
+            { n = 2, kind = "yank", text = "two" },
+          },
+        }),
+      }, path)
+      store.reload()
+      drain()
+      store.update(2, { label = "x" })
+      store.flush()
+      local copies = vim.fn.glob(vim.fs.dirname(path) .. "/*.dropped-*", false, true)
+      assert.equals(1, #copies)
+      assert.is_truthy(
+        table.concat(vim.fn.readfile(copies[1]), "\n"):find("saved-keep-me", 1, true)
+      )
+    end)
+
+    it("does not save over a file it could not copy first", function()
+      local path = seed({
+        { n = 1, kind = "file", path = "ok" },
+        { n = 2, kind = "url", url = "file:///C:/keep.html" },
+      })
+      store.reload()
+      drain()
+      local uv = vim.uv or vim.loop
+      local original = uv.fs_copyfile
+      uv.fs_copyfile = function()
+        return nil, "EACCES"
+      end
+      store.add({ kind = "yank", text = "later" })
+      local ok = store.flush()
+      uv.fs_copyfile = original
+      assert.is_false(ok)
+      assert.is_truthy(table.concat(vim.fn.readfile(path), "\n"):find("keep.html", 1, true))
+      -- the copy works again: the next save goes through, with the copy first
+      assert.is_true(store.flush())
+      assert.equals(1, #vim.fn.glob(vim.fs.dirname(path) .. "/*.dropped-*", false, true))
+    end)
+
     it("does not print a hostile reason in full", function()
       seed({
         { n = 1, kind = "file", path = "ok" },

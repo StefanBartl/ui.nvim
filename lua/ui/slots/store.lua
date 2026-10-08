@@ -91,6 +91,7 @@ end
 ---@param event string
 ---@param n integer|nil
 local function emit(event, n)
+  S.rev = (S.rev or 0) + 1
   for _, fn in pairs(S.listeners) do
     pcall(fn, event, n)
   end
@@ -316,6 +317,8 @@ local function load_file()
     local slot, reason = read_entry(entry)
     if slot then
       if S.fixed[slot.n] then
+        -- Not written back either: the file is copied before it is saved again.
+        S.backup_due = true
         say_once(("slot %d is fixed in setup(); the saved one is ignored"):format(slot.n))
       else
         S.dynamic[slot.n] = slot
@@ -363,6 +366,13 @@ local function snapshot()
   return { format = FORMAT, version = VERSION, root = S.root, slots = list }
 end
 
+--- Moves with every change of the slots: whoever worked something out from the
+--- list can tell whether it is still the list it saw.
+---@return integer
+function M.revision()
+  return S.rev or 0
+end
+
 --- Write the dynamic slots now. Returns false plus a reason when nothing was
 --- written (persistence off, blocked, or the write failed).
 ---@return boolean ok
@@ -388,12 +398,22 @@ function M.flush()
   if S.backup_due then
     S.backup_due = false
     if uv.fs_stat(S.path) then
-      local backup = S.path .. ".dropped-" .. os.date("%Y%m%d-%H%M%S")
+      S.backup_n = (S.backup_n or 0) + 1
+      local backup = ("%s.dropped-%s-%d"):format(S.path, os.date("%Y%m%d-%H%M%S"), S.backup_n)
       local copied, copy_err = uv.fs_copyfile(S.path, backup)
       if copied then
         say("the old file, with the entries that were not read, is kept as " .. backup)
       else
-        say("could not copy " .. S.path .. " before saving it: " .. tostring(copy_err))
+        -- Without the copy the entries would be gone: nothing is written, and the
+        -- next change tries again.
+        S.backup_due = true
+        say(
+          "could not copy "
+            .. S.path
+            .. " before saving it, so it is not saved: "
+            .. tostring(copy_err)
+        )
+        return false, tostring(copy_err)
       end
     end
   end

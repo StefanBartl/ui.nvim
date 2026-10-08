@@ -952,7 +952,8 @@ local function attach()
     if name == "" or vim.bo.buftype ~= "" then
       return
     end
-    local hit = require("ui.slots.kinds.file").matching(name, store.list(), true)[1]
+    local hit =
+      require("ui.slots.kinds.file").matching(name, store.list(), { first_only = true })[1]
     if hit then
       S.focus_n = hit.n
     end
