@@ -67,6 +67,7 @@ local surface = require("ui.kit.surface")
 local autocmd = require("lib.nvim.bindings.autocmd")
 local presets = require("ui.kit.presets")
 local theme = require("ui.kit.theme")
+local nul_safe = require("lib.lua.strings.core").nul_safe
 
 local api = vim.api
 
@@ -866,7 +867,8 @@ function M.refresh(id)
   entry.height = #entry.lines
   local width = 0
   for _, line in ipairs(entry.lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(line))
+    -- A NUL byte in the text is the two cells it is drawn as; measured as it is it raises E976.
+    width = math.max(width, vim.fn.strdisplaywidth(nul_safe(line)))
   end
   -- `min_width` is a floor, not a fixed width: content wider than it still
   -- grows the box past it, same as it always could before this option
