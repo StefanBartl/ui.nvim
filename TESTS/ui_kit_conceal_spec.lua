@@ -350,3 +350,26 @@ describe("a mask nvim cannot show", function()
     end
   end)
 end)
+
+-- The re-mask autocmds of a secret prompt lived in one shared group that each new prompt
+-- cleared: a second secret prompt took them from the first, and what was typed there
+-- afterwards showed in clear text.
+describe("two secret prompts open at once", function()
+  it("keep masking both", function()
+    local first = kit.input({ secret = true, relative = "editor" })
+    local second = kit.input({ secret = true, relative = "editor" })
+    local function marks(surf)
+      local ns = api.nvim_create_namespace("lib_kit_input_secret_" .. surf.bufnr)
+      return #api.nvim_buf_get_extmarks(surf.bufnr, ns, 0, -1, {})
+    end
+    for _, surf in ipairs({ first, second }) do
+      api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "hunter22" })
+      api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+    end
+    local first_marks, second_marks = marks(first), marks(second)
+    first:close()
+    second:close()
+    assert.equals(8, first_marks, "the first prompt is still masked")
+    assert.equals(8, second_marks)
+  end)
+end)
