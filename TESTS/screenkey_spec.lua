@@ -446,3 +446,106 @@ describe("ui.screenkey and a secret being typed", function()
     assert.is_nil(screenkey.surface(), "nothing from the scrub either: " .. current_text())
   end)
 end)
+
+describe("ui.screenkey and a prompt that is not the kit's", function()
+  local showmode
+
+  before_each(function()
+    showmode = vim.o.showmode
+    vim.o.showmode = false
+    screenkey.setup({ fade_ms = 60000 })
+  end)
+
+  after_each(function()
+    screenkey.disable()
+    screenkey.setup({
+      labels = {},
+      join_chars = false,
+      width = 40,
+      fade_ms = 2000,
+      hide = { buftypes = {}, filetypes = {} },
+    })
+    vim.cmd("stopinsert")
+    vim.o.showmode = showmode
+  end)
+
+  --- Types `keys` into `vim.fn.input()` / `vim.fn.inputsecret()` as if from the keyboard.
+  ---@param fn_name "input"|"inputsecret"
+  ---@param keys string
+  ---@return string answer
+  local function answer_prompt(fn_name, keys)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "t", false)
+    -- (not `vim.fn[...]`: the test guard of testing.nvim intercepts that and refuses an unanswered prompt)
+    return vim.api.nvim_call_function(fn_name, { "pw: " })
+  end
+
+  for _, fn_name in ipairs({ "inputsecret", "input" }) do
+    it("shows nothing of what is typed into " .. fn_name .. "()", function()
+      screenkey.enable()
+      local answer = answer_prompt(fn_name, "hunter2<CR>")
+      vim.wait(300)
+      assert.equals("hunter2", answer)
+      assert.is_nil(screenkey.surface(), "no key reached the HUD: " .. current_text())
+      feed("j")
+      vim.wait(300, function()
+        return current_text() ~= ""
+      end)
+      assert.equals("j", current_text(), "outside the prompt the HUD works again")
+    end)
+  end
+
+  it("shows nothing typed into a buftype=prompt buffer", function()
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].buftype = "prompt"
+    vim.api.nvim_set_current_buf(buf)
+    feed("ihunter2")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "no key reached the HUD: " .. current_text())
+    vim.cmd("stopinsert")
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("hides the buftypes and filetypes of setup({ hide })", function()
+    screenkey.setup({ hide = { buftypes = { "nofile" }, filetypes = { "secretft" } } })
+    assert.same({}, screenkey.health_issues())
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true) -- buftype=nofile
+    vim.api.nvim_set_current_buf(buf)
+    feed("ia")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "a hidden buftype shows nothing: " .. current_text())
+    vim.cmd("stopinsert")
+
+    vim.bo[buf].buftype = ""
+    vim.bo[buf].filetype = "secretft"
+    feed("ib")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "a hidden filetype shows nothing: " .. current_text())
+    vim.cmd("stopinsert")
+
+    vim.bo[buf].filetype = "lua"
+    feed("ic")
+    vim.wait(300, function()
+      return current_text():find("c", 1, true) ~= nil
+    end)
+    assert.is_true(
+      current_text():find("c", 1, true) ~= nil,
+      "the control shows: " .. current_text()
+    )
+    vim.cmd("stopinsert")
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("setup() rejects a malformed hide list and keeps the current one", function()
+    screenkey.setup({ hide = { filetypes = { "keepme" } } })
+    screenkey.setup({ hide = { filetypes = "oops", buftypes = { 5 } } })
+    local issues = table.concat(screenkey.health_issues(), "\n")
+    assert.is_truthy(issues:find("hide.filetypes", 1, true), issues)
+    assert.is_truthy(issues:find("hide.buftypes", 1, true), issues)
+    screenkey.setup({ hide = 3 })
+    assert.is_truthy(
+      table.concat(screenkey.health_issues(), "\n"):find("hide must be a table", 1, true)
+    )
+  end)
+end)

@@ -156,7 +156,8 @@ is fine, `<C-w>` is stored as the `<C-W>` that `keytrans()` reports -- e.g.
 `{ ["<Space>"] = "\xE2\x90\xA3" }` for U+2423, written as bytes so no editor or
 encoding pass can damage it; a non-string entry, or one containing a newline, is dropped) and
 `join_chars` (a boolean: run plain characters together into one chip per
-typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart).
+typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart) and
+`hide` (`{ buftypes = {...}, filetypes = {...} }`: buffers whose keys are never shown, on top of the built-in protection described in [scope](scope.md); a non-string entry is dropped, a malformed list is rejected).
 
 | Line | Means |
 | --- | --- |
