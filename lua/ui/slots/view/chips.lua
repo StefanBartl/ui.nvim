@@ -97,6 +97,7 @@ local STAT_TTL_MS = 1000
 ---@field pending boolean
 ---@field attached boolean
 ---@field listener integer|nil
+---@field width_floor integer|nil   # the widest the bar has been since the slots last changed
 ---@field render_cache table<integer, { sig: string, t: integer, r: table }>
 ---@field key_cache table<string, string|false>
 ---@field solid_groups table<string, string>
@@ -397,10 +398,14 @@ local function chip_width(descs)
         or 0
       side_width[d.shape] = sides
     end
-    -- A text is never wider in cells than it is long in bytes: only a chip that
-    -- could be the widest is measured (a long list is not measured one by one).
-    if #d.text + 2 + sides > want then
-      want = math.max(want, vim.fn.strdisplaywidth(d.text) + 2 + sides)
+    -- Plain ASCII (the control characters are gone) is as wide as it is long;
+    -- only a text with other bytes is measured, and only if it could be widest
+    -- (anything shown as <xxxx> is wider than its bytes, so no byte bound holds).
+    local text = d.text
+    if not text:find("[\128-\255]") then
+      want = math.max(want, #text + 2 + sides)
+    else
+      want = math.max(want, vim.fn.strdisplaywidth(text) + 2 + sides)
     end
   end
   -- A border glyph two cells wide (ambiwidth = "double") must divide the width
@@ -619,7 +624,8 @@ function M._theme()
 end
 
 --- Draw the bar now.
-function M.refresh()
+---@param delta integer|nil  # move the window by this many slots first
+function M.refresh(delta)
   if not S.want then
     return
   end
@@ -641,14 +647,22 @@ function M.refresh()
   end
 
   local top = index_from(descs, S.top_n)
-  top = settle(descs, top, avail)
+  top = settle(descs, top + (delta or 0), avail)
   if S.focus_n then
     top = reveal(descs, top, avail, index_from(descs, S.focus_n))
   end
   local first, last = M._range(descs, top, avail)
   S.top_n = descs[first].n
   materialize(descs, first, last)
+  -- The width does not shrink while the list is only scrolled with the wheel: a
+  -- chip with a flag (a missing file, unsaved changes) is wider than its text as
+  -- written, and the bar would jump by a cell or two as such chips come into view
+  -- and leave.
   local width = chip_width(descs)
+  if delta then
+    width = math.max(width, S.width_floor or 0)
+  end
+  S.width_floor = width
 
   local lines, marks, rows = build(descs, first, last, width, true)
   if #lines > avail then
@@ -720,18 +734,10 @@ end
 --- Move the window over the list by `delta` slots.
 ---@param delta integer
 function M.scroll(delta)
-  local _, avail = room()
-  local descs = describe(avail < 3)
-  if #descs == 0 then
-    return
-  end
-  local top = index_from(descs, S.top_n)
-  top = settle(descs, top + delta, avail)
-  S.top_n = descs[top].n
   -- A wheel turn is a request to look elsewhere: the focus must not pull the
   -- window straight back.
   S.focus_n = nil
-  M.refresh()
+  M.refresh(delta)
 end
 
 -- Mouse -----------------------------------------------------------------
@@ -946,12 +952,9 @@ local function attach()
     if name == "" or vim.bo.buftype ~= "" then
       return
     end
-    local here = require("lib.nvim.fs.normkey")(name)
-    for _, slot in ipairs(store.list()) do
-      if file_key(slot) == here then
-        S.focus_n = slot.n
-        break
-      end
+    local hit = require("ui.slots.kinds.file").matching(name, store.list(), true)[1]
+    if hit then
+      S.focus_n = hit.n
     end
   end, "follow the current file")
 
@@ -981,6 +984,7 @@ local function attach()
   end, "come back when the window was closed from outside")
 
   S.listener = store.on_change(function(event, n)
+    S.width_floor = nil
     if event == "reload" or event == "clear_all" then
       S.render_cache, S.key_cache = {}, {}
     elseif (event == "set" or event == "move") and n then

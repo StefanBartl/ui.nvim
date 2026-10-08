@@ -544,6 +544,28 @@ describe("ui.slots preview", function()
       assert.equals("https://example.org/two", asked[2].target)
     end)
 
+    it("does not ask again when the panel redraws and the slot shown did not change", function()
+      local count = 0
+      package.loaded["hover"] = {
+        preview_target = function()
+          count = count + 1
+          return {
+            cancel = function() end,
+          }
+        end,
+      }
+      slots.add({ kind = "url", url = "https://example.org/a" })
+      slots.add({ kind = "url", url = "https://example.org/b" })
+      slots.add({ kind = "url", url = "https://example.org/c" })
+      panel.open()
+      press("K")
+      assert.equals(1, count)
+      -- slot 3 goes; the pane shows slot 1, which did not change
+      slots.clear(3)
+      flush()
+      assert.equals(1, count)
+    end)
+
     it("makes one request when the panel moves or clears a url slot", function()
       local count = 0
       package.loaded["hover"] = {
@@ -641,21 +663,54 @@ describe("ui.slots preview", function()
         end
         return nil
       end
-      local dynamic = preview_of({ kind = "file", path = "//192.0.2.1/share/notes.md" })
-      local rendered = registry.render({ kind = "file", path = [[\\192.0.2.1\share\notes.md]] })
-      local via_placeholder = registry.render(
+      local network = "//192.0.2.1/share/x.md"
+      local written = preview_of({ kind = "file", path = "//192.0.2.1/share/notes.md" })
+      local backslashes = preview_of({ kind = "file", path = [[\\192.0.2.1\share\notes.md]] })
+      -- through a placeholder that holds text the user copied: the same
+      local via_clip = file_kind.preview(
         { kind = "file", path = "{clip}" },
-        { resolve = { clip = "//192.0.2.1/share/x.md" } }
+        { resolve = { clip = network } }
+      )
+      local applied_ok, applied_why = file_kind.apply(
+        { kind = "file", path = "{clip}" },
+        { resolve = { clip = network } }
       )
       local before_fixed = stats
       preview_of({ kind = "file", path = "//192.0.2.1/share/notes.md", fixed = true })
       uv.fs_stat = original
       assert.equals(0, before_fixed)
       assert.is_true(stats > before_fixed)
-      assert.same({ "(the path is empty)" }, dynamic.lines)
-      assert.is_not_nil(rendered)
-      assert.is_not_nil(via_placeholder)
+      for _, pv in ipairs({ written, backslashes, via_clip }) do
+        assert.is_truthy(pv.lines[1]:find("network path", 1, true))
+      end
+      assert.is_false(applied_ok)
+      assert.is_truthy(applied_why:find("setup()", 1, true))
     end)
+
+    it(
+      "follows the user's own tree onto a network share: {dir} and {root} are not refused",
+      function()
+        local uv = vim.uv or vim.loop
+        local original = uv.fs_stat
+        local seen = {}
+        uv.fs_stat = function(path)
+          if tostring(path):find("wsl.localhost", 1, true) then
+            seen[#seen + 1] = path
+          end
+          return nil
+        end
+        local pv = file_kind.preview({ kind = "file", path = "{dir}/TODO.md" }, {
+          resolve = {
+            dir = function()
+              return "//wsl.localhost/Ubuntu/home/me/proj"
+            end,
+          },
+        })
+        uv.fs_stat = original
+        assert.equals(1, #seen)
+        assert.is_truthy(pv.lines[1]:find("file does not exist", 1, true))
+      end
+    )
 
     it("refuses a network path in the editor and the API, with the reason", function()
       local err = registry.validate({ kind = "file", path = "//192.0.2.1/share/notes.md" })
@@ -666,28 +721,63 @@ describe("ui.slots preview", function()
       assert.is_truthy(why)
     end)
 
-    it("asks the slots only when the cursor left a position, not on every BufLeave", function()
-      local path = write("leave.txt", "a\nb\nc\n")
+    it("does not take the trust from the slot a caller hands in", function()
+      local number, why = slots.add({ kind = "url", url = "file:///C:/x.bat", fixed = true })
+      assert.is_nil(number)
+      assert.is_truthy(why and why:find("setup()", 1, true))
+      slots.setup({ slots = { [9] = { kind = "url", url = "file:///C:/trusted.html" } } })
+      -- a copy of a slot from setup() is not one from setup()
+      local copy, copy_why = slots.add(slots.get(9))
+      assert.is_nil(copy)
+      assert.is_truthy(copy_why)
+      assert.equals(1, #slots.list())
+    end)
+
+    it("gives a slot that came after the last BufLeave its position, cursor unmoved", function()
+      local path = write("late.txt", "a\nb\nc\nd\n")
+      vim.cmd.edit(path)
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      file_kind.remember_current()
       slots.add({ kind = "file", path = path })
+      file_kind.remember_current()
+      assert.equals(4, store.get(1).line)
+      file_kind.forget_positions()
+    end)
+
+    it("does not ask the file system about every slot on a BufLeave", function()
+      for i = 1, 400 do
+        store.add({ kind = "file", path = dir .. "/other/file" .. i .. ".txt" })
+      end
+      local path = write("here.txt", "a\nb\n")
+      store.add({ kind = "file", path = path })
       vim.cmd.edit(path)
       vim.api.nvim_win_set_cursor(0, { 2, 0 })
-      file_kind.remember_current()
+      local uv = vim.uv or vim.loop
+      local original = uv.fs_realpath
       local calls = 0
-      local original = store.list
-      store.list = function(...)
+      uv.fs_realpath = function(...)
         calls = calls + 1
         return original(...)
       end
       file_kind.remember_current()
-      file_kind.remember_current()
-      local unmoved = calls
-      vim.api.nvim_win_set_cursor(0, { 3, 0 })
-      file_kind.remember_current()
-      store.list = original
-      assert.equals(0, unmoved)
-      assert.equals(1, calls)
-      assert.equals(3, store.get(1).line)
+      uv.fs_realpath = original
+      assert.equals(2, store.get(401).line)
+      assert.is_true(calls < 150, "asked for " .. calls .. " real paths")
       file_kind.forget_positions()
+    end)
+
+    it("finds the slot of a file also for a relative path as written", function()
+      local path = write("rel.txt", "x\n")
+      local cwd = vim.fn.getcwd()
+      vim.cmd.cd(dir)
+      local list = {}
+      for i = 1, 300 do
+        list[i] = { n = i, kind = "file", path = "other" .. i .. ".txt" }
+      end
+      list[301] = { n = 301, kind = "file", path = "rel.txt" }
+      local hit = file_kind.matching(path, list, true, 0)[1]
+      vim.cmd.cd(cwd)
+      assert.equals(301, hit and hit.n)
     end)
   end)
 

@@ -845,6 +845,52 @@ describe("ui.slots bar", function()
       assert.is_true(stats < 40, "stat'ed " .. stats .. " files for the first draw")
     end)
 
+    it("builds the list once for a turn of the wheel", function()
+      start()
+      for i = 1, 100 do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+      chips.open()
+      flush()
+      local calls = 0
+      local original = store.list
+      store.list = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+      chips.scroll(1)
+      store.list = original
+      assert.equals(1, calls)
+    end)
+
+    it("does not narrow the bar while the wheel scrolls it", function()
+      start()
+      for i = 1, 300 do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+      chips.open()
+      flush()
+      local widest = 0
+      for _ = 1, 150 do
+        chips.scroll(1)
+        widest = math.max(widest, vim.api.nvim_win_get_width(chips.state().win))
+      end
+      for _ = 1, 150 do
+        chips.scroll(-1)
+        assert.equals(widest, vim.api.nvim_win_get_width(chips.state().win))
+      end
+    end)
+
+    it("measures a chip that is wider in cells than in bytes", function()
+      start({ width = 80 })
+      store.add({ kind = "file", path = dir .. "/gone/" .. string.rep("a", 20) })
+      store.add({ kind = "file", path = dir .. "/gone/bbbbb\xe2\x80\x8b\xe2\x80\x8b\xe2\x80\x8b" })
+      chips.open()
+      flush()
+      -- U+200B is shown as <200b>: six cells for three bytes
+      assert.is_nil(text():find("…", 1, true))
+    end)
+
     it("scrolls to a chip far down and draws that one in full", function()
       start()
       for i = 1, 300 do

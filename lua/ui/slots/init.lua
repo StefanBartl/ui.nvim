@@ -224,6 +224,11 @@ function M.add(slot, n)
     end
   end
 
+  -- Whether a slot is trusted is not for the caller to say: `fixed` is what the
+  -- store sets for the slots of setup(), and a copy of one of them (`add(get(n))`)
+  -- is not one.
+  slot = vim.deepcopy(slot)
+  slot.fixed = nil
   local err = registry.validate(slot)
   if err then
     say(err)

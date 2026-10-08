@@ -41,6 +41,7 @@ local NS = api.nvim_create_namespace("ui_slots_panel")
 ---@field refined table<integer, boolean>  # lines that have their full render (stat, current file)
 ---@field hl table<integer, string>        # line -> highlight group of a refined row
 ---@field rev integer               # moves with every redraw: a scheduled one of an older state is dropped
+---@field scrolled_id integer|nil   # the WinScrolled autocmd of this panel window
 ---@field from integer|nil         # the window the panel was opened from
 ---@field from_path string|nil     # its file, the default of `a`
 ---@field listener integer|nil
@@ -231,44 +232,18 @@ local function place(want)
   pcall(api.nvim_win_set_cursor, S.surf.winid, { math.min(line, math.max(#numbers, 1)), 0 })
 end
 
---- A path in a spelling that compares without asking the file system.
----@param path string
----@return string
-local function cheap_key(path)
-  local k = vim.fs.normalize(path)
-  if vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1 then
-    k = k:lower()
-  end
-  return k
-end
-
---- Up to this many slots, the slot of the file you came from is found exactly
---- (a real path for each); with more it is found by the path as written.
+--- Up to this many slots, the slot of the file you came from is found by real
+--- path as well (a link to it, a placeholder); with more, by the path as written.
 local EXACT_MAX = 200
 
 --- The number of the file slot that points at the file the panel came from.
 ---@return integer|nil
 local function find_current_slot()
-  local from = S.from_path
-  if not from then
+  if not S.from_path then
     return nil
   end
-  local exact = #S.list <= EXACT_MAX
-  local normkey = require("lib.nvim.fs.normkey")
-  local here = exact and normkey(from) or cheap_key(from)
-  for _, slot in ipairs(S.list) do
-    if slot.kind == "file" and type(slot.path) == "string" then
-      if exact then
-        local text = registry.text(slot)
-        if text and normkey(text) == here then
-          return slot.n
-        end
-      elseif not slot.path:find("{", 1, true) and cheap_key(slot.path) == here then
-        return slot.n
-      end
-    end
-  end
-  return nil
+  local hit = require("ui.slots.kinds.file").matching(S.from_path, S.list, true, EXACT_MAX)[1]
+  return hit and hit.n or nil
 end
 
 --- Redraw the list; the cursor stays on the same slot.
@@ -696,6 +671,10 @@ function M.open(opts)
       store.off(S.listener)
       S.listener = nil
     end
+    if S.scrolled_id then
+      require("lib.nvim.bindings.autocmd").delete(S.scrolled_id)
+      S.scrolled_id = nil
+    end
   end)
   attach_keys()
 
@@ -722,7 +701,7 @@ function M.open(opts)
     record = false,
     desc = "ui.slots panel: full render of the rows in view",
   })
-  require("lib.nvim.bindings.autocmd").create("WinScrolled", refine, {
+  S.scrolled_id = require("lib.nvim.bindings.autocmd").create("WinScrolled", refine, {
     pattern = tostring(surf.winid),
     record = false,
     desc = "ui.slots panel: full render of the rows in view",

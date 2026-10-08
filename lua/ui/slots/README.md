@@ -123,10 +123,15 @@ dynamic one with the same number and are not written back.
   written and look closely (is the file there, is it the file you are in, has
   it unsaved changes) only at what is in view, so ten thousand slots open in a
   fraction of a second. A row far down shows its `✗` and its marker when it
-  comes into view; beyond 200 slots the slot of the file you came from is found
-  by the path as written, not by its real path. `add` compares the new file
-  with every file slot by real path: noticeable from a few thousand slots.
-
+  comes into view. The slot of the file you are in (for the bar's focus, the
+  panel's start row and the remembered cursor position) is found by the path as
+  written; a link to the file, or a placeholder in the path, is only followed
+  for the first 30 such slots (200 when the panel opens). `add` compares the
+  new file with every file slot by real path: noticeable from a few thousand
+  slots.
+- **Entries a data file loses.** An entry that is not read (a `file:` address, a
+  network path, a kind that may not be there) is dropped with one message; the
+  file is copied to `<file>.dropped-<time>` before it is saved again.
 - Keys on the bar: a click is taken away from the editor on Neovim 0.11+; on
   0.10 it also moves the cursor under the bar.
 - Two sessions in the same project write the same data file; the last wins.

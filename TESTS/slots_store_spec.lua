@@ -502,6 +502,42 @@ describe("ui.slots.store", function()
       assert.is_truthy(dropped[1]:find("dropped 3 entries", 1, true))
     end)
 
+    it("keeps a copy of the file before it is saved without the entries it dropped", function()
+      seed({
+        { n = 1, kind = "file", path = "ok" },
+        { n = 2, kind = "url", url = "file:///C:/Users/x/docs/readme.html", label = "Docs" },
+      })
+      store.reload()
+      drain()
+      store.add({ kind = "yank", text = "later" })
+      store.flush()
+      local dirpath = vim.fs.dirname(store.path())
+      local copies = vim.fn.glob(dirpath .. "/*.dropped-*", false, true)
+      assert.equals(1, #copies)
+      local kept = table.concat(vim.fn.readfile(copies[1]), "\n")
+      assert.is_truthy(kept:find("readme.html", 1, true))
+      local main = table.concat(vim.fn.readfile(store.path()), "\n")
+      assert.is_nil(main:find("readme.html", 1, true))
+      -- and only once: the next save does not copy again
+      store.add({ kind = "yank", text = "again" })
+      store.flush()
+      assert.equals(1, #vim.fn.glob(dirpath .. "/*.dropped-*", false, true))
+    end)
+
+    it("does not print a hostile reason in full", function()
+      seed({
+        { n = 1, kind = "file", path = "ok" },
+        { n = 2, kind = string.rep("A", 20000) },
+      })
+      store.reload()
+      drain()
+      local dropped = vim.tbl_filter(function(m)
+        return m:find("dropped", 1, true) ~= nil
+      end, messages)
+      assert.equals(1, #dropped)
+      assert.is_true(#dropped[1] < 600)
+    end)
+
     it("says one message for a file of many bad entries", function()
       local entries = { { n = 1, kind = "file", path = "ok" } }
       for i = 2, 200 do
