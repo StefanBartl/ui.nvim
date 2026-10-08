@@ -514,6 +514,7 @@ describe("ui.slots.store", function()
       local dirpath = vim.fs.dirname(store.path())
       local copies = vim.fn.glob(dirpath .. "/*.dropped-*", false, true)
       assert.equals(1, #copies)
+      assert.is_truthy(copies[1]:find("-" .. vim.fn.getpid() .. "-", 1, true))
       local kept = table.concat(vim.fn.readfile(copies[1]), "\n")
       assert.is_truthy(kept:find("readme.html", 1, true))
       local main = table.concat(vim.fn.readfile(store.path()), "\n")
@@ -561,8 +562,9 @@ describe("ui.slots.store", function()
         return nil, "EACCES"
       end
       store.add({ kind = "yank", text = "later" })
-      local ok = store.flush()
+      local flushed, ok = pcall(store.flush)
       uv.fs_copyfile = original
+      assert.is_true(flushed, ok)
       assert.is_false(ok)
       assert.is_truthy(table.concat(vim.fn.readfile(path), "\n"):find("keep.html", 1, true))
       -- the copy works again: the next save goes through, with the copy first
