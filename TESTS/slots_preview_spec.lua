@@ -954,8 +954,9 @@ describe("ui.slots preview", function()
     end)
 
     it("finds a slot written with a leading $VAR behind many others", function()
-      vim.env.UI_SLOTS_SPEC_DIR = dir
       local path = write("env.txt", "x\n")
+      -- the directory as the editor spells it (a link in the temp path is resolved)
+      vim.env.UI_SLOTS_SPEC_DIR = vim.fs.dirname(path)
       local list = {}
       for i = 1, 40 do
         list[i] = { n = i, kind = "file", path = "/elsewhere/file" .. i .. ".txt" }
