@@ -61,7 +61,8 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 >
 > All of the above are soft: without them everything else works unchanged.
 > [lib.nvim](https://github.com/StefanBartl/lib.nvim) is the one real
-> dependency — see [Requirements](docs/requirements.md).
+> dependency (commit `863952e` or newer recommended) — see
+> [Requirements](docs/requirements.md).
 >
 > The traffic also runs the other way, at far greater scale: `ui.kit` (float
 > pickers, input, confirm, menu, toast, viewer, ...) and `ui.contextmenu` are
