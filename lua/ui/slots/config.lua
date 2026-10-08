@@ -296,6 +296,10 @@ function M.issues(cfg)
     issues[#issues + 1] = "persistable_kinds: must be a list of kind names"
   end
 
+  if type(cfg.keys) == "table" then
+    vim.list_extend(issues, require("ui.slots.bindings").issues(cfg.keys))
+  end
+
   if type(cfg.slots) ~= "table" then
     issues[#issues + 1] = "slots: must be a table of [n] = { kind = ..., ... }"
   else

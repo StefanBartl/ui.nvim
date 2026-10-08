@@ -180,13 +180,16 @@ local function refine()
   end
 
   local rows = api.nvim_buf_get_lines(buf, first - 1, last, false)
+  -- {dir} and {file} are those of the window the panel came from, not of the
+  -- panel's own (unnamed) buffer.
+  local octx = origin_context().resolve
   for i = first, last do
     if not S.refined[i] then
       local slot = S.list[i]
-      local r = registry.render(slot)
+      local r = registry.render(slot, { resolve = octx })
       local current_file = false
       if here_key and slot.kind == "file" then
-        local text = registry.text(slot)
+        local text = registry.text(slot, { resolve = octx })
         current_file = text ~= nil and text ~= "" and normkey(text) == here_key
       end
       rows[i - first + 1] = row_text(slot, r, current_file)
@@ -344,6 +347,19 @@ local function run(n)
     pcall(api.nvim_set_current_win, from)
   end
   require("ui.slots").apply(n)
+end
+
+--- When the panel is the current window: close it and go back to the window it
+--- came from. For whatever is about to open something in "the current window".
+function M.leave()
+  if not (M.is_open() and api.nvim_get_current_win() == S.surf.winid) then
+    return
+  end
+  local from = S.from
+  M.close()
+  if from and api.nvim_win_is_valid(from) then
+    pcall(api.nvim_set_current_win, from)
+  end
 end
 
 local function with_slot(fn)
@@ -523,7 +539,7 @@ local function attach_keys()
         defaults = path and { path = path } or nil,
         on_close = back,
       })
-    end)
+    end, current())
   end, "add a slot")
 
   map("dd", function()
@@ -537,6 +553,16 @@ local function attach_keys()
 
   map("y", function()
     with_slot(function(n)
+      -- with the placeholders as the window the panel came from sees them
+      local from = S.from
+      if from and api.nvim_win_is_valid(from) then
+        local ok = pcall(api.nvim_win_call, from, function()
+          require("ui.slots").yank(n)
+        end)
+        if ok then
+          return
+        end
+      end
       require("ui.slots").yank(n)
     end)
   end, "copy what the slot stands for")

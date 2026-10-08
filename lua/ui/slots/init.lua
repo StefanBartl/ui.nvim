@@ -158,6 +158,12 @@ end
 ---@return string|nil err
 function M.apply(n, opts)
   ensure()
+  -- From the panel (a click on the bar, a key, `:UI slots 3` typed there) a slot
+  -- runs in the window the panel came from: the panel cannot show another buffer.
+  local panel = package.loaded["ui.slots.view.panel"]
+  if panel then
+    panel.leave()
+  end
   local num = number(n)
   if not num then
     say(("%s is not a slot number"):format(vim.inspect(n)))

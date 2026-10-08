@@ -45,7 +45,10 @@ M.PROBED = {
   { mod = "sandbox.statusline", optional_for = "the sandbox engine summary" },
   { mod = "sessions.statusline", optional_for = "the session-status segment" },
   { mod = "sessions.marks", optional_for = "slots of kind mark (ui.slots)" },
-  { mod = "hover", optional_for = "the page preview of a url slot (ui.slots)" },
+  {
+    mod = "hover",
+    optional_for = "the page preview of a url slot (ui.slots, with preview.fetch = true)",
+  },
   { mod = "github_stats.analytics", optional_for = "the github-stats view badge" },
   { mod = "filetree", optional_for = "the filetree cwd-mode segment" },
   {
