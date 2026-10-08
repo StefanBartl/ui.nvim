@@ -9,6 +9,7 @@
 --- `kit.sheet` for every secret row on every repaint. The marks it sets are the same
 --- ones: one per character, a base character and its combining marks counting as one.
 
+local kit = require("ui.kit")
 local input = require("ui.kit.input")
 local api = vim.api
 local fn = vim.fn
@@ -140,5 +141,74 @@ describe("input.conceal_line", function()
     api.nvim_buf_delete(buf, { force = true })
     assert.equals(29997, count, "one mark per character")
     assert.is_true(ms < 1500, ("masking 30 000 characters took %.0f ms"):format(ms))
+  end)
+end)
+
+--- A NUL byte in text that goes through `vim.fn`.
+---
+--- A NUL in a Lua string reaches `vim.fn` as a Blob, and `split()` or `strdisplaywidth()`
+--- raise E976 on it. The mask is re-applied from a `TextChanged` handler that clears its
+--- namespace first: a raise there left every character of the secret unmasked, on screen.
+--- A NUL gets into a prompt by a paste or `<C-v>000`, or through `default`; a title is
+--- measured when the prompt opens. (`kit.sheet` masks its secret rows with the same
+--- `conceal_line`.)
+describe("a NUL byte in a secret or a title", function()
+  local nul = string.char(0)
+
+  after_each(function()
+    for _, w in ipairs(api.nvim_list_wins()) do
+      if api.nvim_win_is_valid(w) and api.nvim_win_get_config(w).relative ~= "" then
+        pcall(api.nvim_win_close, w, true)
+      end
+    end
+  end)
+
+  it("is masked like any other character instead of raising E976", function()
+    local ok, ranges, all = pcall(masked, "abc" .. nul .. "def")
+    assert.is_true(ok, "conceal_line does not raise: " .. tostring(ranges))
+    assert.equals("0-1,1-2,2-3,3-4,4-5,5-6,6-7", ranges, "one mark per character, the NUL included")
+    assert.is_true(all, "each one carries the mask")
+    assert.equals(
+      "0-3,3-4",
+      (masked("e\204\129" .. nul)),
+      "a base with its combining mark, then the NUL"
+    )
+  end)
+
+  it("keeps the whole secret masked while the line holds one", function()
+    local surf = kit.input({ secret = true, relative = "editor" })
+    local ns = api.nvim_create_namespace("lib_kit_input_secret_" .. surf.bufnr)
+    local function marks()
+      return #api.nvim_buf_get_extmarks(surf.bufnr, ns, 0, -1, {})
+    end
+    api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "abcdef" })
+    api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+    assert.equals(6, marks(), "six characters, six marks")
+
+    api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "abc" .. nul .. "def" })
+    api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+    assert.equals(7, marks(), "the NUL is masked as well, and the rest still is")
+    surf:close()
+  end)
+
+  it("opens a secret prompt whose default holds one", function()
+    local surf
+    local ok, err = pcall(function()
+      surf = kit.input({ secret = true, default = "a" .. nul .. "b", relative = "editor" })
+    end)
+    assert.is_true(ok, "the prompt opens instead of raising: " .. tostring(err))
+    local ns = api.nvim_create_namespace("lib_kit_input_secret_" .. surf.bufnr)
+    assert.equals(3, #api.nvim_buf_get_extmarks(surf.bufnr, ns, 0, -1, {}), "all of it masked")
+    surf:close()
+  end)
+
+  it("opens a prompt whose title holds one", function()
+    local surf
+    local ok, err = pcall(function()
+      surf = kit.input({ title = "case" .. nul .. "title", relative = "editor" })
+    end)
+    assert.is_true(ok, "the prompt opens instead of raising: " .. tostring(err))
+    assert.is_not_nil(surf, "and there is a prompt")
+    surf:close()
   end)
 end)
