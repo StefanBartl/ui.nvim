@@ -746,6 +746,38 @@ describe("path completion in a big directory", function()
     check_like_getcompletion(dir .. "/g_")
   end)
 
+  it(
+    "leaves a fragment that ends inside a character to Neovim's regex, not to the bytes",
+    function()
+      -- A line that is not valid UTF-8 (a path pasted from a Latin-1 file) can end in the middle
+      -- of a character: "item_" and a lone lead byte C3 is, byte by byte, the start of every
+      -- "item_" and an a-umlaut, where getcompletion() lists none. Where the bytes decide -- no
+      -- case folding, so not on Windows -- the big list used to answer with 300 names that do not
+      -- match. The same characters whole are still the big list's.
+      local characters = { "\195\164", "\226\132\170", "\240\159\152\128" } -- U+E4, U+212A, U+1F600
+      dir = new_dir()
+      local names = {}
+      for i = 0, MAX do
+        for _, character in ipairs(characters) do
+          names[#names + 1] = ("item_%s%03d"):format(character, i)
+        end
+      end
+      for _, name in ipairs(names) do
+        touch(dir .. "/" .. name)
+      end
+      if not listed_verbatim(dir, names) then
+        pending("this file system normalizes the names")
+        return
+      end
+      for _, frag in ipairs({ "item_\195", "item_\226\132", "item_\240\159", "item_\240\159\152" }) do
+        check_like_getcompletion(dir .. "/" .. frag)
+      end
+      for _, character in ipairs(characters) do
+        check_like_getcompletion(dir .. "/item_" .. character)
+      end
+    end
+  )
+
   it("leaves a fragment with a NUL byte to getcompletion() instead of raising", function()
     -- No file name holds a NUL. The fold of a non-ASCII name goes through `toupper()`, and a
     -- NUL in a Lua string reaches `vim.fn` as a Blob: E976 out of the <Tab> mapping, where
