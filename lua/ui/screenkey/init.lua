@@ -20,8 +20,11 @@
 --- Privacy: a recording is when a password typed into a prompt costs the most, so the
 --- keys typed into a buffer marked as holding a secret (`ui.kit.surface.is_secret`: a
 --- `ui.kit.input` with `secret = true`, a `ui.kit.sheet` with a secret field) never
---- reach the HUD. What is not the kit's -- `vim.fn.inputsecret()`, a plugin's own
---- password prompt -- is not covered: keep the HUD off while typing one.
+--- reach the HUD. What is not the kit's cannot be told from an ordinary prompt (a plugin's own
+--- password question is a plain `input()`), so the HUD stays silent for all of them: while
+--- `vim.fn.input()` (command-line type `@`) or `vim.fn.inputsecret()` (type `-`, which is also
+--- `:insert`/`:append`) is waiting, in a `buftype=prompt` buffer, and in any buffer of
+--- `setup({ hide = { buftypes = {...}, filetypes = {...} } })`.
 
 local surface = require("ui.kit.surface")
 local debounce = require("lib.nvim.debounce")
@@ -43,6 +46,7 @@ local M = {}
 ---@field theme? string|table|nil
 ---@field labels? table<string, string>
 ---@field join_chars? boolean
+---@field hide? { buftypes?: string[], filetypes?: string[] } # buffers whose keys are never shown, on top of the built-in ones
 
 ---@class Ui.Screenkey.Config
 ---@field fade_ms integer # how long the HUD stays up after the last keystroke
@@ -53,6 +57,8 @@ local M = {}
 ---@field theme string|table|nil # forwarded to ui.kit.surface's theme resolver
 ---@field labels table<string, string> # keytrans() name -> what to show instead, e.g. { ["<Space>"] = "\xE2\x90\xA3" (U+2423), ["<CR>"] = "\xE2\x8F\x8E" (U+23CE) }
 ---@field join_chars boolean # run plain characters together ("todo.md") instead of one chip per key ("t o d o . m d")
+---@field hide_buftypes table<string, true> # keys typed into a buffer of these 'buftype's are not shown (`prompt` always is)
+---@field hide_filetypes table<string, true> # same for 'filetype's
 local cfg = {
   fade_ms = 2000,
   width = 40,
@@ -62,6 +68,8 @@ local cfg = {
   theme = nil,
   labels = {},
   join_chars = false,
+  hide_buftypes = {},
+  hide_filetypes = {},
 }
 
 ---@type boolean
@@ -270,21 +278,38 @@ local function render()
 end
 
 ---@internal
+--- Whether what is typed right now must stay off the HUD: a prompt of the kit marked as
+--- secret, a waiting `input()`/`inputsecret()` (command-line type `@` / `-`), a `buftype=prompt`
+--- buffer, or a buffer of the `hide` lists. Asked synchronously in `on_key`, see there.
+---@return boolean
+local function protected()
+  if surface.is_secret() then
+    return true
+  end
+  local cmdtype = vim.fn.getcmdtype()
+  if cmdtype == "@" or cmdtype == "-" then
+    return true
+  end
+  local bo = vim.bo[vim.api.nvim_get_current_buf()]
+  return bo.buftype == "prompt"
+    or cfg.hide_buftypes[bo.buftype] == true
+    or cfg.hide_filetypes[bo.filetype] == true
+end
+
+---@internal
 --- The `vim.on_key()` callback. Deliberately minimal outside `vim.schedule`
 --- -- the raw callback runs in Neovim's own input-processing path, not a
 --- normal call stack, so the actual state mutation and every API call
 --- (`nvim_open_win` et al., via `render()`) are deferred onto the main loop
 --- the same way `lib.nvim.debounce`'s own fired callback already is.
 ---
---- A key typed into a buffer that is marked as holding a secret (`kit.input` with
---- `secret = true`, a `kit.sheet` with a secret field: `ui.kit.surface.is_secret`) is not
---- shown. That is asked HERE, before the `vim.schedule`: the key that submits the prompt
+--- A key typed while `protected()` is not shown. That is asked HERE, before the `vim.schedule`: the key that submits the prompt
 --- (`<CR>`) closes it, and by the time the scheduled work ran the current buffer would
 --- be another one and the key would be shown after all.
 ---@param key string # post-mapping raw keycode, per vim.on_key()'s own contract
 ---@return nil
 local function on_key(key)
-  if key == "" or surface.is_secret() then
+  if key == "" or protected() then
     return
   end
   vim.schedule(function()
@@ -400,6 +425,36 @@ function M.setup(opts)
       setup_issues[#setup_issues + 1] = ("join_chars must be a boolean (kept %s)"):format(
         tostring(cfg.join_chars)
       )
+    end
+  end
+  if opts.hide ~= nil then
+    if type(opts.hide) == "table" then
+      for field, target in pairs({ buftypes = "hide_buftypes", filetypes = "hide_filetypes" }) do
+        local list, set = opts.hide[field], {}
+        if list == nil then
+          set = cfg[target]
+        elseif type(list) == "table" then
+          for _, name in ipairs(list) do
+            if type(name) == "string" and name ~= "" then
+              set[name] = true
+            else
+              setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings (dropped %s)"):format(
+                field,
+                vim.inspect(name)
+              )
+            end
+          end
+        else
+          setup_issues[#setup_issues + 1] = ("hide.%s must be a list of strings (kept the current one)"):format(
+            field
+          )
+          set = cfg[target]
+        end
+        cfg[target] = set
+      end
+    else
+      setup_issues[#setup_issues + 1] =
+        "hide must be a table { buftypes, filetypes } (kept the current one)"
     end
   end
   if apply_int(opts, "fade_ms", 1) then
