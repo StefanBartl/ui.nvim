@@ -700,7 +700,10 @@ half a second for a directory of five thousand files; this stats no file or
 directory, and a link or an entry the listing gives no type for only until 300
 are found, which for `"dir"` can be every link of the directory, once, as no link
 to a file is a directory; a link that leads nowhere is left out, as
-`getcompletion()` leaves it); typing on narrows it. Where a non-ASCII character
+`getcompletion()` leaves it); typing on narrows it. That list does not apply `'wildignore'`, which
+`getcompletion()` does: it is a shortcut for huge directories, and checking every
+entry against the patterns would cost the speed it exists for. Up to 300 matches
+`getcompletion()` answers, and honours the option. Where a non-ASCII character
 is involved, Neovim's own regex engine decides whether a name starts with the
 fragment (its case folding is not `toupper()`, it does not split a character
 from a combining mark that follows, and it reads a lone Latin-1 byte as the
