@@ -778,6 +778,107 @@ describe("path completion in a big directory", function()
     end
   )
 
+  --- More plain names than a menu holds that start with "U", and five that start with "U" and
+  --- a combining mark (an umlaut written as two characters): "U" is a prefix of the plain
+  --- ones only, and the marked ones would sort first ("Uy000" before "Uz000") were they let in.
+  ---@return string[]|nil names  # nil where the file system normalizes them
+  local function make_crowd()
+    dir = new_dir()
+    local names = {}
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("Uz%03d"):format(i)
+    end
+    for i = 0, 4 do
+      names[#names + 1] = ("U%sy%03d"):format(vim.fn.nr2char(0x308), i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return nil
+    end
+    return names
+  end
+
+  it(
+    "keeps the big list when a few names have a combining mark right after the fragment",
+    function()
+      -- The byte comparison takes "U" for a prefix of "U" + U+0308 + "y000"; Neovim's regex
+      -- does not, and the bytes ask it whenever the next byte could begin a mark (CC or later).
+      -- Without that the five marked names would be offered, and sorted to the top. Only a file
+      -- system whose matching is case-sensitive reaches this (Linux, macOS; not Windows, where
+      -- the regex decides everything): there it is the only thing that keeps them out.
+      if not make_crowd() then
+        return
+      end
+      with_case_options(true, false, function()
+        assert.is_true(#real_getcompletion(dir .. "/U", "file") > MAX, "more than a menu holds")
+      end)
+      check_like_getcompletion(dir .. "/U")
+      check_like_getcompletion(dir .. "/u")
+      press_tab(dir .. "/U")
+      assert.equals(dir .. "/Uz000", shown[1], "the plain names, from the start")
+    end
+  )
+
+  it("leaves the list to getcompletion() when Neovim's matcher cannot be built", function()
+    -- `vim.regex` compiles every pattern this list can ask it for, so nothing real reaches
+    -- that fallback; it is a safety net for a list that would be built without the judge of
+    -- the marked names, and it is pinned with a matcher that refuses.
+    if not make_crowd() then
+      return
+    end
+    local real_regex = vim.regex
+    vim.regex = function()
+      error("E0: no matcher")
+    end
+    local ok, err = pcall(function()
+      with_case_options(true, false, function()
+        press_tab(dir .. "/U")
+        assert.equals(1, getcompletion_calls, "getcompletion() answers")
+        assert.same({ "from-getcompletion" }, shown)
+      end)
+    end)
+    vim.regex = real_regex
+    assert(ok, err)
+  end)
+
+  it("keeps the files out of the list for completion = dir, whatever their names", function()
+    -- A file cannot be an answer for "dir", so it is neither kept nor asked about its name:
+    -- three hundred files with a combining mark would otherwise cost the question for marks
+    -- (and the sort) on names that are dropped at the end. Nothing but the two directories
+    -- is left, and no `strchars()` has been asked.
+    dir = new_dir()
+    local names = {}
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("f%s%03d"):format(vim.fn.nr2char(0x308), i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    vim.fn.mkdir(dir .. "/sub_a", "p")
+    vim.fn.mkdir(dir .. "/sub_b", "p")
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    -- only the questions about a name with the mark: the prompt itself asks others
+    local real_strchars, strchars_calls = vim.fn.strchars, 0
+    vim.fn.strchars = function(s, ...)
+      if type(s) == "string" and s:find("\204\136", 1, true) then
+        strchars_calls = strchars_calls + 1
+      end
+      return real_strchars(s, ...)
+    end
+    local ok, err = pcall(press_tab, dir .. "/", "dir")
+    vim.fn.strchars = real_strchars
+    assert(ok, err)
+    assert.equals(0, getcompletion_calls, "the listing has the answer")
+    assert.same({ dir .. "/sub_a/", dir .. "/sub_b/" }, shown)
+    assert.equals(0, strchars_calls, "and no file was asked about a mark")
+  end)
+
   it("leaves a fragment with a NUL byte to getcompletion() instead of raising", function()
     -- No file name holds a NUL. The fold of a non-ASCII name goes through `toupper()`, and a
     -- NUL in a Lua string reaches `vim.fn` as a Blob: E976 out of the <Tab> mapping, where
