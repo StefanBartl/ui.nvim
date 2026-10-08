@@ -93,13 +93,34 @@ local function is_network(path)
 end
 
 --- Placeholders whose value is text the user (or a page) put somewhere, not a
---- place the user is in: a path made of them may name any host.
+--- place the user is in.
 ---@param path string
 ---@return boolean
 local function has_content_placeholder(path)
   return path:find("{clip}", 1, true) ~= nil
     or path:find("{sel}", 1, true) ~= nil
     or path:find("{word}", 1, true) ~= nil
+end
+
+--- Placeholders that name where the user is working.
+local OWN_PLACES = { root = true, cwd = true, dir = true, file = true }
+
+--- Does a path that resolved to a network path get that from the user's own tree?
+--- `{root}/TODO.md` in a project on `\\wsl$\...` does; so does `{file}`. What
+--- is written out as a network path, what a placeholder that is empty here makes
+--- of `/{dir}/host/share`, and what comes from `{clip}` do not: the network part
+--- must be the value of a placeholder the path *starts with*.
+---@param path string  # as written
+---@param resolved string
+---@param ctx Ui.Slots.Ctx|nil
+---@return boolean
+local function own_tree(path, resolved, ctx)
+  local lead = path:match("^{(%a+)}")
+  if not (lead and OWN_PLACES[lead]) then
+    return false
+  end
+  local value = resolve.resolve("{" .. lead .. "}", ctx)
+  return value ~= "" and is_network(value) and resolved:sub(1, #value) == value
 end
 
 ---@param slot table
@@ -115,16 +136,10 @@ local function target_path(slot, ctx)
     -- Nothing to open (every placeholder was empty): not the current directory.
     return "", unknown
   end
-  -- A network path is not followed for a slot that does not come from setup()
-  -- -- unless it is where the user's own tree is: `{root}/TODO.md` in a project
-  -- on `\\wsl$\...` names no other host than the one the user is working on. What
-  -- is written out as a network path, or comes from `{clip}`, `{sel}` or
-  -- `{word}`, may name any host.
-  if
-    slot.fixed ~= true
-    and is_network(resolved)
-    and (is_network(slot.path) or has_content_placeholder(slot.path))
-  then
+  -- A network path is not followed for a slot that does not come from setup(),
+  -- unless it is where the user's own tree is (see `own_tree`): touching one is
+  -- a synchronous connection to that host.
+  if slot.fixed ~= true and is_network(resolved) and not own_tree(slot.path, resolved, ctx) then
     return "", unknown, "a network path can only be set in setup()"
   end
   return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
@@ -345,14 +360,25 @@ local function fold(path)
   return win_or_mac and path:lower() or path
 end
 
+--- Relative paths are read against the working directory, which can change: one
+--- memo per directory.
+local rel_cwd, rel_memo, rel_count = nil, {}, 0
+
 ---@param slot table
+---@param cwd string|nil
 ---@return string|nil
-local function cheap_slot_key(slot)
+local function cheap_slot_key(slot, cwd)
   local p = slot.path
-  if type(p) ~= "string" or p:find("{", 1, true) then
+  -- A brace is a placeholder or an escape (`}}` is a literal `}`): the file
+  -- system, or the resolver, has to say what it comes to.
+  if type(p) ~= "string" or p:find("[{}]") then
     return nil
   end
   if p:match("^[/\\~]") or p:match("^%a:[/\\]") then
+    -- `$VAR` is read when it is used: not remembered.
+    if p:find("$", 1, true) then
+      return fold(p)
+    end
     local hit = cheap_memo[p]
     if hit then
       return hit
@@ -364,45 +390,86 @@ local function cheap_slot_key(slot)
     cheap_memo[p], cheap_count = k, cheap_count + 1
     return k
   end
-  -- Relative to the working directory, which can change.
-  return fold(uv.cwd() .. "/" .. p)
+  if not cwd then
+    return nil
+  end
+  if rel_cwd ~= cwd or rel_count >= CHEAP_MAX then
+    rel_cwd, rel_memo, rel_count = cwd, {}, 0
+  end
+  local hit = rel_memo[p]
+  if hit then
+    return hit
+  end
+  local k = fold(cwd .. "/" .. p)
+  rel_memo[p], rel_count = k, rel_count + 1
+  return k
 end
 
+---@class Ui.Slots.MatchOpts
+---@field first_only boolean|nil
+---@field exact_max integer|nil   # slots with a placeholder asked by real path (default 30)
+---@field link_max integer|nil    # slots with a path as written that did not match, asked by real path in case of a link (default 10)
+---@field skip_fixed boolean|nil
+---@field ctx Ui.Slots.Ctx|nil    # where the placeholders are read
+
 --- The file slots of `list` that point at the file `name` (a buffer's name).
---- A slot is known by the path as written, which costs nothing; only up to
---- `exact_max` of the slots that do not match that way are asked again by their
---- real path (a link to the file, a placeholder, another spelling). A list of
---- ten thousand slots is walked on every window switch: this must stay cheap.
+--- A slot is known by the path as written, which costs nothing; of the others a
+--- bounded number is asked again by real path: the slots with a placeholder
+--- (`exact_max`) and the first slots whose path as written is somewhere else, in
+--- case it is a link to the file (`link_max`). A list of ten thousand slots is
+--- walked on every window switch: this must stay cheap, and a slot that raises
+--- must not stop it.
 ---@param name string
 ---@param list Ui.Slots.Slot[]
----@param first_only boolean|nil
----@param exact_max integer|nil  # default 30
+---@param opts Ui.Slots.MatchOpts|nil
 ---@return Ui.Slots.Slot[]
-function M.matching(name, list, first_only, exact_max)
+function M.matching(name, list, opts)
+  opts = opts or {}
   local out = {}
   if type(name) ~= "string" or name == "" then
     return out
   end
-  local want = fold(name)
+  local ok_want, want = pcall(fold, name)
+  if not ok_want then
+    return out
+  end
   local real
-  local budget = exact_max or 30
+  local exact_left, link_left = opts.exact_max or 30, opts.link_max or 10
+  local cwd = uv.cwd() or vim.fn.getcwd()
   for _, slot in ipairs(list) do
-    if slot.kind == "file" and type(slot.path) == "string" then
-      local hit = false
-      local cheap = cheap_slot_key(slot)
-      if cheap ~= nil and cheap == want then
-        hit = true
-      elseif budget > 0 then
-        budget = budget - 1
-        local path = target_path(slot)
-        if path ~= "" then
-          real = real or key(name)
-          hit = cached_key(path) == real
+    if
+      slot.kind == "file"
+      and type(slot.path) == "string"
+      and not (opts.skip_fixed and slot.fixed)
+    then
+      local ok, hit = pcall(function()
+        local cheap = cheap_slot_key(slot, cwd)
+        if cheap ~= nil then
+          if cheap == want then
+            return true
+          end
+          if link_left <= 0 then
+            return false
+          end
+          link_left = link_left - 1
+        else
+          -- What `{clip}` or `{word}` holds says nothing about which file the
+          -- slot is for.
+          if exact_left <= 0 or has_content_placeholder(slot.path) then
+            return false
+          end
+          exact_left = exact_left - 1
         end
-      end
-      if hit then
+        local path = target_path(slot, opts.ctx)
+        if path == "" then
+          return false
+        end
+        real = real or key(name)
+        return cached_key(path) == real
+      end)
+      if ok and hit then
         out[#out + 1] = slot
-        if first_only then
+        if opts.first_only then
           return out
         end
       end
@@ -410,6 +477,9 @@ function M.matching(name, list, first_only, exact_max)
   end
   return out
 end
+
+--- Where the cursor was, and the slots as they were, at the last walk.
+local last_walk = nil
 
 --- Remember where the cursor is in the current buffer, for the file slot(s)
 --- that point at it. Slots in the data file keep it across restarts; fixed
@@ -423,14 +493,29 @@ function M.remember_current()
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line, col = cursor[1], cursor[2] + 1
-  positions[cached_key(name)] = { line = line, col = col }
+  local k = cached_key(name)
+  positions[k] = { line = line, col = col }
 
   local store = require("ui.slots.store")
-  for _, slot in ipairs(M.matching(name, store.list())) do
-    if not slot.fixed and (slot.line ~= line or slot.col ~= col) then
+  -- Left where it was last left, and the slots have not changed since: every
+  -- slot that points here already holds this position (BufLeave fires on every
+  -- window switch).
+  local rev = store.revision()
+  if
+    last_walk
+    and last_walk.k == k
+    and last_walk.line == line
+    and last_walk.col == col
+    and last_walk.rev == rev
+  then
+    return
+  end
+  for _, slot in ipairs(M.matching(name, store.list(), { skip_fixed = true })) do
+    if slot.line ~= line or slot.col ~= col then
       store.update(slot.n, { line = line, col = col })
     end
   end
+  last_walk = { k = k, line = line, col = col, rev = store.revision() }
 end
 
 --- Where the cursor was last left in `path` this session, or nil.
@@ -445,6 +530,8 @@ function M.forget_positions()
   positions = {}
   key_cache, key_count = {}, 0
   cheap_memo, cheap_count = {}, 0
+  rel_cwd, rel_memo, rel_count = nil, {}, 0
+  last_walk = nil
 end
 
 return M

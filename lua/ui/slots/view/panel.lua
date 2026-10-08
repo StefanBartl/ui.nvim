@@ -242,7 +242,14 @@ local function find_current_slot()
   if not S.from_path then
     return nil
   end
-  local hit = require("ui.slots.kinds.file").matching(S.from_path, S.list, true, EXACT_MAX)[1]
+  -- The placeholders as the window the panel came from sees them, not the
+  -- panel's own (unnamed) buffer.
+  local hit = require("ui.slots.kinds.file").matching(S.from_path, S.list, {
+    first_only = true,
+    exact_max = EXACT_MAX,
+    link_max = EXACT_MAX,
+    ctx = origin_context().resolve,
+  })[1]
   return hit and hit.n or nil
 end
 

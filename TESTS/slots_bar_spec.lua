@@ -864,7 +864,7 @@ describe("ui.slots bar", function()
     end)
 
     it("does not narrow the bar while the wheel scrolls it", function()
-      start()
+      start({ width = 80 })
       for i = 1, 300 do
         store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
       end
