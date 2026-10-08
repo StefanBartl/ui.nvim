@@ -399,8 +399,15 @@ function M.flush()
     S.backup_due = false
     if uv.fs_stat(S.path) then
       S.backup_n = (S.backup_n or 0) + 1
-      local backup = ("%s.dropped-%s-%d"):format(S.path, os.date("%Y%m%d-%H%M%S"), S.backup_n)
-      local copied, copy_err = uv.fs_copyfile(S.path, backup)
+      -- The process id in the name, and no overwriting: another Neovim in the
+      -- same project may save in the same second.
+      local backup = ("%s.dropped-%s-%d-%d"):format(
+        S.path,
+        os.date("%Y%m%d-%H%M%S"),
+        vim.fn.getpid(),
+        S.backup_n
+      )
+      local copied, copy_err = uv.fs_copyfile(S.path, backup, { excl = true })
       if copied then
         say("the old file, with the entries that were not read, is kept as " .. backup)
       else

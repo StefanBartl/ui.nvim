@@ -606,6 +606,30 @@ describe("ui.slots preview", function()
   end)
 
   describe("hardening", function()
+    local restore
+
+    before_each(function()
+      local uv = vim.uv or vim.loop
+      local saved_fns = {
+        fs_stat = uv.fs_stat,
+        fs_realpath = uv.fs_realpath,
+        cwd = uv.cwd,
+        list = store.list,
+        update = store.update,
+      }
+      local saved_cwd = vim.fn.getcwd()
+      restore = function()
+        uv.fs_stat, uv.fs_realpath, uv.cwd = saved_fns.fs_stat, saved_fns.fs_realpath, saved_fns.cwd
+        store.list, store.update = saved_fns.list, saved_fns.update
+        pcall(vim.cmd.cd, saved_cwd)
+        file_kind.forget_positions()
+      end
+    end)
+
+    after_each(function()
+      restore()
+    end)
+
     local geom = { row = 2, col = 90, width = 30, height = 20, side = "right" }
 
     it("keeps no undo history in the pane", function()
@@ -883,6 +907,184 @@ describe("ui.slots preview", function()
       end
       file_kind.remember_current()
       file_kind.remember_current()
+      store.list = original
+      assert.equals(0, calls)
+      file_kind.forget_positions()
+    end)
+
+    it(
+      "does not take another host for the user's own, behind a placeholder that is only a host",
+      function()
+        local uv = vim.uv or vim.loop
+        local original = uv.fs_stat
+        local seen = {}
+        uv.fs_stat = function(path)
+          if tostring(path):find("evil", 1, true) then
+            seen[#seen + 1] = path
+          end
+          return nil
+        end
+        local bare_host = { resolve = { dir = "//fileserver" } }
+        local a =
+          file_kind.preview({ kind = "file", path = "{dir}.evil.example/share/x.md" }, bare_host)
+        local share = { resolve = { dir = "//fileserver/share" } }
+        local b = file_kind.preview({ kind = "file", path = "{dir}.evil/x.md" }, share)
+        local c = file_kind.preview({ kind = "file", path = "{dir}/x.md" }, share)
+        uv.fs_stat = original
+        assert.same({}, seen)
+        assert.is_truthy(a.lines[1]:find("network path", 1, true))
+        assert.is_truthy(b.lines[1]:find("network path", 1, true))
+        -- the user's own share, with a separator behind it, is still followed
+        assert.is_truthy(c.lines[1]:find("file does not exist", 1, true))
+      end
+    )
+
+    it("asks the placeholder it starts with once", function()
+      local calls = 0
+      local ctx = {
+        resolve = {
+          root = function()
+            calls = calls + 1
+            return "//wsl.localhost/Ubuntu/home/me/proj"
+          end,
+        },
+      }
+      file_kind.preview({ kind = "file", path = "{root}/TODO.md" }, ctx)
+      assert.equals(1, calls)
+    end)
+
+    it("finds a slot written with a leading $VAR behind many others", function()
+      vim.env.UI_SLOTS_SPEC_DIR = dir
+      local path = write("env.txt", "x\n")
+      local list = {}
+      for i = 1, 40 do
+        list[i] = { n = i, kind = "file", path = "/elsewhere/file" .. i .. ".txt" }
+      end
+      list[41] = { n = 41, kind = "file", path = "$UI_SLOTS_SPEC_DIR/env.txt" }
+      local found = file_kind.matching(path, list, { first_only = true })
+      vim.env.UI_SLOTS_SPEC_DIR = nil
+      assert.equals(41, found[1] and found[1].n)
+    end)
+
+    it("does not leave a slot with a brace in its name to the link budget", function()
+      local path = write("b}c.txt", "x\n")
+      local list = {}
+      for i = 1, 40 do
+        list[i] = { n = i, kind = "file", path = "/elsewhere/file" .. i .. ".txt" }
+      end
+      list[41] = { n = 41, kind = "file", path = vim.fs.dirname(path) .. "/b}}c.txt" }
+      local found = file_kind.matching(path, list, { first_only = true })
+      assert.equals(41, found[1] and found[1].n)
+    end)
+
+    it("does not match by what the clipboard or the word under the cursor holds", function()
+      local path = write("clip.txt", "x\n")
+      local found = file_kind.matching(path, { { n = 1, kind = "file", path = "{clip}" } }, {
+        ctx = {
+          clip = function()
+            return path
+          end,
+        },
+      })
+      assert.same({}, found)
+    end)
+
+    it("does not remember a position for a fixed slot, and does not ask the store to", function()
+      local path = write("fixedspy.txt", "a\nb\n")
+      slots.setup({ slots = { [1] = { kind = "file", path = path } } })
+      vim.cmd.edit(path)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      local updates = 0
+      local original = store.update
+      store.update = function(...)
+        updates = updates + 1
+        return original(...)
+      end
+      file_kind.remember_current()
+      store.update = original
+      assert.equals(0, updates)
+      file_kind.forget_positions()
+    end)
+
+    it("reads a relative path against the directory it is in now", function()
+      local a_dir = dir .. "/rel_a"
+      local b_dir = dir .. "/rel_b"
+      vim.fn.mkdir(a_dir, "p")
+      vim.fn.mkdir(b_dir, "p")
+      vim.fn.writefile({ "x" }, b_dir .. "/rel.txt")
+      local target = require("lib.nvim.fs.normkey")(b_dir .. "/rel.txt")
+      local list = {}
+      for i = 1, 40 do
+        list[i] = { n = i, kind = "file", path = "/elsewhere/file" .. i .. ".txt" }
+      end
+      list[41] = { n = 41, kind = "file", path = "rel.txt" }
+      local cwd = vim.fn.getcwd()
+      vim.cmd.cd(require("lib.nvim.fs.normkey")(a_dir))
+      local in_a = file_kind.matching(target, list, { first_only = true })
+      vim.cmd.cd(vim.fs.dirname(target))
+      local in_b = file_kind.matching(target, list, { first_only = true })
+      vim.cmd.cd(cwd)
+      assert.same({}, in_a)
+      assert.equals(41, in_b[1] and in_b[1].n)
+    end)
+
+    it(
+      "writes the position again after a :cd that changes what a relative slot points at",
+      function()
+        local a_dir = dir .. "/cd_a"
+        local b_dir = dir .. "/cd_b"
+        vim.fn.mkdir(a_dir, "p")
+        vim.fn.mkdir(b_dir, "p")
+        vim.fn.writefile({ "1", "2", "3" }, b_dir .. "/notes.md")
+        local real_a = require("lib.nvim.fs.normkey")(a_dir)
+        local real_b = require("lib.nvim.fs.normkey")(b_dir)
+        local cwd = vim.fn.getcwd()
+        -- one list for every directory: a project's own list follows the :cd
+        start({ scope = "global" })
+        vim.cmd.cd(real_a)
+        store.add({ kind = "file", path = "notes.md" })
+        vim.cmd.edit(real_b .. "/notes.md")
+        vim.api.nvim_win_set_cursor(0, { 3, 0 })
+        file_kind.remember_current()
+        local before = store.get(1).line
+        vim.cmd.cd(real_b)
+        file_kind.remember_current()
+        local after = store.get(1).line
+        vim.cmd.cd(cwd)
+        file_kind.forget_positions()
+        assert.is_nil(before)
+        assert.equals(3, after)
+      end
+    )
+
+    it("skips the walk for each of two buffers that are switched between", function()
+      local first = write("sw_one.txt", "a\nb\n")
+      local second = write("sw_two.txt", "a\nb\n")
+      slots.add({ kind = "file", path = first })
+      slots.add({ kind = "file", path = second })
+      vim.cmd.edit(first)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      file_kind.remember_current()
+      vim.cmd.edit(second)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      file_kind.remember_current()
+      -- one round to settle the revision the updates of the first walks made
+      vim.cmd.buffer(vim.fn.bufnr(first))
+      file_kind.remember_current()
+      vim.cmd.buffer(vim.fn.bufnr(second))
+      file_kind.remember_current()
+      local calls = 0
+      local original = store.list
+      store.list = function(...)
+        calls = calls + 1
+        return original(...)
+      end
+      for _ = 1, 3 do
+        vim.cmd.buffer(vim.fn.bufnr(first))
+        file_kind.remember_current()
+        vim.cmd.buffer(vim.fn.bufnr(second))
+        file_kind.remember_current()
+      end
       store.list = original
       assert.equals(0, calls)
       file_kind.forget_positions()
