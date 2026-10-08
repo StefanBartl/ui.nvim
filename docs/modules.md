@@ -495,7 +495,8 @@ frozen: no new features, only what is here already.
 Two opt-in features went across anyway, on 2026-10-07: `kit.form`'s `back`
 navigation (and the `ui.kit.buttons` helper it shares with `kit.confirm`),
 and the new `kit.sheet` (one float with every field of a form, inline
-validation; it shares two small helpers of `kit.input`, the secret mask and
+validation; it shares three small helpers of `kit.input`, the secret mask, the
+guard of a secret buffer -- marked for a keystroke HUD, closed to buffer-word completion -- and
 the completion popup). The drift spec compares code, not intent, so a kit
 feature left on one side is a red CI run; the features are off unless asked
 for, so lib.nvim's own call sites behave as before. Until the spec learns a way to name a deliberate

@@ -84,6 +84,29 @@ local COMPONENTS = {
       vim.cmd("stopinsert")
     end,
   },
+  -- A secret prompt re-masks on `TextChanged*` through a hook of its own buffer. It was in a
+  -- group named after the buffer, recorded: one group and one record per prompt, for good.
+  secret_input = {
+    open = function()
+      _G.__records_spec_handle = kit.input({ secret = true, relative = "editor" })
+    end,
+    close = function()
+      _G.__records_spec_handle:close()
+      _G.__records_spec_handle = nil
+    end,
+  },
+  live_input = {
+    open = function()
+      _G.__records_spec_handle = kit.live_input({
+        relative = "editor",
+        on_change = function() end,
+      })
+    end,
+    close = function()
+      _G.__records_spec_handle:close()
+      _G.__records_spec_handle = nil
+    end,
+  },
   compare = {
     open = function()
       _G.__records_spec_handle = kit.compare({

@@ -16,6 +16,12 @@
 --- `ui.statusline.modules.macro_counter`'s own `RecordingEnter`/
 --- `RecordingLeave`-bracketed hook) -- a disabled screenkey costs nothing on
 --- every keystroke in the session, not just "renders nothing".
+---
+--- Privacy: a recording is when a password typed into a prompt costs the most, so the
+--- keys typed into a buffer marked as holding a secret (`ui.kit.surface.is_secret`: a
+--- `ui.kit.input` with `secret = true`, a `ui.kit.sheet` with a secret field) never
+--- reach the HUD. What is not the kit's -- `vim.fn.inputsecret()`, a plugin's own
+--- password prompt -- is not covered: keep the HUD off while typing one.
 
 local surface = require("ui.kit.surface")
 local debounce = require("lib.nvim.debounce")
@@ -269,10 +275,16 @@ end
 --- normal call stack, so the actual state mutation and every API call
 --- (`nvim_open_win` et al., via `render()`) are deferred onto the main loop
 --- the same way `lib.nvim.debounce`'s own fired callback already is.
+---
+--- A key typed into a buffer that is marked as holding a secret (`kit.input` with
+--- `secret = true`, a `kit.sheet` with a secret field: `ui.kit.surface.is_secret`) is not
+--- shown. That is asked HERE, before the `vim.schedule`: the key that submits the prompt
+--- (`<CR>`) closes it, and by the time the scheduled work ran the current buffer would
+--- be another one and the key would be shown after all.
 ---@param key string # post-mapping raw keycode, per vim.on_key()'s own contract
 ---@return nil
 local function on_key(key)
-  if key == "" then
+  if key == "" or surface.is_secret() then
     return
   end
   vim.schedule(function()

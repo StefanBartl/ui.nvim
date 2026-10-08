@@ -35,7 +35,7 @@ theme list.
 | `:UI picker` | — | Open a floating theme picker (`ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
 | `:UI transparency` | — | Toggle background transparency |
-| `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs |
+| `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs; keys typed into a secret `ui.kit` prompt or sheet are never shown |
 | `:UI color [#hex]` | an optional start colour | Open the interactive colour picker (`ui.colorpicker`): a hue row, a saturation × lightness grid, a shades row; the window cursor selects, `<CR>` replaces the `#hex` the picker opened on (or inserts after the cursor), `y` yanks, `q` closes |
 | `:UI zen` | `on`/`off` for an explicit state | Toggle the distraction-free box (`ui.zen`): the current buffer alone in a centred 120-column float over a dimmed backdrop, statusline/tabline/ruler hidden and the gutter emptied; closing the float any way restores everything |
 | `:UI notify` | `on`/`off` for an explicit state; `history` opens the recorded notifications in a viewer; `clear` forgets them | Toggle `ui.notify`: `vim.notify` rendered as level-coloured `ui.kit.toast`s with per-level timeouts, every message recorded in a ring buffer -- off by default; `ui.setup({ notify = true })` turns it on at startup |
