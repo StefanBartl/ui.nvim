@@ -779,6 +779,86 @@ describe("path completion in a big directory", function()
     check_like_getcompletion(dir .. "/" .. CYRILLIC)
   end)
 
+  it("lets a mark right behind the separator belong to it, as getcompletion() does", function()
+    -- In what pathcmp() compares, "<dir>/" is followed by U+0301 and "a_first", and the mark
+    -- joins the "/" before it: the name sorts as "a_first" and comes first. Ordered by its
+    -- own bytes (CC 81 is above every ASCII letter) it went behind everything else, and the
+    -- cut to a menu dropped it: three names of the first 300 were missing.
+    local mark = "\204\129" -- U+0301
+    dir = new_dir()
+    local names = { mark .. "a_first", mark .. "item_100x", mark .. "m_first" }
+    for i = 0, MAX + 19 do
+      names[#names + 1] = ("item_%03d"):format(i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    with_case_options(true, false, function()
+      local expected = expected_list(dir .. "/")
+      assert.equals(MAX, #expected, "more than a menu holds: the big list runs")
+      assert.equals(dir .. "/" .. mark .. "a_first", expected[1], "getcompletion() starts with it")
+      assert.is_true(
+        vim.tbl_contains(expected, dir .. "/" .. mark .. "item_100x"),
+        "and has this one"
+      )
+      assert.is_false(
+        vim.tbl_contains(expected, dir .. "/" .. mark .. "m_first"),
+        "but not the last"
+      )
+    end)
+    check_like_getcompletion(dir .. "/")
+    press_tab(dir .. "/")
+    assert.equals(0, getcompletion_calls, "the big list answers")
+    assert.equals(dir .. "/" .. mark .. "a_first", shown[1])
+  end)
+
+  it("keeps a mark that starts a name of the working directory a character of its own", function()
+    -- Without a directory part nothing stands before the name: the mark is the first code
+    -- point of the string pathcmp() compares, and it sorts as U+0301 -- behind every other name
+    -- here, all of which begin with U+0200 (bytes C8 80, below CC, so none of them is a
+    -- candidate for a mark). The separator is put in front of a name only where the path has
+    -- a directory part: with it the mark would be dropped and the name would come first.
+    local mark = "\204\129" -- U+0301
+    dir = new_dir()
+    local names = { mark .. "a_first" }
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("\200\128%03d"):format(i) -- U+0200
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    local saved = vim.fn.getcwd()
+    vim.cmd("cd " .. vim.fn.fnameescape(dir))
+    local ok, err = pcall(function()
+      with_case_options(true, false, function()
+        local expected = expected_list("")
+        assert.equals(MAX, #expected, "more than a menu holds: the big list runs")
+        assert.is_false(
+          vim.tbl_contains(expected, mark .. "a_first"),
+          "getcompletion() puts it last"
+        )
+      end)
+      for _, case in ipairs(CASE_OPTIONS) do
+        with_case_options(case[1], case[2], function()
+          local expected = expected_list("")
+          press_tab("")
+          assert.equals(0, getcompletion_calls, "the big list answers")
+          assert.same(expected, shown)
+        end)
+      end
+    end)
+    vim.cmd("cd " .. vim.fn.fnameescape(saved))
+    assert(ok, err)
+  end)
+
   --- A base character with combining marks after it, in the scripts that write them.
   for _, script in ipairs({
     { name = "Thai", base = 0x0E01, marks = { 0x0E34, 0x0E48 } },
