@@ -310,6 +310,7 @@ local function load_file()
   -- One message for all the entries that were dropped: a message per entry
   -- (each with its own number) would be a notification per entry from a file
   -- that has thousands.
+  S.backup_due = false
   local dropped, first_reason = 0, nil
   for _, entry in ipairs(data.slots) do
     local slot, reason = read_entry(entry)
@@ -325,12 +326,19 @@ local function load_file()
     end
   end
   if dropped > 0 then
+    -- What was not read is not written back: the next save would leave it out.
+    S.backup_due = true
+    -- The reason is built from the file's own text: one line, and not longer.
+    local why = tostring(first_reason):gsub("%c", " ")
+    if #why > 200 then
+      why = why:sub(1, 200) .. "…"
+    end
     say_once(
-      ("dropped %d entr%s of %s (first: %s)"):format(
+      ("dropped %d entr%s of %s (first: %s); the file is copied before it is saved again"):format(
         dropped,
         dropped == 1 and "y" or "ies",
         path,
-        tostring(first_reason)
+        why
       )
     )
   end
@@ -375,6 +383,19 @@ function M.flush()
   if not ok_mk then
     say("could not create " .. vim.fs.dirname(S.path) .. ": " .. tostring(mk_err))
     return false, tostring(mk_err)
+  end
+
+  if S.backup_due then
+    S.backup_due = false
+    if uv.fs_stat(S.path) then
+      local backup = S.path .. ".dropped-" .. os.date("%Y%m%d-%H%M%S")
+      local copied, copy_err = uv.fs_copyfile(S.path, backup)
+      if copied then
+        say("the old file, with the entries that were not read, is kept as " .. backup)
+      else
+        say("could not copy " .. S.path .. " before saving it: " .. tostring(copy_err))
+      end
+    end
   end
 
   local snap = snapshot()

@@ -78,7 +78,11 @@ end
 
 ---@param slot table
 ---@return { label: string, icon: string, hl: string, missing: boolean }
-function M.render(slot)
+function M.render(slot, opts)
+  if opts and opts.cheap then
+    -- The list of marks is read from disk: not for a row that is not in view.
+    return { label = ("mark %s"):format(tostring(slot.index)), icon = "󰃀", hl = "KitAccent" }
+  end
   local it = item(slot)
   if not it then
     return {

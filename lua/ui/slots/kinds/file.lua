@@ -55,6 +55,33 @@ local function cached_key(path)
   return k
 end
 
+--- The last component of a path as written, found from the end (a pattern for it
+--- backtracks quadratically on a long first segment, and a data file may hold
+--- one).
+---@param p string
+---@return string
+local function basename(p)
+  local e = #p
+  while e > 0 do
+    local c = p:byte(e)
+    if c == 47 or c == 92 then
+      e = e - 1
+    else
+      break
+    end
+  end
+  local b = e
+  while b > 0 do
+    local c = p:byte(b)
+    if c == 47 or c == 92 then
+      break
+    end
+    b = b - 1
+  end
+  local name = p:sub(b + 1, e)
+  return name ~= "" and name or p
+end
+
 --- A network (UNC) path: `\\host\share` or `//host/share`. Touching one is a
 --- synchronous connection to that host -- twenty seconds when it is gone, and
 --- on Windows a place the account's credentials are offered -- so only a slot
@@ -65,10 +92,21 @@ local function is_network(path)
   return type(path) == "string" and path:match("^[\\/][\\/]") ~= nil
 end
 
+--- Placeholders whose value is text the user (or a page) put somewhere, not a
+--- place the user is in: a path made of them may name any host.
+---@param path string
+---@return boolean
+local function has_content_placeholder(path)
+  return path:find("{clip}", 1, true) ~= nil
+    or path:find("{sel}", 1, true) ~= nil
+    or path:find("{word}", 1, true) ~= nil
+end
+
 ---@param slot table
 ---@param ctx Ui.Slots.Ctx|nil
 ---@return string path
 ---@return string[] unknown
+---@return string|nil refused  # why the path is empty although the slot names one
 local function target_path(slot, ctx)
   local resolved, unknown = resolve.resolve(slot.path, ctx)
   -- Absolute: a relative name that starts with "+" would be read by :edit as
@@ -77,9 +115,17 @@ local function target_path(slot, ctx)
     -- Nothing to open (every placeholder was empty): not the current directory.
     return "", unknown
   end
-  if slot.fixed ~= true and is_network(resolved) then
-    -- Not even resolved to an absolute path: that is the first call to the host.
-    return "", unknown
+  -- A network path is not followed for a slot that does not come from setup()
+  -- -- unless it is where the user's own tree is: `{root}/TODO.md` in a project
+  -- on `\\wsl$\...` names no other host than the one the user is working on. What
+  -- is written out as a network path, or comes from `{clip}`, `{sel}` or
+  -- `{word}`, may name any host.
+  if
+    slot.fixed ~= true
+    and is_network(resolved)
+    and (is_network(slot.path) or has_content_placeholder(slot.path))
+  then
+    return "", unknown, "a network path can only be set in setup()"
   end
   return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
 end
@@ -153,8 +199,11 @@ end
 ---@return boolean ok
 ---@return string|nil err
 function M.apply(slot, ctx)
-  local path, unknown = target_path(slot, ctx.resolve)
+  local path, unknown, refused = target_path(slot, ctx.resolve)
   util.warn_unknown(unknown, "file slot")
+  if refused then
+    return false, refused
+  end
   local st = uv.fs_stat(path)
   if not st then
     return false, "file does not exist: " .. path
@@ -172,11 +221,10 @@ end
 ---@param slot table
 ---@return { label: string, icon: string, hl: string, missing: boolean }
 function M.render(slot, opts)
-  if opts and opts.cheap and type(slot.path) == "string" and not slot.path:find("{", 1, true) then
-    -- The name as written: no placeholder to put in, no absolute path to make,
-    -- no stat -- the row is corrected when it comes into view.
-    local base = slot.path:match("([^/\\]+)[/\\]*$")
-    return { label = base or slot.path, icon = "󰈔", hl = "KitAccent", missing = false }
+  if opts and opts.cheap and type(slot.path) == "string" then
+    -- The name as written (a placeholder stays as it is): nothing put in, no
+    -- absolute path made, no stat -- the row is corrected when it comes into view.
+    return { label = basename(slot.path), icon = "󰈔", hl = "KitAccent", missing = false }
   end
   local path = target_path(slot)
   local missing = not uv.fs_stat(path)
@@ -239,9 +287,9 @@ end
 ---@param ctx { resolve?: Ui.Slots.Ctx }
 ---@return Ui.Slots.Preview
 function M.preview(slot, ctx)
-  local path = target_path(slot, ctx.resolve)
+  local path, _, refused = target_path(slot, ctx.resolve)
   if path == "" then
-    return { lines = { "(the path is empty)" } }
+    return { lines = { refused and ("(" .. refused .. ")") or "(the path is empty)" } }
   end
   local st = uv.fs_stat(path)
   if not st then
@@ -284,6 +332,85 @@ function M.preview(slot, ctx)
   return { lines = lines, ft = ft, pos = at }
 end
 
+--- A spelling of a slot's path that compares without asking the file system
+--- anything, or nil when only the file system can say (a placeholder in it).
+local win_or_mac = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CHEAP_MAX = 20000
+local cheap_memo, cheap_count = {}, 0
+
+---@param path string
+---@return string
+local function fold(path)
+  path = vim.fs.normalize(path)
+  return win_or_mac and path:lower() or path
+end
+
+---@param slot table
+---@return string|nil
+local function cheap_slot_key(slot)
+  local p = slot.path
+  if type(p) ~= "string" or p:find("{", 1, true) then
+    return nil
+  end
+  if p:match("^[/\\~]") or p:match("^%a:[/\\]") then
+    local hit = cheap_memo[p]
+    if hit then
+      return hit
+    end
+    if cheap_count >= CHEAP_MAX then
+      cheap_memo, cheap_count = {}, 0
+    end
+    local k = fold(p)
+    cheap_memo[p], cheap_count = k, cheap_count + 1
+    return k
+  end
+  -- Relative to the working directory, which can change.
+  return fold(uv.cwd() .. "/" .. p)
+end
+
+--- The file slots of `list` that point at the file `name` (a buffer's name).
+--- A slot is known by the path as written, which costs nothing; only up to
+--- `exact_max` of the slots that do not match that way are asked again by their
+--- real path (a link to the file, a placeholder, another spelling). A list of
+--- ten thousand slots is walked on every window switch: this must stay cheap.
+---@param name string
+---@param list Ui.Slots.Slot[]
+---@param first_only boolean|nil
+---@param exact_max integer|nil  # default 30
+---@return Ui.Slots.Slot[]
+function M.matching(name, list, first_only, exact_max)
+  local out = {}
+  if type(name) ~= "string" or name == "" then
+    return out
+  end
+  local want = fold(name)
+  local real
+  local budget = exact_max or 30
+  for _, slot in ipairs(list) do
+    if slot.kind == "file" and type(slot.path) == "string" then
+      local hit = false
+      local cheap = cheap_slot_key(slot)
+      if cheap ~= nil and cheap == want then
+        hit = true
+      elseif budget > 0 then
+        budget = budget - 1
+        local path = target_path(slot)
+        if path ~= "" then
+          real = real or key(name)
+          hit = cached_key(path) == real
+        end
+      end
+      if hit then
+        out[#out + 1] = slot
+        if first_only then
+          return out
+        end
+      end
+    end
+  end
+  return out
+end
+
 --- Remember where the cursor is in the current buffer, for the file slot(s)
 --- that point at it. Slots in the data file keep it across restarts; fixed
 --- slots (which cannot be changed) and every other file keep it for the
@@ -296,22 +423,12 @@ function M.remember_current()
   end
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line, col = cursor[1], cursor[2] + 1
-  local k = cached_key(name)
-  local before = positions[k]
-  positions[k] = { line = line, col = col }
-  if before and before.line == line and before.col == col then
-    -- Left where it was last left (BufLeave fires on every window switch): the
-    -- slots already hold this position, and walking them all is for nothing.
-    return
-  end
+  positions[cached_key(name)] = { line = line, col = col }
 
   local store = require("ui.slots.store")
-  for _, slot in ipairs(store.list()) do
-    if slot.kind == "file" and not slot.fixed and type(slot.path) == "string" then
-      local path = target_path(slot)
-      if path ~= "" and cached_key(path) == k and (slot.line ~= line or slot.col ~= col) then
-        store.update(slot.n, { line = line, col = col })
-      end
+  for _, slot in ipairs(M.matching(name, store.list())) do
+    if not slot.fixed and (slot.line ~= line or slot.col ~= col) then
+      store.update(slot.n, { line = line, col = col })
     end
   end
 end
@@ -327,6 +444,7 @@ end
 function M.forget_positions()
   positions = {}
   key_cache, key_count = {}, 0
+  cheap_memo, cheap_count = {}, 0
 end
 
 return M

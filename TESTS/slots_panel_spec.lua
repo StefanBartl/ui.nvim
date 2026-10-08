@@ -666,6 +666,33 @@ describe("ui.slots panel and editor", function()
       end
     )
 
+    it("leaves no WinScrolled autocmd behind when the panel closes", function()
+      start()
+      add_missing_files(5)
+      local before = #vim.api.nvim_get_autocmds({ event = "WinScrolled" })
+      for _ = 1, 3 do
+        panel.open()
+        panel.close()
+      end
+      assert.equals(before, #vim.api.nvim_get_autocmds({ event = "WinScrolled" }))
+    end)
+
+    it("finds a relative path as written in a list too long to check by real path", function()
+      start()
+      local path = dir .. "/rel.txt"
+      vim.fn.writefile({ "x" }, path)
+      local cwd = vim.fn.getcwd()
+      vim.cmd.cd(dir)
+      add_missing_files(400)
+      store.add({ kind = "file", path = "rel.txt" })
+      vim.cmd.edit(path)
+      panel.open()
+      local current = panel.current()
+      panel.close()
+      vim.cmd.cd(cwd)
+      assert.equals(401, current)
+    end)
+
     it("draws the empty list with its hint", function()
       start()
       panel.open()
