@@ -619,13 +619,14 @@ describe("path completion in a big directory", function()
   end)
 
   it(
-    "leaves names with a combining mark to getcompletion(), which orders them its own way",
+    "orders a name with a combining mark by its base characters, as getcompletion() does",
     function()
-      -- pathcmp() skips the combining mark, so "Abe" + U+0308 + "x" sorts beside "Abex";
-      -- ordered by bytes it would come behind "Abez". Not worth reproducing: it is
-      -- getcompletion()'s, however many names match.
+      -- pathcmp() steps over the combining mark and compares the base characters only, so
+      -- "Abe" + U+0308 + "y" sorts between "Abex" and "Abez"; ordered by bytes (CC 88 is above
+      -- every ASCII letter) it would come behind "Abez". No two names share a key once the
+      -- mark is skipped: getcompletion() leaves such ties to an unstable qsort.
       dir = new_dir()
-      local names = { "Abex", "Abey", "Abez", "Abe\204\136x", "Abe\204\136y" } -- U+0308 is CC 88
+      local names = { "Abex", "Abe\204\136y", "Abez" } -- U+0308 is CC 88
       for i = 0, MAX do
         names[#names + 1] = ("Abz%03d"):format(i)
       end
@@ -639,11 +640,111 @@ describe("path completion in a big directory", function()
       with_case_options(true, false, function()
         assert.is_true(#real_getcompletion(dir .. "/Ab", "file") > MAX, "more than a menu holds")
       end)
-      check_like_getcompletion(dir .. "/Ab", true)
-      -- the same names, none with a combining mark among the candidates: the big list again
+      check_like_getcompletion(dir .. "/Ab")
       check_like_getcompletion(dir .. "/Abz")
+      press_tab(dir .. "/Ab")
+      assert.same(
+        { dir .. "/Abex", dir .. "/Abe\204\136y", dir .. "/Abez" },
+        vim.list_slice(shown, 1, 3),
+        "between Abex and Abez, not behind Abez"
+      )
     end
   )
+
+  it("keeps the big list when a single name in it has a combining mark", function()
+    -- One name written the macOS way (a letter and its accent as two characters) used to
+    -- send the whole directory back to getcompletion(): 0.8 s at five thousand names, after
+    -- the walk had been paid for. Its place is the one of "item_005x", between item_005 and
+    -- item_006; by its bytes it would come behind item_009.
+    dir = new_dir()
+    local marked = "item_00\204\1815x" -- U+0301 is CC 81
+    local names = { marked }
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("item_%03d"):format(i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/item_")
+    press_tab(dir .. "/item_")
+    assert.equals(0, getcompletion_calls, "the big list answers")
+    assert.equals(dir .. "/" .. marked, shown[7], "after item_005")
+  end)
+
+  --- A base character with combining marks after it, in the scripts that write them.
+  for _, script in ipairs({
+    { name = "Thai", base = 0x0E01, marks = { 0x0E34, 0x0E48 } },
+    { name = "Devanagari", base = 0x0939, marks = { 0x0902 } },
+    { name = "Arabic", base = 0x0628, marks = { 0x0651, 0x064E } },
+  }) do
+    it(
+      ("orders %s names with combining marks as getcompletion() does"):format(script.name),
+      function()
+        -- Every second name carries the marks, the rest do not, and each has its own number:
+        -- no two share a key once the marks are skipped. By bytes all the plain names would
+        -- come before all the marked ones; getcompletion() interleaves them by number. In such
+        -- a script nearly every name carries a mark, so the list has to cope with that.
+        local nr2char = vim.fn.nr2char
+        local base, marks = nr2char(script.base), ""
+        for _, mark in ipairs(script.marks) do
+          marks = marks .. nr2char(mark)
+        end
+        dir = new_dir()
+        local names = {}
+        for i = 0, MAX + 9 do
+          names[#names + 1] = ("%s%s%03d"):format(base, i % 2 == 1 and marks or "", i)
+        end
+        for _, name in ipairs(names) do
+          touch(dir .. "/" .. name)
+        end
+        if not listed_verbatim(dir, names) then
+          pending("this file system normalizes the names")
+          return
+        end
+        check_like_getcompletion(dir .. "/")
+      end
+    )
+  end
+
+  it("orders names with Hangul jamo, ZWJ sequences and flags as getcompletion() does", function()
+    -- Characters of more than two code points: a flag is two regional indicators, a family
+    -- is three people joined by U+200D, a syllable is written as its jamo. `pathcmp()` reads
+    -- the first code point of each and no more, so two flags that begin alike (DE, DK) or
+    -- two families that begin with the same person are interleaved by the number behind.
+    local nr2char = vim.fn.nr2char
+    local function chars(...)
+      local out = {}
+      for _, cp in ipairs({ ... }) do
+        out[#out + 1] = nr2char(cp)
+      end
+      return table.concat(out)
+    end
+    local clusters = {
+      chars(0x1F1E9, 0x1F1EA), -- DE
+      chars(0x1F1E9, 0x1F1F0), -- DK
+      chars(0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467), -- man, woman, girl
+      chars(0x1F468, 0x200D, 0x1F467), -- man, girl
+      chars(0x1112, 0x1161, 0x11AB), -- a syllable as lead, vowel and tail
+      chars(0x1112, 0x1161), -- ... without the tail
+    }
+    dir = new_dir()
+    local names = {}
+    for i = 0, MAX + 9 do
+      names[#names + 1] = ("g_%s%03d"):format(clusters[i % #clusters + 1], i)
+    end
+    for _, name in ipairs(names) do
+      touch(dir .. "/" .. name)
+    end
+    if not listed_verbatim(dir, names) then
+      pending("this file system normalizes the names")
+      return
+    end
+    check_like_getcompletion(dir .. "/g_")
+  end)
 
   it("leaves a fragment with a NUL byte to getcompletion() instead of raising", function()
     -- No file name holds a NUL. The fold of a non-ASCII name goes through `toupper()`, and a
