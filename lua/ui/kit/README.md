@@ -702,11 +702,14 @@ are found, which for `"dir"` can be every link of the directory, once, as no lin
 to a file is a directory; a link that leads nowhere is left out, as
 `getcompletion()` leaves it); typing on narrows it. Where a non-ASCII character
 is involved, Neovim's own regex engine decides whether a name starts with the
-fragment (its case folding is not `toupper()`, and it does not split a character
-from a combining mark that follows), and a name with a combining mark (`é`
+fragment (its case folding is not `toupper()`, it does not split a character
+from a combining mark that follows, and it reads a lone Latin-1 byte as the
+character whose UTF-8 spelling is a pair, so a directory with both spellings of
+an umlaut lists both), and a name with a combining mark (`é`
 written as `e` plus U+0301, or most names in Thai, Hindi or Arabic) is ordered
 by its base characters, as `getcompletion()` does: such a name no longer sends
-the whole list back to it. A fragment with a backtick
+the whole list back to it, and a mark right behind the `/` of a path belongs to
+that separator, as it does there. A fragment with a backtick
 in it is never completed:
 `getcompletion()` runs the span between backticks through the shell, and the
 fragment may be pasted text.
