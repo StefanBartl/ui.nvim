@@ -326,6 +326,14 @@ would keep one entry per popup for good. They pass `record = false` too, and
 `lib.nvim`'s own `close_on_focus_lost` helper does the same. Groups with a fixed
 name are cleared on every open and stay recorded.
 
+The `TextChanged` hooks of a prompt -- the re-mask of a secret `kit.input`, the
+debounce of `kit.live_input` and of `kit.compare`'s query -- are in no group at all:
+buffer-local autocmds, `record = false`, that go with their buffer when the float
+closes. A group shared by every prompt and cleared at each open took the hooks of the
+prompt that was already open away (its `on_change` was never called again, a secret
+typed after that showed in clear text); one named after the buffer was a group and a
+record per prompt that nothing removed.
+
 ### Message log (paginated, time-ordered entry list)
 
 `kit.message_log(opts)` is a scrollable, time-ordered, paginated, collapsible
