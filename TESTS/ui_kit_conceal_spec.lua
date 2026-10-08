@@ -292,3 +292,61 @@ describe("a mask that is not a string", function()
     surf:close()
   end)
 end)
+
+--- A mask nvim cannot show is the default one, too.
+---
+--- `nvim_buf_set_extmark{conceal=...}` raises "conceal char has to be printable" for a string
+--- that starts with a control character (a newline, NUL, tab, escape), a lone continuation
+--- byte or an invisible character. That came out of `conceal_line` in the `TextChanged`
+--- handler after `apply_mask` had cleared the namespace: the typed password stood in the
+--- buffer, with an error for every key. (`kit.sheet` masks its rows with the same function.)
+describe("a mask nvim cannot show", function()
+  local bad = { "\n", "\0", "\1", "\t", "\27", "\127", "\128", "\226\128\139", "\1a" }
+
+  after_each(function()
+    for _, w in ipairs(api.nvim_list_wins()) do
+      if api.nvim_win_is_valid(w) and api.nvim_win_get_config(w).relative ~= "" then
+        pcall(api.nvim_win_close, w, true)
+      end
+    end
+  end)
+
+  it("masks with * in conceal_line instead of raising", function()
+    for _, mask in ipairs(bad) do
+      local ok, ranges, all = pcall(masked, "abc", mask)
+      assert.is_true(ok, ("%q raised: %s"):format(mask, tostring(ranges)))
+      assert.equals("0-1,1-2,2-3", ranges, ("%q"):format(mask))
+      assert.is_false(all, "not with the mask given")
+    end
+  end)
+
+  it("masks a secret prompt with * from the start and while typing", function()
+    for _, mask in ipairs(bad) do
+      local ok, err = pcall(function()
+        local surf =
+          kit.input({ secret = true, mask = mask, default = "hunter2", relative = "editor" })
+        local ns = api.nvim_create_namespace("lib_kit_input_secret_" .. surf.bufnr)
+        local function conceals()
+          local out = {}
+          for _, m in ipairs(api.nvim_buf_get_extmarks(surf.bufnr, ns, 0, -1, { details = true })) do
+            out[#out + 1] = m[4].conceal
+          end
+          return out
+        end
+        assert.same(vim.fn["repeat"]({ "*" }, 7), conceals(), "the default")
+        api.nvim_buf_set_lines(surf.bufnr, 0, -1, false, { "hunter22" })
+        api.nvim_exec_autocmds("TextChanged", { buffer = surf.bufnr })
+        assert.same(vim.fn["repeat"]({ "*" }, 8), conceals(), "what is typed on top of it")
+        surf:close()
+      end)
+      assert.is_true(ok, ("%q: %s"):format(mask, tostring(err)))
+    end
+  end)
+
+  it("keeps a mask nvim shows, an empty one included", function()
+    for _, mask in ipairs({ "•", "", "é", "😀" }) do
+      local _, all = masked("abc", mask)
+      assert.is_true(all, ("%q"):format(mask))
+    end
+  end)
+end)
