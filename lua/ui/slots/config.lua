@@ -161,6 +161,9 @@ function M.setup(opts)
       end
     end
   end
+  if opts.data_dir ~= nil and (type(opts.data_dir) ~= "string" or opts.data_dir == "") then
+    found[#found + 1] = ("data_dir: %s is not a directory name"):format(vim.inspect(opts.data_dir))
+  end
   for _, key in ipairs({ "slots", "kinds", "keys", "clipboard", "persistable_kinds" }) do
     if opts[key] ~= nil and type(opts[key]) ~= "table" then
       found[#found + 1] = ("%s: %s is not a table"):format(key, vim.inspect(opts[key]))

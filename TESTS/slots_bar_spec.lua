@@ -904,6 +904,7 @@ describe("ui.slots bar", function()
       store.reload()
       flush()
       assert.is_nil(chips.state().focus_n)
+      assert.equals(1, chips.state().top_n)
     end)
 
     it("forgets what it found out about a file when the file is written", function()
@@ -939,6 +940,24 @@ describe("ui.slots bar", function()
         assert.is_true(seen)
       end
     )
+
+    it("makes the chips as the window the panel came from sees them", function()
+      start({ width = 80 })
+      local path = dir .. "/here.txt"
+      vim.fn.writefile({ "x" }, path)
+      vim.fn.writefile({ "y" }, dir .. "/other.txt")
+      store.add({ kind = "file", path = "{dir}/other.txt" })
+      store.add({ kind = "file", path = "{file}" })
+      vim.cmd.edit(path)
+      chips.open()
+      flush()
+      assert.is_nil(text():find("✗", 1, true), text())
+      require("ui.slots.view.panel").open()
+      -- the panel is the current window now, and its buffer has no name
+      chips.refresh()
+      assert.is_nil(text():find("✗", 1, true), text())
+      require("ui.slots.view.panel").close()
+    end)
 
     it("scrolls to a chip far down and draws that one in full", function()
       start()

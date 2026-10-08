@@ -659,6 +659,15 @@ function M.refresh(delta)
   end
   local first, last = M._range(descs, top, avail)
   S.top_n = descs[first].n
+  -- With the panel in front, "the current buffer" is its empty one: the chips
+  -- are made as the window the panel came from sees them.
+  local panel = package.loaded["ui.slots.view.panel"]
+  local origin = panel and panel.origin_window()
+  if origin then
+    pcall(api.nvim_win_call, origin, function()
+      materialize(descs, first, last)
+    end)
+  end
   materialize(descs, first, last)
   -- The width does not shrink while the list is only scrolled with the wheel: a
   -- chip with a flag (a missing file, unsaved changes) is wider than its text as

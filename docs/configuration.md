@@ -272,10 +272,12 @@ a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 `:UI notify off` puts the previous handler back.
 
 `slots` is explicit-only as well: `all = true` does not switch it on. `true`
-is `{ enabled = true }`; a table only sets the options (and needs `enabled = true`
-to switch the slots on, unlike `notify`, where a table does) listed in
-[`lua/ui/slots/README.md`](../lua/ui/slots/README.md) (fixed slots, keys, the
-bar's style and side, the preview). Nothing is mapped unless `keys` asks.
+switches it on with what `require("ui.slots").setup()` was given before. A
+table sets the options anew (everything it leaves out is the default) and needs
+`enabled = true` to switch the slots on, unlike `notify`, where a table does;
+the options are listed in [`lua/ui/slots/README.md`](../lua/ui/slots/README.md)
+(fixed slots, keys, the bar's style and side, the preview). Nothing is mapped
+unless `keys` asks.
 
 `toast` only tunes the look of the top-right corner toasts and replaces
 nothing, so it is applied whenever given. A toast is as wide as its text plus
