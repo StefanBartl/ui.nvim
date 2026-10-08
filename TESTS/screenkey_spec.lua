@@ -337,3 +337,112 @@ describe("ui.screenkey", function()
     screenkey.setup({ max_entries = 30 })
   end)
 end)
+
+--- A keystroke HUD that shows what is typed into a password prompt is a leak, and it is on
+--- exactly when somebody records a demo. The prompt (`kit.input` with `secret = true`) and a
+--- sheet with a secret field mark their buffer (`ui.kit.surface.SECRET_VAR`); the HUD leaves the
+--- keys typed into a marked buffer out. A sheet is marked as a whole: there is no telling which
+--- row a key was meant for.
+---
+--- Real keys again. `A` starts an Insert run that the fed keys type into (this runner never
+--- enters Insert mode on its own), and the run ends with the keys.
+describe("ui.screenkey and a secret being typed", function()
+  local kit = require("ui.kit")
+  local showmode
+
+  before_each(function()
+    showmode = vim.o.showmode
+    vim.o.showmode = false
+    -- The HUD fades `fade_ms` after the last key, and an earlier test above leaves it at 80 ms:
+    -- a leak would be gone again by the time it is looked for, and every test below would pass
+    -- without the check it is about.
+    screenkey.setup({ fade_ms = 60000 })
+  end)
+
+  after_each(function()
+    screenkey.disable()
+    screenkey.setup({ labels = {}, join_chars = false, width = 40, fade_ms = 2000 })
+    vim.cmd("stopinsert")
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_config(w).relative ~= "" then
+        pcall(vim.api.nvim_win_close, w, true)
+      end
+    end
+    vim.o.showmode = showmode
+  end)
+
+  it("shows what is typed into a plain prompt (the control)", function()
+    screenkey.enable()
+    kit.input({ relative = "editor" })
+    feed("Aok")
+    vim.wait(300, function()
+      return current_text():find("k", 1, true) ~= nil
+    end)
+    assert.is_true(current_text():find("o", 1, true) ~= nil, current_text())
+    assert.is_true(current_text():find("k", 1, true) ~= nil, current_text())
+  end)
+
+  it("shows nothing of what is typed into a secret prompt", function()
+    screenkey.enable()
+    kit.input({ relative = "editor", secret = true })
+    feed("Ahunter2")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "no key reached the HUD: " .. current_text())
+  end)
+
+  it("shows nothing of a sheet with a secret field, whichever row is typed into", function()
+    screenkey.enable()
+    local sheet = kit.sheet({
+      fields = { { name = "user" }, { name = "token", secret = true } },
+      relative = "editor",
+      on_submit = function() end,
+    })
+    feed("Aroot")
+    sheet:focus_field("token")
+    feed("Ahunter2")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "no key reached the HUD: " .. current_text())
+  end)
+
+  it("shows what is typed into a sheet with no secret field (the control)", function()
+    screenkey.enable()
+    kit.sheet({
+      fields = { { name = "user" }, { name = "city" } },
+      relative = "editor",
+      on_submit = function() end,
+    })
+    feed("Aroot")
+    vim.wait(300, function()
+      return current_text():find("t", 1, true) ~= nil
+    end)
+    assert.is_true(current_text():find("r", 1, true) ~= nil, current_text())
+  end)
+
+  it("leaves out the key that closes the prompt too, and shows the next one again", function()
+    screenkey.enable()
+    local secret = kit.input({ relative = "editor", secret = true })
+    feed("Ahunter2")
+    -- `c` of `<C-w>c` closes the window the prompt is in: the current buffer is another one
+    -- by the time the HUD's scheduled work runs, so it must be asked when the key arrives.
+    feed("<C-w>c")
+    vim.wait(300)
+    assert.is_false(secret:is_valid(), "the prompt is closed")
+    assert.is_nil(screenkey.surface(), "not even the closing key: " .. current_text())
+
+    feed("j")
+    vim.wait(300, function()
+      return screenkey.surface() ~= nil
+    end)
+    assert.equals("j", current_text(), "outside the prompt the HUD works again")
+  end)
+
+  it("shows nothing of the keys that wipe the secret out of the last Insert run", function()
+    -- `scrub_insert_traces` types `i<Esc>` into a scratch buffer once the prompt is gone.
+    screenkey.enable()
+    local secret = kit.input({ relative = "editor", secret = true })
+    feed("Ahunter2")
+    secret:close()
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "nothing from the scrub either: " .. current_text())
+  end)
+end)

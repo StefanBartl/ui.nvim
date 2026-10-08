@@ -484,4 +484,145 @@ describe("kit.input in a real Neovim", function()
       assert.equals("plain", dot(), "the last Insert run is the user's own")
     end)
   end)
+
+  -- Insert-mode completion works on the words of the buffer, and in a secret prompt the buffer is
+  -- the secret: `<C-n>`/`<C-p>` listed them in clear text and put the pick in unmasked, and with
+  -- 'autocomplete' (Neovim 0.12) the popup came up by itself as one types. They do nothing there
+  -- now (`ui_kit_secret_buffer_spec.lua` has the keys without a popup to look at).
+  describe("a secret prompt and the completion popup", function()
+    local TYPED = "hunter2 hunter3 hun"
+
+    --- `autocomplete` is a Neovim 0.12 option: the child is the same binary as this one.
+    local has_autocomplete = vim.fn.exists("&autocomplete") == 1
+
+    --- How many characters the line holds and how many of them are under a mask.
+    ---@return table
+    local function masked()
+      return lua([[
+        local b = vim.api.nvim_get_current_buf()
+        local ns = vim.api.nvim_create_namespace("lib_kit_input_secret_" .. b)
+        return {
+          marks = #vim.api.nvim_buf_get_extmarks(b, ns, 0, -1, {}),
+          chars = vim.fn.strchars(vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]),
+        }
+      ]])
+    end
+
+    --- Press `keys`, then `!`: the line must be what was typed and the `!`, and no popup may be
+    --- open. One sequence at a time, and the `!` taken out again: several completion keys in a row
+    --- (`<C-n><C-p>`) cancel each other out and would hide a candidate that was put in.
+    ---@param keys string
+    local function nothing_completes(keys)
+      input(keys .. "!")
+      local s = expect(function(x)
+        return x.lines[1] == TYPED .. "!"
+      end, keys .. " inserted nothing")
+      assert.is_false(s.pum, keys .. " opened no popup")
+      input("<BS>")
+      expect(function(x)
+        return x.lines[1] == TYPED
+      end, "the character is taken out again")
+    end
+
+    ---@param autocomplete boolean
+    ---@param secret boolean
+    local function open_typing(autocomplete, secret)
+      if has_autocomplete then
+        lua(("vim.o.autocomplete = %s"):format(tostring(autocomplete)))
+      end
+      lua(
+        ([[ require("ui.kit").input({ secret = %s, relative = "editor" }) ]]):format(
+          tostring(secret)
+        )
+      )
+      expect(function(s)
+        return s.mode == "i"
+      end, "the prompt opens in Insert mode")
+      input(TYPED)
+      expect(function(s)
+        return s.lines[1] == TYPED
+      end, "the words are typed")
+    end
+
+    for _, autocomplete in ipairs(has_autocomplete and { false, true } or { false }) do
+      local label = ("'autocomplete' %s"):format(autocomplete and "on" or "off")
+
+      it("offers no word of the buffer, " .. label, function()
+        open_typing(autocomplete, true)
+        vim.wait(300) -- the popup of 'autocomplete' comes after the key that asked for it
+        assert.is_false(state().pum, "no popup while typing")
+        for _, keys in ipairs({ "<C-n>", "<C-p>", "<C-x><C-n>", "<C-x><C-p>" }) do
+          nothing_completes(keys)
+        end
+      end)
+
+      it("(control) a plain prompt does, " .. label, function()
+        open_typing(autocomplete, false)
+        if not autocomplete then
+          input("<C-n>")
+        end
+        expect(function(s)
+          return s.pum
+        end, "the popup lists the words: without this the test above sees nothing either way")
+      end)
+    end
+
+    it(
+      "keeps the popup of its own completion, moves in it with <C-n>/<C-p>, and masks the pick",
+      function()
+        for _, name in ipairs({ "alpha1.txt", "alpha2.txt" }) do
+          local f = assert(io.open(tmp .. "/" .. name, "w"))
+          f:write("")
+          f:close()
+        end
+        lua(([[
+        vim.cmd("cd " .. vim.fn.fnameescape(%q))
+        require("ui.kit").input({ secret = true, completion = "file", default = "al", relative = "editor" })
+      ]]):format(tmp:gsub("\\", "/")))
+        expect(function(s)
+          return s.mode == "i"
+        end, "the prompt opens in Insert mode")
+        input("<Tab>")
+        local s = expect(function(x)
+          return x.pum and x.lines[1]:match("^alpha[12]%.txt$") ~= nil
+        end, "<Tab> opens the popup, with the first candidate in")
+        local first = s.lines[1]
+        input("<C-n>")
+        s = expect(function(x)
+          return x.lines[1]:match("^alpha[12]%.txt$") ~= nil and x.lines[1] ~= first
+        end, "<C-n> goes on to the next candidate")
+        assert.is_true(s.pum, "the popup stays open")
+        -- The pick is a change made with the popup open (`TextChangedP`): masked all the same.
+        local m = masked()
+        assert.equals(m.chars, m.marks, "every character of the pick is under a mask")
+        assert.is_true(m.chars > 2, "and it is more than what was typed")
+        input("<C-p>")
+        expect(function(x)
+          return x.lines[1] == first
+        end, "<C-p> goes back")
+        m = masked()
+        assert.equals(m.chars, m.marks, "the one it went back to is masked too")
+      end
+    )
+
+    it("offers nothing from the buffer in a sheet with a secret field either", function()
+      lua([[
+        require("ui.kit").sheet({
+          fields = { { name = "token", secret = true }, { name = "note" } },
+          relative = "editor",
+          on_submit = function() end,
+        })
+      ]])
+      expect(function(s)
+        return s.mode == "i"
+      end, "the sheet opens in Insert mode")
+      input(TYPED)
+      expect(function(s)
+        return s.lines[1] == TYPED
+      end, "the words are typed")
+      for _, keys in ipairs({ "<C-n>", "<C-x><C-n>" }) do
+        nothing_completes(keys)
+      end
+    end)
+  end)
 end)
