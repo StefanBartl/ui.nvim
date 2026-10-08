@@ -148,7 +148,12 @@ local function target_path(slot, ctx)
       ctx = setmetatable({
         [lead] = function()
           if lead_value == nil then
-            local v = type(source) == "function" and source() or source
+            local v
+            if type(source) == "function" then
+              v = source()
+            else
+              v = source
+            end
             lead_value = v == nil and "" or tostring(v)
           end
           return lead_value
@@ -162,6 +167,11 @@ local function target_path(slot, ctx)
   if resolved == "" then
     -- Nothing to open (every placeholder was empty): not the current directory.
     return "", unknown
+  end
+  -- `{cwd}/x` with the working directory `/` is `//x`: the root joined to a
+  -- name, not a host.
+  if lead_value and lead_value ~= "" and not is_network(lead_value) then
+    resolved = resolved:gsub("^[\\/]+", "/")
   end
   -- A network path is not followed for a slot that does not come from setup(),
   -- unless it is where the user's own tree is (see `own_tree`): touching one is
@@ -272,7 +282,8 @@ function M.render(slot, opts)
     -- absolute path made, no stat -- the row is corrected when it comes into view.
     return { label = basename(slot.path), icon = "󰈔", hl = "KitAccent", missing = false }
   end
-  local path = target_path(slot)
+  -- (`opts.resolve`: where the placeholders are read, when it is not here)
+  local path = target_path(slot, opts and opts.resolve)
   local missing = not uv.fs_stat(path)
   return {
     label = vim.fs.basename(path) ~= "" and vim.fs.basename(path) or path,

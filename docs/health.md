@@ -182,10 +182,10 @@ slots written in `setup({ slots = ... })`.
 | WARN `<option>: ...` (one per finding) | That option was wrong (an unknown name, a value outside its set, a negative number, a bad `keys` entry) and the default is used |
 | OK `N slot(s) in setup(), every placeholder is a known one` | No `{name}` in a path, address, text or command is unknown |
 | WARN `slot N: unknown placeholder {name} in 'field'` | The name is not one of `{file} {dir} {root} {cwd} {line} {col} {word} {sel} {clip} {count}`; it stays in the text. Write `{{` and `}}` for literal braces |
-| INFO `no slots in setup({ slots = ... })` | Nothing fixed; slots made while working are in the data file and are checked when it is loaded |
+| INFO `no slots in setup({ slots = ... })` | Nothing fixed; slots made while working are in the data file: an entry that cannot be read is dropped with one message when it is loaded, but a placeholder in it is not checked here |
 | ERROR `ui.slots failed while being checked` | The check itself raised; the message says why |
 
-`hover.nvim` (the page preview of an address) and `sessions.marks` (slots of
+`hover.nvim` (the page preview of an address, with `preview.fetch = true`) and `sessions.marks` (slots of
 kind `mark`) are listed under "Optional integrations".
 
 ---

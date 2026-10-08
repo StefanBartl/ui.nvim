@@ -158,8 +158,9 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI slots open
 :UI slots close
     The slot bar: a chip per slot at the right edge (number, icon, label).
-    A click runs the slot, a right click offers apply, copy and clear, the
-    wheel over the bar scrolls it. With more slots than rows it scrolls like
+    A click runs the slot, a right click offers apply, edit, copy and clear
+    (and, for a file, open in a split, vsplit or tab), the wheel over the bar
+    scrolls it. With more slots than rows it scrolls like
     an accordion (the top one drops out, the next comes in below) and keeps
     the slot you applied last, or the one of the current file, in sight;
     "▲ +n" and "▼ +n" say what is hidden. The option `show = true` opens it
@@ -174,8 +175,10 @@ Theme overrides go to `ui.config.setup`, not here: >lua
     at; an address: its host, or with `preview.fetch` = true (off by
     default: it is a request to that host) its page as hover.nvim shows it,
     "loading ..." first;
-    `preview.mode` = "auto" opens it by itself after `preview.delay`
-    ms, "off" switches it off), <C-j>/<C-k> move it down/up, a right click opens a menu (apply, edit, copy,
+    `preview.mode` = "auto" opens it by itself (the preview of the row you
+    start on is there at once; `preview.delay` ms is how long the cursor must
+    rest before it follows to another row), "off" switches it off),
+    <C-j>/<C-k> move it down/up, a right click opens a menu (apply, edit, copy,
     open a file in a split, vsplit or tab, clear), q or <Esc> closes. Leaving
     the panel closes it.
 

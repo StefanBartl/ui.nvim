@@ -37,7 +37,7 @@ require("ui").setup({
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
   slots = true,    -- numbered action slots (bar, panel, previews); or a table of options
-                   -- (lua/ui/slots/README.md). Explicit-only, like notify
+                   -- (lua/ui/slots/README.md). Explicit-only; a table needs enabled = true
   tasks = {        -- options of the opt-in tasks_counter statusline segment (explicit-only;
                    -- see docs/modules.md): vault, area, areas, source, statuses, ttl_ms,
                    -- prefix, hide_zero, breakdown, urgent_prio, watch_writes, max_files
@@ -272,7 +272,8 @@ a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 `:UI notify off` puts the previous handler back.
 
 `slots` is explicit-only as well: `all = true` does not switch it on. `true`
-is `{ enabled = true }`; a table sets the options listed in
+is `{ enabled = true }`; a table only sets the options (and needs `enabled = true`
+to switch the slots on, unlike `notify`, where a table does) listed in
 [`lua/ui/slots/README.md`](../lua/ui/slots/README.md) (fixed slots, keys, the
 bar's style and side, the preview). Nothing is mapped unless `keys` asks.
 

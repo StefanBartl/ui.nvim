@@ -1091,6 +1091,28 @@ describe("ui.slots preview", function()
       file_kind.forget_positions()
     end)
 
+    it("does not take the root joined to a name for a host", function()
+      local cwd_root = { resolve = { cwd = "/", dir = "/", root = "/" } }
+      for _, lead in ipairs({ "cwd", "dir", "root" }) do
+        local pv = file_kind.preview({ kind = "file", path = "{" .. lead .. "}/TODO.md" }, cwd_root)
+        assert.is_nil(pv.lines[1]:find("network path", 1, true), lead)
+      end
+    end)
+
+    it("treats a placeholder that answers nothing as empty, not as a function", function()
+      local ctx = {
+        resolve = {
+          root = function()
+            return nil
+          end,
+        },
+      }
+      local pv = file_kind.preview({ kind = "file", path = "{root}" }, ctx)
+      assert.same({ "(the path is empty)" }, pv.lines)
+      local text = file_kind.text({ kind = "file", path = "{root}/TODO.md" }, ctx)
+      assert.is_nil(text:find("function", 1, true))
+    end)
+
     it("says a slot is needed when add gets something else", function()
       local number, why = slots.add("not a slot")
       assert.is_nil(number)

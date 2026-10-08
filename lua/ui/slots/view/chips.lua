@@ -181,7 +181,9 @@ end
 ---@return string
 local function solid_group(hl)
   local name = S.solid_groups[hl]
-  if name then
+  -- (`:colorscheme` clears the groups; the handler for it is only attached while
+  -- the bar is open)
+  if name and next(api.nvim_get_hl(0, { name = name })) ~= nil then
     return name
   end
   local fg = api.nvim_get_hl(0, { name = hl, link = false }).fg
@@ -220,6 +222,10 @@ end
 ---@param slot table
 ---@return table
 local function render(slot)
+  -- A path with a placeholder depends on the buffer you are in: not remembered.
+  if type(slot.path) == "string" and slot.path:find("{", 1, true) then
+    return registry.render(slot)
+  end
   local cached = S.render_cache[slot.n]
   local now = uv.now()
   local sig = signature(slot)
@@ -919,6 +925,9 @@ local function attach()
     return
   end
   S.attached = true
+  -- A colour scheme set while the bar was off was not seen (the handler for it
+  -- is attached only while it is on): the colours are made again.
+  S.themed, S.solid_groups, S.recolor = false, {}, true
   local group = autocmd.group(GROUP, true)
   local function on(events, fn, desc, pattern)
     autocmd.create(
@@ -940,6 +949,13 @@ local function attach()
   }, function()
     schedule()
   end, "redraw")
+
+  -- A file that was written may be there now (or gone): what the last render
+  -- found out about it is no longer true.
+  on({ "BufWritePost", "BufFilePost" }, function()
+    S.render_cache = {}
+    schedule()
+  end, "forget what was learned about files")
 
   -- What the room depends on besides the size of the editor.
   on("OptionSet", function()
@@ -988,6 +1004,8 @@ local function attach()
     S.width_floor = nil
     if event == "reload" or event == "clear_all" then
       S.render_cache, S.key_cache = {}, {}
+      -- The numbers are those of the list that is gone.
+      S.top_n, S.focus_n = nil, nil
     elseif (event == "set" or event == "move") and n then
       S.render_cache[n] = nil
       S.focus_n = n

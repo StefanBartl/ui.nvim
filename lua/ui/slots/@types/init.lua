@@ -16,7 +16,7 @@
 --- Where `preview` finds its limits and when it opens.
 ---@class Ui.Slots.PreviewConfig
 ---@field mode "key"|"auto"|"off"
----@field delay integer         # ms before `auto` opens the preview
+---@field delay integer         # ms the cursor must rest before the preview follows it to another row
 ---@field max_kb integer        # a larger file is cut here and says so
 ---@field max_lines integer
 ---@field fetch boolean         # a url slot's preview fetches the page (through hover.nvim); off by default: it is a request to that host
@@ -56,7 +56,7 @@
 ---@field persist? boolean
 ---@field target? "current"|"split"|"vsplit"|"tab"
 ---@field clipboard? string[]
----@field preview? { mode?: "key"|"auto"|"off", delay?: integer, max_kb?: integer, max_lines?: integer }
+---@field preview? { mode?: "key"|"auto"|"off", delay?: integer, max_kb?: integer, max_lines?: integer, fetch?: boolean }
 ---@field overflow? "accordion"
 ---@field keys? table<string, string|false>
 ---@field slots? table<integer, table>

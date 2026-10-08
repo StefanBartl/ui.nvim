@@ -891,6 +891,55 @@ describe("ui.slots bar", function()
       assert.is_nil(text():find("…", 1, true))
     end)
 
+    it("goes back to the top of the list when the slots are another project's", function()
+      start()
+      for i = 1, 60 do
+        store.add({ kind = "file", path = dir .. "/gone/file" .. i .. ".txt" })
+      end
+      chips.open()
+      flush()
+      chips.set_focus(55)
+      flush()
+      assert.is_true((chips.state().top_n or 1) > 1)
+      store.reload()
+      flush()
+      assert.is_nil(chips.state().focus_n)
+    end)
+
+    it("forgets what it found out about a file when the file is written", function()
+      start({ width = 80 })
+      local path = dir .. "/written_later.txt"
+      store.add({ kind = "file", path = path })
+      chips.open()
+      flush()
+      assert.is_truthy(text():find("✗", 1, true))
+      vim.fn.writefile({ "now" }, path)
+      vim.api.nvim_exec_autocmds("BufWritePost", {})
+      flush()
+      assert.is_nil(text():find("✗", 1, true))
+    end)
+
+    it(
+      "draws the solid chips again after a colour scheme that was set while it was closed",
+      function()
+        start({ style = "solid" })
+        store.add({ kind = "file", path = dir .. "/gone/solid.txt" })
+        chips.open()
+        flush()
+        chips.close()
+        vim.cmd("hi clear")
+        chips.open()
+        flush()
+        local seen = false
+        for _, group in ipairs({ "UiSlotsSolid_KitMuted", "UiSlotsSolid_KitAccent" }) do
+          if next(vim.api.nvim_get_hl(0, { name = group })) ~= nil then
+            seen = true
+          end
+        end
+        assert.is_true(seen)
+      end
+    )
+
     it("scrolls to a chip far down and draws that one in full", function()
       start()
       for i = 1, 300 do
