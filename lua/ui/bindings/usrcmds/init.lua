@@ -1051,8 +1051,13 @@ end
 ---@return nil
 function M.setup()
   -- `ui.kit` registers nothing when required (LUA-92), so its playground
-  -- command comes in with the rest of the commands.
-  pcall(require("ui.kit.preview").ensure_command)
+  -- command comes in with the rest of the commands. The `require` is inside
+  -- the protected call too: `pcall(require(...).f)` evaluates the `require`
+  -- before `pcall` runs, so a module that fails to load would abort the
+  -- setup and take `:UI` and `:Theme` with it.
+  pcall(function()
+    require("ui.kit.preview").ensure_command()
+  end)
 
   usercmd.create("UI", dispatcher, {
     nargs = "*",

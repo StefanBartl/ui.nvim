@@ -55,3 +55,53 @@ describe("requiring ui.kit", function()
     end
   end)
 end)
+
+--- `usrcmds.setup()` brings `:KitPreview` in (see above). The playground is a
+--- side feature: a `ui.kit.preview` that fails to load must not take the main
+--- commands down with it. `pcall(require("x").f)` would not guard that -- the
+--- `require` is evaluated before `pcall` runs.
+describe("ui.bindings.usrcmds.setup() with a ui.kit.preview that fails to load", function()
+  local saved
+
+  local function drop_commands()
+    for _, name in ipairs({ "UI", "Theme", "KitPreview" }) do
+      pcall(vim.api.nvim_del_user_command, name)
+    end
+  end
+
+  before_each(function()
+    saved = package.loaded["ui.kit.preview"]
+    package.loaded["ui.kit.preview"] = nil
+    package.preload["ui.kit.preview"] = function()
+      error("boom")
+    end
+    drop_commands()
+  end)
+
+  after_each(function()
+    package.preload["ui.kit.preview"] = nil
+    package.loaded["ui.kit.preview"] = saved
+    drop_commands()
+  end)
+
+  it("does not throw and still registers :UI and :Theme", function()
+    assert.has_no.errors(function()
+      require("ui.bindings.usrcmds").setup()
+    end)
+    assert.equals(2, vim.fn.exists(":UI"))
+    assert.equals(2, vim.fn.exists(":Theme"))
+    -- Only the optional playground is lost.
+    assert.equals(0, vim.fn.exists(":KitPreview"))
+  end)
+
+  it("registers :KitPreview next to them when the module loads", function()
+    package.preload["ui.kit.preview"] = nil
+    package.loaded["ui.kit.preview"] = nil
+    assert.has_no.errors(function()
+      require("ui.bindings.usrcmds").setup()
+    end)
+    assert.equals(2, vim.fn.exists(":UI"))
+    assert.equals(2, vim.fn.exists(":Theme"))
+    assert.equals(2, vim.fn.exists(":KitPreview"))
+  end)
+end)
