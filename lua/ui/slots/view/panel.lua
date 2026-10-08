@@ -349,6 +349,18 @@ local function run(n)
   require("ui.slots").apply(n)
 end
 
+--- The window the panel came from, while the panel is the current window; else
+--- nil. What reads "the current buffer" (the bar's chips) is told to read that
+--- window's instead.
+---@return integer|nil
+function M.origin_window()
+  if not (M.is_open() and api.nvim_get_current_win() == S.surf.winid) then
+    return nil
+  end
+  local from = S.from
+  return (from and api.nvim_win_is_valid(from)) and from or nil
+end
+
 --- When the panel is the current window: close it and go back to the window it
 --- came from. For whatever is about to open something in "the current window".
 function M.leave()

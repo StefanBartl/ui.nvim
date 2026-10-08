@@ -29,11 +29,14 @@ require("ui").setup({
 require("ui.slots").setup({ ... })
 ```
 
-`slots = true` is the same as `{ enabled = true }`; **a table only sets the
-options** and needs `enabled = true` to switch the slots on. `ui.setup({ all = true })` does
-**not** switch the slots on. Requiring `ui.slots` registers no command, no key
-and no autocommand; `:UI slots ...` and every API function switch it on for the
-session.
+`slots = true` switches the slots on with the options that `require("ui.slots").setup()`
+was given before; **a table sets the options anew** (everything it leaves out is
+the default) and needs `enabled = true` to switch the slots on.
+`ui.setup({ all = true })` does **not** switch the slots on. Requiring `ui.slots`
+registers no command, no key and no autocommand; `:UI slots ...` and the
+functions that work on slots (`apply`, `add`, `yank`, `clear`, `clear_all`,
+`move`, `list`, `get`, `panel`, `edit`) switch it on for the session;
+`setup`, `register_kind`, `last_applied`, `disable` and `is_enabled` do not.
 
 ## Kinds
 
@@ -43,7 +46,7 @@ session.
 | `url` | `url` | opens `http`, `https` or `mailto` addresses with the system opener; `file:` only from `setup()` (the opener would run a program as readily as show a document) | yes |
 | `yank` | `text`, `register?` | puts the text into the clipboard registers | yes |
 | `mark` | `index` | the n-th mark of sessions.nvim | yes (the index only) |
-| `cmd` | `cmd`, `args?` (a string, split into words before the placeholders go in, or a list that is taken as it is), `bang?`, `raw_values?` | runs an Ex command (`bang = true` for `:Foo!`); a value that a placeholder puts in and that holds `\|`, a backtick or starts with `+`/`!` is refused rather than quoted, unless `raw_values = true` (for commands that read `<q-args>`/`<f-args>`) | **no** |
+| `cmd` | `cmd`, `args?` (a string, split into words before the placeholders go in, or a list that is taken as it is), `bang?`, `raw_values?` | runs an Ex command whose name is letters and digits (`bang = true` for `:Foo!`); a value that a placeholder puts in is refused rather than quoted when it holds `\|` or a backtick, or when it starts the argument with `+` or `!` (the argument is `{clip}` and the value begins with `+`; `x={clip}` is fine), unless `raw_values = true` (for commands that read `<q-args>`/`<f-args>`) | **no** |
 | `lua` | `fn` | calls the function with `{ slot, n, count, ... }` | **no** |
 
 `cmd` and `lua` run code, so they come from `setup()` or from Lua only; a data
@@ -129,12 +132,14 @@ dynamic one with the same number and are not written back.
 
 **It has a size limit.** A list that takes more than `max_file_kb` (256 KB: some
 thousand short paths) is not saved -- with an error on every change after it --
-and a file above the limit is not read at all. Raise `max_file_kb` for a longer
+and a file above the limit is not read at all -- and then nothing is saved for
+the rest of the session (the file stays as it is, and one message says that a
+change was not saved). Raise `max_file_kb` for a longer
 list. There is no limit on the number of slots in a session.
 
 ## Lua API
 
-`apply(n)`, `add(opts)`, `yank(n)`, `clear(n)`, `clear_all()`, `move(from, to)`,
+`apply(n)`, `add(slot, n)` (without a slot: the current file), `yank(n)`, `clear(n)`, `clear_all()`, `move(from, to)`,
 `list()`, `get(n)`, `last_applied()`, `register_kind(name, kind)`, `panel()`,
 `edit(n)`, `setup(opts)`, `enable()`, `disable()`.
 

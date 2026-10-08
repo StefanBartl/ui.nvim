@@ -1113,6 +1113,63 @@ describe("ui.slots preview", function()
       assert.is_nil(text:find("function", 1, true))
     end)
 
+    it("tells a wrong key once, not at setup and again when the keys are mapped", function()
+      slots.reset()
+      messages = {}
+      slots.setup({
+        data_dir = dir .. "/data",
+        enabled = true,
+        keys = { appply = "<leader>%d", apply = "<leader>x" },
+      })
+      vim.wait(30)
+      local joined = table.concat(messages, "\n")
+      local _, count_unknown = joined:gsub("keys%.appply", "")
+      local _, count_pattern = joined:gsub("exactly one", "")
+      assert.equals(1, count_unknown)
+      assert.equals(1, count_pattern)
+    end)
+
+    it("reports a data_dir that is not a directory name", function()
+      config.setup({ data_dir = 42 })
+      assert.is_truthy(table.concat(config.issues(), "\n"):find("data_dir", 1, true))
+      config.setup({ data_dir = "" })
+      assert.is_truthy(table.concat(config.issues(), "\n"):find("data_dir", 1, true))
+      config.setup({ data_dir = dir })
+      assert.is_nil(table.concat(config.issues(), "\n"):find("data_dir", 1, true))
+    end)
+
+    it("does not keep the number of a list that was loaded again while the slot ran", function()
+      registry.register("reloader", {
+        apply = function()
+          store.reload()
+          return true
+        end,
+      })
+      slots.add({ kind = "reloader" })
+      assert.is_nil(slots.last_applied())
+      local before = store.reload_count()
+      assert.is_true((slots.apply(1)))
+      assert.is_true(store.reload_count() > before)
+      assert.is_nil(slots.last_applied())
+    end)
+
+    it("says that nothing is saved while the data file is not read", function()
+      local path = store.path()
+      vim.fn.mkdir(vim.fs.dirname(path), "p")
+      vim.fn.writefile(
+        { vim.json.encode({ format = "ui.slots", pad = string.rep("x", 3000), slots = {} }) },
+        path
+      )
+      config.get().max_file_kb = 1
+      store.reload()
+      messages = {}
+      store.add({ kind = "yank", text = "unsaved" })
+      vim.wait(30)
+      assert.is_truthy(
+        table.concat(messages, "\n"):find("not saved while the data file is not read", 1, true)
+      )
+    end)
+
     it("says a slot is needed when add gets something else", function()
       local number, why = slots.add("not a slot")
       assert.is_nil(number)

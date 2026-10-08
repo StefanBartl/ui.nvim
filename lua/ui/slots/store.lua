@@ -92,6 +92,9 @@ end
 ---@param n integer|nil
 local function emit(event, n)
   S.rev = (S.rev or 0) + 1
+  if event == "reload" then
+    S.reloads = (S.reloads or 0) + 1
+  end
   for _, fn in pairs(S.listeners) do
     pcall(fn, event, n)
   end
@@ -373,6 +376,13 @@ function M.revision()
   return S.rev or 0
 end
 
+--- How many times the list was loaded again (another project, `reload()`): the
+--- slot numbers from before are not those of the list that is there now.
+---@return integer
+function M.reload_count()
+  return S.reloads or 0
+end
+
 --- Write the dynamic slots now. Returns false plus a reason when nothing was
 --- written (persistence off, blocked, or the write failed).
 ---@return boolean ok
@@ -457,6 +467,7 @@ local function touch()
   -- claiming success for a change that cannot reach the disk.
   S.dirty = true
   if S.blocked then
+    say_once("not saved while the data file is not read: " .. S.blocked)
     return
   end
   local delay = config.get().save_delay_ms

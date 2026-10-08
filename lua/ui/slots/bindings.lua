@@ -82,9 +82,8 @@ function M.attach(api)
   local cfg = config.get()
   local keys = cfg.keys
 
-  for _, issue in ipairs(M.issues(keys)) do
-    util.notify(issue)
-  end
+  -- (What is wrong with `keys` is told by `setup()`, which lists
+  -- `config.issues()`; telling it here as well would be every message twice.)
 
   local apply = keys.apply
   if type(apply) == "string" and select(2, apply:gsub("%%d", "")) == 1 then

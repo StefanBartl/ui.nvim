@@ -174,10 +174,16 @@ function M.apply(n, opts)
     say(("slot %d is empty"):format(num))
     return false, "empty"
   end
+  local reloads = store.reload_count()
   local ok, err = registry.apply(slot, { count = opts and opts.count })
   if not ok then
     say(("slot %d: %s"):format(num, err))
     return false, err
+  end
+  if store.reload_count() ~= reloads then
+    -- The slot opened a file in another project and the list was loaded again:
+    -- `num` is a number of the list that is gone, not one to keep in sight.
+    return true
   end
   last_applied = num
   local bar = package.loaded["ui.slots.view.chips"]
