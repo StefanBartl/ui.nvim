@@ -8,7 +8,9 @@ Nothing here is registered until `require("ui").setup({ all = true })` runs.
 Requiring `ui.kit` (or any of its modules) registers nothing: `:KitPreview`
 comes in with the commands (`usrcmds`) or with `require("ui.kit").setup()` or
 `require("ui.kit").preview()`, and the toast's `VimResized` autocommand
-(group `lib_kit_toast_resize`) is created when the first toast opens.
+(group `lib_kit_toast_resize`) is created when the first toast opens. If the
+playground module cannot be loaded, only `:KitPreview` is missing; `:UI` and
+`:Theme` are registered regardless.
 
 ---
 
