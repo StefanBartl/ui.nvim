@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Neovim | **0.10+** |
-| [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required |
+| [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required; commit `863952e` or newer recommended (older: a float title with control characters is drawn raw instead of spelled out) |
 
 [NvChad](https://github.com/NvChad/NvChad) is **not** required, and is not
 even installed any more in the reference host this plugin was extracted
