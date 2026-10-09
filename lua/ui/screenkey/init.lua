@@ -409,6 +409,10 @@ local function apply_int(opts, field, min)
   return false
 end
 
+--- Stands for "a gap in the list" where the first bad entry of a `hide` list is kept (a real
+--- `vim.NIL` entry is a bad entry of its own).
+local GAP = {}
+
 ---@internal
 --- Whether every key of `t` is a positive integer: a list, possibly with gaps.
 ---@param t table
@@ -516,7 +520,7 @@ function M.setup(opts)
           -- ADDS to the current list instead: a privacy setting must never hide less than
           -- the caller asked for (the valid entries) or than it did before (the old ones).
           -- A gap (`{ vim.env.X, "pw" }` with X unset) is a bad entry like any other.
-          local bad = (not vim.islist(list)) and vim.NIL or nil
+          local bad = (next(list) ~= nil and not vim.islist(list)) and GAP or nil
           for _, name in pairs(list) do
             if type(name) == "string" and name ~= "" then
               set[name] = true
@@ -527,7 +531,7 @@ function M.setup(opts)
           if bad ~= nil then
             setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings, got %s (the valid ones were added to the current list)"):format(
               field,
-              bad == vim.NIL and "a gap" or vim.inspect(bad)
+              bad == GAP and "a gap" or vim.inspect(bad)
             )
             for name in pairs(cfg[target]) do
               set[name] = true
@@ -546,14 +550,15 @@ function M.setup(opts)
         "hide must be a table { buftypes, filetypes } (kept the current one)"
     end
   end
-  -- `hide` is a privacy setting: a mistake in it must not wait for someone to run
-  -- :checkhealth, while the keys it was meant to hide are on a recording.
-  if #setup_issues >= hide_from then
-    notify.warn(table.concat(setup_issues, "; ", hide_from))
-  end
   if apply_int(opts, "fade_ms", 1) then
     fader.cancel()
     fader = build_fader()
+  end
+  -- `hide` is a privacy setting: a mistake in it must not wait for someone to run
+  -- :checkhealth, while the keys it was meant to hide are on a recording. Last, and guarded: a
+  -- broken `vim.notify` override must not keep the settings above from being applied.
+  if #setup_issues >= hide_from then
+    pcall(notify.warn, table.concat(setup_issues, "; ", hide_from))
   end
 end
 

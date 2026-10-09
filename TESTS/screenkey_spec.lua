@@ -655,6 +655,32 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("an empty dict empties a hide list, a vim.NIL entry is a bad entry, not a gap", function()
+    screenkey.setup({ hide = { filetypes = { "old" } } })
+    screenkey.setup({ hide = { filetypes = vim.empty_dict() } })
+    assert.same({}, screenkey.health_issues(), "{} in its dict form is the documented way to empty")
+    screenkey.setup({ hide = { filetypes = { vim.NIL, "pw" } } })
+    local issues = table.concat(screenkey.health_issues(), "\n")
+    assert.is_truthy(issues:find("vim.NIL", 1, true), issues)
+    assert.is_nil(issues:find("a gap", 1, true), issues)
+  end)
+
+  it("a failing vim.notify does not keep the rest of setup() from being applied", function()
+    local original = vim.notify
+    vim.notify = function()
+      error("probe: notify failed")
+    end
+    local ok, err = pcall(screenkey.setup, { hide = { filetypes = "x" }, width = 37 })
+    vim.notify = original
+    assert.is_true(ok, tostring(err))
+    screenkey.enable()
+    feed("j")
+    vim.wait(300, function()
+      return current_text() ~= ""
+    end)
+    assert.equals(37, vim.api.nvim_win_get_width(screenkey.surface().winid))
+  end)
+
   it("a mistake in hide is announced at setup(), a clean call is silent", function()
     local seen = {}
     local original = vim.notify
