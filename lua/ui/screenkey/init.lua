@@ -429,11 +429,19 @@ function M.setup(opts)
   end
   if opts.hide ~= nil then
     if type(opts.hide) == "table" then
+      for key in pairs(opts.hide) do
+        if key ~= "buftypes" and key ~= "filetypes" then
+          setup_issues[#setup_issues + 1] = ("hide.%s is not a known key (buftypes, filetypes)"):format(
+            tostring(key)
+          )
+        end
+      end
       for field, target in pairs({ buftypes = "hide_buftypes", filetypes = "hide_filetypes" }) do
         local list, set = opts.hide[field], {}
         if list == nil then
           set = cfg[target]
-        elseif type(list) == "table" then
+        elseif type(list) == "table" and (next(list) == nil or vim.islist(list)) then
+          -- the given list REPLACES that field's earlier one (`{}` empties it)
           for _, name in ipairs(list) do
             if type(name) == "string" and name ~= "" then
               set[name] = true
