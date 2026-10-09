@@ -46,7 +46,7 @@ local M = {}
 ---@field theme? string|table|nil
 ---@field labels? table<string, string>
 ---@field join_chars? boolean
----@field hide? { buftypes?: string[], filetypes?: string[] } # buffers whose keys are never shown, on top of the built-in ones
+---@field hide? { buftypes?: string[], filetypes?: string[] } # buffers whose keys are never shown, on top of the built-in ones; a given list replaces that field's earlier one (`{}` empties it), one invalid entry rejects the whole list
 
 ---@class Ui.Screenkey.Config
 ---@field fade_ms integer # how long the HUD stays up after the last keystroke
@@ -70,6 +70,19 @@ local cfg = {
   join_chars = false,
   hide_buftypes = {},
   hide_filetypes = {},
+}
+
+--- The keys `M.setup()` understands; any other is reported by `M.health_issues()`.
+local KNOWN_OPTS = {
+  fade_ms = true,
+  width = true,
+  height = true,
+  margin = true,
+  max_entries = true,
+  theme = true,
+  labels = true,
+  join_chars = true,
+  hide = true,
 }
 
 ---@type boolean
@@ -427,6 +440,11 @@ function M.setup(opts)
       )
     end
   end
+  for key in pairs(opts) do
+    if not KNOWN_OPTS[key] then
+      setup_issues[#setup_issues + 1] = ("%s is not a known option (ignored)"):format(tostring(key))
+    end
+  end
   if opts.hide ~= nil then
     if type(opts.hide) == "table" then
       for key in pairs(opts.hide) do
@@ -441,16 +459,23 @@ function M.setup(opts)
         if list == nil then
           set = cfg[target]
         elseif type(list) == "table" and (next(list) == nil or vim.islist(list)) then
-          -- the given list REPLACES that field's earlier one (`{}` empties it)
+          -- the given list REPLACES that field's earlier one (`{}` empties it). One bad
+          -- entry rejects the whole list: dropping it could leave a list that hides less
+          -- than the caller meant, and this is a privacy setting.
+          local bad
           for _, name in ipairs(list) do
             if type(name) == "string" and name ~= "" then
               set[name] = true
-            else
-              setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings (dropped %s)"):format(
-                field,
-                vim.inspect(name)
-              )
+            elseif bad == nil then
+              bad = name
             end
+          end
+          if bad ~= nil then
+            setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings, got %s (kept the current list)"):format(
+              field,
+              vim.inspect(bad)
+            )
+            set = cfg[target]
           end
         else
           setup_issues[#setup_issues + 1] = ("hide.%s must be a list of strings (kept the current one)"):format(

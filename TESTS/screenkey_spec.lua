@@ -564,6 +564,43 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("a rejected hide list keeps the current one, a replacing one is in force", function()
+    screenkey.setup({ hide = { filetypes = { "keepme" } } })
+    screenkey.setup({ hide = { filetypes = { secret = true } } }) -- a dict is no list
+    screenkey.setup({ hide = { filetypes = "oops" } })
+    screenkey.setup({ hide = { filetypes = { "fine", 5 } } }) -- one bad entry rejects the list
+    assert.is_truthy(
+      table.concat(screenkey.health_issues(), "\n"):find("kept the current list", 1, true)
+    )
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(buf)
+    vim.bo[buf].buftype = "" -- only the filetype can hide this buffer
+    vim.bo[buf].filetype = "keepme"
+    feed("ia")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "the rejected calls kept the list: " .. current_text())
+    vim.cmd("stopinsert")
+    screenkey.setup({ hide = { filetypes = { "second" } } })
+    vim.bo[buf].filetype = "second"
+    feed("ib")
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "the replacing list hides: " .. current_text())
+    vim.cmd("stopinsert")
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("setup() reports an option key it does not know", function()
+    screenkey.setup({ hide_filetypes = { "x" } })
+    assert.is_truthy(
+      table
+        .concat(screenkey.health_issues(), "\n")
+        :find("hide_filetypes is not a known option", 1, true)
+    )
+    screenkey.setup({})
+    assert.same({}, screenkey.health_issues())
+  end)
+
   it("setup() rejects a malformed hide list and keeps the current one", function()
     screenkey.setup({ hide = { filetypes = { "keepme" } } })
     screenkey.setup({ hide = { filetypes = "oops", buftypes = { 5 } } })

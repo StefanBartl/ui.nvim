@@ -157,7 +157,7 @@ is fine, `<C-w>` is stored as the `<C-W>` that `keytrans()` reports -- e.g.
 encoding pass can damage it; a non-string entry, or one containing a newline, is dropped) and
 `join_chars` (a boolean: run plain characters together into one chip per
 typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and held keys (`j×8`) stay apart) and
-`hide` (`{ buftypes = {...}, filetypes = {...} }`: buffers whose keys are never shown, on top of the built-in protection described in [scope](scope.md); a later call replaces the list of each field it names and keeps the other, `{}` empties one; a non-string entry is dropped, a malformed list or an unknown key is reported).
+`hide` (`{ buftypes = {...}, filetypes = {...} }`: buffers whose keys are never shown, on top of the built-in protection described in [scope](scope.md); a later call replaces the list of each field it names and keeps the other, `{}` empties one; a list with a non-string or empty entry, a malformed list and an unknown key are reported and the current list is kept) and any other unknown option key is reported and ignored.
 
 | Line | Means |
 | --- | --- |
