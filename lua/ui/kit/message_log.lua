@@ -80,6 +80,8 @@ end
 ---@field package collapsed boolean
 ---@field package has_more_older boolean
 ---@field package has_more_newer boolean
+---@field package _pending table[]  entries parked by `append` until the main loop can draw them
+---@field package _flush_scheduled boolean
 local Handle = {}
 Handle.__index = Handle
 
@@ -226,15 +228,30 @@ function Handle:append(new_entries)
   -- Live-feed callers (`lib.nvim.messages.on_message`, fed by a
   -- `vim.ui_attach` callback) can run in a fast event context, where
   -- `nvim_win_is_valid` and every other window/buffer API is forbidden
-  -- (E5560). Defer to the main loop and re-enter; the entries are kept by
-  -- reference so nothing is lost in between.
-  if vim.in_fast_event() then
-    vim.schedule(function()
-      self:append(new_entries)
-    end)
+  -- (E5560). Park the entries in `_pending` and flush them from the main
+  -- loop. Every later append -- fast or not -- goes through the same queue
+  -- while it is non-empty, so entries can never be reordered, and a burst
+  -- of messages costs one redraw instead of one per message.
+  if #new_entries == 0 then
     return
   end
-  if not self.surf:is_valid() or #new_entries == 0 then
+  local pending = self._pending
+  if vim.in_fast_event() or #pending > 0 then
+    vim.list_extend(pending, new_entries)
+    if not self._flush_scheduled then
+      self._flush_scheduled = true
+      vim.schedule(function()
+        self._flush_scheduled = false
+        local queued = self._pending
+        self._pending = {}
+        if #queued > 0 then
+          self:append(queued)
+        end
+      end)
+    end
+    return
+  end
+  if not self.surf:is_valid() then
     return
   end
   for _, e in ipairs(new_entries) do
@@ -353,6 +370,8 @@ function M.open(opts)
     has_more_older = type(opts.load_more) == "function",
     has_more_newer = false, -- newest loaded entry is "now"; nothing newer until a live append arrives
     now_ms_fn = now_ms_fn,
+    _pending = {}, -- live entries parked by a fast-event `append`, see there
+    _flush_scheduled = false,
     _hl_ns = HL_NS,
     _arrow_ns = ARROW_NS,
   }, Handle)
