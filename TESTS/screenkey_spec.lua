@@ -556,7 +556,10 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.wait(300, function()
       return current_text():find("y", 1, true) ~= nil
     end)
-    assert.is_true(current_text():find("y", 1, true) ~= nil, "unlisted parts show: " .. current_text())
+    assert.is_true(
+      current_text():find("y", 1, true) ~= nil,
+      "unlisted parts show: " .. current_text()
+    )
     vim.cmd("stopinsert")
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
@@ -588,31 +591,37 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
-  it("a rejected hide list keeps the current one, a replacing one is in force", function()
-    screenkey.setup({ hide = { filetypes = { "keepme" } } })
-    screenkey.setup({ hide = { filetypes = { secret = true } } }) -- a dict is no list
-    screenkey.setup({ hide = { filetypes = "oops" } })
-    screenkey.setup({ hide = { filetypes = { "fine", 5 } } }) -- one bad entry rejects the list
-    assert.is_truthy(
-      table.concat(screenkey.health_issues(), "\n"):find("kept the current list", 1, true)
-    )
-    screenkey.enable()
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_set_current_buf(buf)
-    vim.bo[buf].buftype = "" -- only the filetype can hide this buffer
-    vim.bo[buf].filetype = "keepme"
-    feed("ia")
-    vim.wait(300)
-    assert.is_nil(screenkey.surface(), "the rejected calls kept the list: " .. current_text())
-    vim.cmd("stopinsert")
-    screenkey.setup({ hide = { filetypes = { "second" } } })
-    vim.bo[buf].filetype = "second"
-    feed("ib")
-    vim.wait(300)
-    assert.is_nil(screenkey.surface(), "the replacing list hides: " .. current_text())
-    vim.cmd("stopinsert")
-    vim.api.nvim_buf_delete(buf, { force = true })
-  end)
+  it(
+    "a malformed hide list keeps the current one, a bad entry only adds, a replacing one is in force",
+    function()
+      screenkey.setup({ hide = { filetypes = { "keepme" } } })
+      screenkey.setup({ hide = { filetypes = { secret = true } } }) -- a dict is no list
+      screenkey.setup({ hide = { filetypes = "oops" } })
+      -- one bad entry: the list is no trusted replacement, so "fine" is ADDED and "keepme" stays
+      screenkey.setup({ hide = { filetypes = { "fine", 5 } } })
+      assert.is_truthy(
+        table.concat(screenkey.health_issues(), "\n"):find("added to the current list", 1, true)
+      )
+      screenkey.enable()
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+      vim.bo[buf].buftype = "" -- only the filetype can hide this buffer
+      for _, ft in ipairs({ "keepme", "fine" }) do
+        vim.bo[buf].filetype = ft
+        feed("ia")
+        vim.wait(300)
+        assert.is_nil(screenkey.surface(), ft .. " is hidden: " .. current_text())
+        vim.cmd("stopinsert")
+      end
+      screenkey.setup({ hide = { filetypes = { "second" } } })
+      vim.bo[buf].filetype = "second"
+      feed("ib")
+      vim.wait(300)
+      assert.is_nil(screenkey.surface(), "the replacing list hides: " .. current_text())
+      vim.cmd("stopinsert")
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  )
 
   it("setup() reports an option key it does not know", function()
     screenkey.setup({ hide_filetypes = { "x" } })
@@ -623,6 +632,37 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     )
     screenkey.setup({})
     assert.same({}, screenkey.health_issues())
+  end)
+
+  it("setup() with something that is no table raises nothing and says so", function()
+    for _, bad in ipairs({ "x", 5, true }) do
+      assert.has_no.errors(function()
+        screenkey.setup(bad)
+      end)
+      local issues = table.concat(screenkey.health_issues(), "\n")
+      assert.is_truthy(issues:find("takes a table of options", 1, true), issues)
+    end
+    screenkey.setup()
+    assert.same({}, screenkey.health_issues())
+  end)
+
+  it("a key whose protection cannot be told is not shown and the hook survives", function()
+    screenkey.enable()
+    -- `vim.fn` resolves a field on first use and keeps it: the stub is a field of its own and
+    -- going back to the original is deleting that field.
+    vim.fn.getcmdtype = function()
+      error("probe: getcmdtype failed")
+    end
+    local ok, err = pcall(feed, "j")
+    vim.fn.getcmdtype = nil
+    assert.is_true(ok, tostring(err))
+    vim.wait(300)
+    assert.is_nil(screenkey.surface(), "an unknown state shows nothing: " .. current_text())
+    feed("k")
+    vim.wait(300, function()
+      return current_text() ~= ""
+    end)
+    assert.equals("k", current_text(), "the hook was not dropped by the failure")
   end)
 
   it("setup() rejects a malformed hide list and keeps the current one", function()

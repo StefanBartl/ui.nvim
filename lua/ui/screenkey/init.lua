@@ -46,7 +46,7 @@ local M = {}
 ---@field theme? string|table|nil
 ---@field labels? table<string, string>
 ---@field join_chars? boolean
----@field hide? { buftypes?: string[], filetypes?: string[] } # buffers whose keys are never shown, on top of the built-in ones; a given list replaces that field's earlier one (`{}` empties it), one invalid entry rejects the whole list
+---@field hide? { buftypes?: string[], filetypes?: string[] } # buffers whose keys are never shown, on top of the built-in ones; a given list replaces that field's earlier one (`{}` empties it), unless it holds an invalid entry: then its valid entries are added to the earlier list
 
 ---@class Ui.Screenkey.Config
 ---@field fade_ms integer # how long the HUD stays up after the last keystroke
@@ -298,6 +298,10 @@ end
 ---@param filetype string # the buffer's 'filetype' (may be empty or dotted)
 ---@return boolean
 local function hidden_filetype(filetype)
+  -- Asked for every key: nothing to look up while no filetype is listed (the default).
+  if next(cfg.hide_filetypes) == nil then
+    return false
+  end
   if cfg.hide_filetypes[filetype] == true then
     return true
   end
@@ -341,7 +345,13 @@ end
 ---@param key string # post-mapping raw keycode, per vim.on_key()'s own contract
 ---@return nil
 local function on_key(key)
-  if key == "" or protected() then
+  if key == "" then
+    return
+  end
+  -- An error here would make Neovim drop this callback for good, and a key whose protection
+  -- could not be told is one that must not be shown: both end the same way, silently.
+  local told, hidden = pcall(protected)
+  if not told or hidden then
     return
   end
   vim.schedule(function()
@@ -406,8 +416,16 @@ end
 ---@param opts? Ui.Screenkey.Opts
 ---@return nil
 function M.setup(opts)
-  opts = opts or {}
   setup_issues = {}
+  -- Not a table (`setup("x")`, `setup(5)`): indexing or iterating it would raise, and there is
+  -- nothing to merge, so the current settings stay.
+  if opts ~= nil and type(opts) ~= "table" then
+    setup_issues[1] = ("setup() takes a table of options (got %s) -- ignored"):format(
+      vim.inspect(opts)
+    )
+    return
+  end
+  opts = opts or {}
 
   apply_int(opts, "width", 1)
   apply_int(opts, "height", 1)
@@ -478,9 +496,10 @@ function M.setup(opts)
         if list == nil then
           set = cfg[target]
         elseif type(list) == "table" and (next(list) == nil or vim.islist(list)) then
-          -- the given list REPLACES that field's earlier one (`{}` empties it). One bad
-          -- entry rejects the whole list: dropping it could leave a list that hides less
-          -- than the caller meant, and this is a privacy setting.
+          -- the given list REPLACES that field's earlier one (`{}` empties it). With a bad
+          -- entry the list is not trusted to be a complete replacement, so what it holds
+          -- ADDS to the current list instead: a privacy setting must never hide less than
+          -- the caller asked for (the valid entries) or than it did before (the old ones).
           local bad
           for _, name in ipairs(list) do
             if type(name) == "string" and name ~= "" then
@@ -490,11 +509,13 @@ function M.setup(opts)
             end
           end
           if bad ~= nil then
-            setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings, got %s (kept the current list)"):format(
+            setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings, got %s (the valid ones were added to the current list)"):format(
               field,
               vim.inspect(bad)
             )
-            set = cfg[target]
+            for name in pairs(cfg[target]) do
+              set[name] = true
+            end
           end
         else
           setup_issues[#setup_issues + 1] = ("hide.%s must be a list of strings (kept the current one)"):format(
