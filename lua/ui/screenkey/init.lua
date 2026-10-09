@@ -550,6 +550,7 @@ function M.setup(opts)
         "hide must be a table { buftypes, filetypes } (kept the current one)"
     end
   end
+  local hide_to = #setup_issues
   if apply_int(opts, "fade_ms", 1) then
     fader.cancel()
     fader = build_fader()
@@ -557,8 +558,8 @@ function M.setup(opts)
   -- `hide` is a privacy setting: a mistake in it must not wait for someone to run
   -- :checkhealth, while the keys it was meant to hide are on a recording. Last, and guarded: a
   -- broken `vim.notify` override must not keep the settings above from being applied.
-  if #setup_issues >= hide_from then
-    pcall(notify.warn, table.concat(setup_issues, "; ", hide_from))
+  if hide_to >= hide_from then
+    pcall(notify.warn, table.concat(setup_issues, "; ", hide_from, hide_to))
   end
 end
 
