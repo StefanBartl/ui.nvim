@@ -634,6 +634,27 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     assert.same({}, screenkey.health_issues())
   end)
 
+  it("a hide list with a gap adds its valid entries instead of being dropped", function()
+    screenkey.setup({ hide = { filetypes = { "keepme" } } })
+    screenkey.setup({ hide = { filetypes = { nil, "pw" } } })
+    assert.is_truthy(
+      table.concat(screenkey.health_issues(), "\n"):find("got a gap", 1, true),
+      table.concat(screenkey.health_issues(), "\n")
+    )
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(buf)
+    vim.bo[buf].buftype = ""
+    for _, ft in ipairs({ "keepme", "pw" }) do
+      vim.bo[buf].filetype = ft
+      feed("ia")
+      vim.wait(300)
+      assert.is_nil(screenkey.surface(), ft .. " is hidden: " .. current_text())
+      vim.cmd("stopinsert")
+    end
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
   it("setup() with something that is no table raises nothing and says so", function()
     for _, bad in ipairs({ "x", 5, true }) do
       assert.has_no.errors(function()

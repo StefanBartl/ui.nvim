@@ -408,6 +408,19 @@ local function apply_int(opts, field, min)
   return false
 end
 
+---@internal
+--- Whether every key of `t` is a positive integer: a list, possibly with gaps.
+---@param t table
+---@return boolean
+local function array_like(t)
+  for k in pairs(t) do
+    if type(k) ~= "number" or k < 1 or k % 1 ~= 0 then
+      return false
+    end
+  end
+  return true
+end
+
 ---Override the shipped tunables. Safe to call before or after `M.enable()`;
 ---a `fade_ms` change takes effect on the next keystroke's fade, not
 ---retroactively on one already pending. An invalid value (wrong type, or
@@ -495,13 +508,14 @@ function M.setup(opts)
         local list, set = opts.hide[field], {}
         if list == nil then
           set = cfg[target]
-        elseif type(list) == "table" and (next(list) == nil or vim.islist(list)) then
+        elseif type(list) == "table" and (next(list) == nil or array_like(list)) then
           -- the given list REPLACES that field's earlier one (`{}` empties it). With a bad
           -- entry the list is not trusted to be a complete replacement, so what it holds
           -- ADDS to the current list instead: a privacy setting must never hide less than
           -- the caller asked for (the valid entries) or than it did before (the old ones).
-          local bad
-          for _, name in ipairs(list) do
+          -- A gap (`{ vim.env.X, "pw" }` with X unset) is a bad entry like any other.
+          local bad = (not vim.islist(list)) and vim.NIL or nil
+          for _, name in pairs(list) do
             if type(name) == "string" and name ~= "" then
               set[name] = true
             elseif bad == nil then
@@ -511,7 +525,7 @@ function M.setup(opts)
           if bad ~= nil then
             setup_issues[#setup_issues + 1] = ("hide.%s entries must be non-empty strings, got %s (the valid ones were added to the current list)"):format(
               field,
-              vim.inspect(bad)
+              bad == vim.NIL and "a gap" or vim.inspect(bad)
             )
             for name in pairs(cfg[target]) do
               set[name] = true
