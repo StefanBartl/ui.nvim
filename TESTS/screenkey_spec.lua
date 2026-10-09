@@ -537,12 +537,44 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("a later setup({ hide }) replaces the list of that field and keeps the other", function()
+    screenkey.setup({ hide = { filetypes = { "first" }, buftypes = { "nofile" } } })
+    screenkey.setup({ hide = { filetypes = { "second" } } })
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true) -- buftype=nofile, still hidden
+    vim.api.nvim_set_current_buf(buf)
+    vim.bo[buf].filetype = "first" -- no longer hidden, but the buftype is
+    feed("ia")
+    vim.wait(300)
+    assert.is_nil(
+      screenkey.surface(),
+      "the untouched buftypes list still hides: " .. current_text()
+    )
+    vim.cmd("stopinsert")
+    screenkey.setup({ hide = { buftypes = {} } }) -- `{}` empties the field
+    feed("ib")
+    vim.wait(300, function()
+      return current_text():find("b", 1, true) ~= nil
+    end)
+    assert.is_true(
+      current_text():find("b", 1, true) ~= nil,
+      "an emptied list hides nothing: " .. current_text()
+    )
+    vim.cmd("stopinsert")
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
   it("setup() rejects a malformed hide list and keeps the current one", function()
     screenkey.setup({ hide = { filetypes = { "keepme" } } })
     screenkey.setup({ hide = { filetypes = "oops", buftypes = { 5 } } })
     local issues = table.concat(screenkey.health_issues(), "\n")
     assert.is_truthy(issues:find("hide.filetypes", 1, true), issues)
     assert.is_truthy(issues:find("hide.buftypes", 1, true), issues)
+    -- a dict-shaped table is no list; an unknown key is named
+    screenkey.setup({ hide = { filetypes = { secret = true }, filetype = { "x" } } })
+    issues = table.concat(screenkey.health_issues(), "\n")
+    assert.is_truthy(issues:find("hide.filetypes must be a list", 1, true), issues)
+    assert.is_truthy(issues:find("hide.filetype is not a known key", 1, true), issues)
     screenkey.setup({ hide = 3 })
     assert.is_truthy(
       table.concat(screenkey.health_issues(), "\n"):find("hide must be a table", 1, true)
