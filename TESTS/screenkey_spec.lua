@@ -537,6 +537,30 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("hides a dotted filetype when any of its parts is listed", function()
+    screenkey.setup({ hide = { filetypes = { "secretft" } } })
+    screenkey.enable()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(buf)
+    vim.bo[buf].buftype = ""
+    for _, ft in ipairs({ "secretft.local", "other.secretft", "secretft" }) do
+      vim.bo[buf].filetype = ft
+      feed("ix")
+      vim.wait(300)
+      assert.is_nil(screenkey.surface(), ft .. " shows nothing: " .. current_text())
+      vim.cmd("stopinsert")
+    end
+    -- a part that is not listed, and a name that merely contains a listed one, still show
+    vim.bo[buf].filetype = "secretftx.local"
+    feed("iy")
+    vim.wait(300, function()
+      return current_text():find("y", 1, true) ~= nil
+    end)
+    assert.is_true(current_text():find("y", 1, true) ~= nil, "unlisted parts show: " .. current_text())
+    vim.cmd("stopinsert")
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
   it("a later setup({ hide }) replaces the list of that field and keeps the other", function()
     screenkey.setup({ hide = { filetypes = { "first" }, buftypes = { "nofile" } } })
     screenkey.setup({ hide = { filetypes = { "second" } } })
