@@ -163,6 +163,8 @@ typed word, a short repeat spelled out ("app"), while `<Esc>`, `<C-…>` and hel
 | --- | --- |
 | OK `no rejected config values from the last setup() call` | Every field validated |
 | WARN `<field> must be ...` (one per rejected field) | That `setup()` call passed something invalid for `<field>`; the message names what was kept instead |
+| WARN `<key> is not a known option (ignored)` | `setup()` got a key it does not know (often a misspelling); it had no effect |
+| WARN `hide.<field> ...` (also shown as a notification at `setup()`) | A mistake in `hide`: an entry that is not a non-empty string, a malformed list, an unknown key; the message says which entries were kept or added |
 | ERROR `ui.screenkey did not load` | The module errored on require |
 
 ---

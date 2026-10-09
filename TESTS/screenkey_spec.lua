@@ -752,4 +752,26 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
       table.concat(screenkey.health_issues(), "\n"):find("hide must be a table", 1, true)
     )
   end)
+
+  it("setup() knows every option it documents, so none is reported as unknown", function()
+    screenkey.setup({
+      fade_ms = 1500,
+      width = 30,
+      height = 1,
+      margin = 1,
+      max_entries = 20,
+      theme = nil,
+      labels = { ["<Space>"] = "_" },
+      join_chars = true,
+      hide = { buftypes = {}, filetypes = {} },
+    })
+    assert.same({}, screenkey.health_issues())
+    -- and an option it does not know has no effect: nothing is hidden by a misspelt key
+    screenkey.setup({ hide_filetypes = { "x" }, hide = { filetypes = { "keepme" } } })
+    assert.is_truthy(
+      table
+        .concat(screenkey.health_issues(), "\n")
+        :find("hide_filetypes is not a known option", 1, true)
+    )
+  end)
 end)
