@@ -320,6 +320,69 @@ describe("ui.kit.message_log", function()
     end
   )
 
+  it("append() from a fast event context is deferred, not an E5560 error", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      entries = { { time_ms = 0, content = "first" } },
+    })
+    local fast, err
+    local timer = vim.uv.new_timer()
+    timer:start(0, 0, function()
+      timer:close()
+      fast = vim.in_fast_event()
+      -- Two appends in one fast event: both must survive, in order.
+      err = select(2, pcall(handle.append, handle, { { time_ms = 0, content = "second" } }))
+      pcall(handle.append, handle, { { time_ms = 0, content = "third" } })
+    end)
+    vim.wait(1000, function()
+      return #lines(handle) >= 3
+    end)
+    assert.is_true(fast, "the callback really ran in a fast event")
+    assert.is_nil(err)
+    local got = lines(handle)
+    assert.equals(3, #got)
+    assert.truthy(got[1]:match("first$"))
+    assert.truthy(got[2]:match("second$"))
+    assert.truthy(got[3]:match("third$"))
+  end)
+
+  it("a direct append() never overtakes entries still queued from a fast event", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      entries = {},
+    })
+    handle._pending = { { time_ms = 0, content = "queued" } }
+    handle:append({ { time_ms = 0, content = "direct" } })
+    vim.wait(1000, function()
+      return #handle.entries >= 2
+    end)
+    assert.equals("queued", handle.entries[1].content)
+    assert.equals("direct", handle.entries[2].content)
+  end)
+
+  it("a queued append() after the window closed is a harmless no-op", function()
+    handle = message_log.open({ entries = {} })
+    local errors = {}
+    local notify = vim.notify
+    vim.notify = function(msg)
+      errors[#errors + 1] = msg
+    end
+    handle._pending = { { time_ms = 0, content = "late" } }
+    handle:append({ { time_ms = 0, content = "later" } })
+    handle:close()
+    local drained = vim.wait(1000, function()
+      return not handle._flush_scheduled
+    end)
+    vim.notify = notify
+    assert.is_true(drained, "the scheduled flush ran")
+    assert.same({}, errors)
+    handle = nil -- already closed, after_each must not double-close
+  end)
+
   it("on_close fires when the window is closed", function()
     local closed = false
     handle = message_log.open({ entries = {} })
