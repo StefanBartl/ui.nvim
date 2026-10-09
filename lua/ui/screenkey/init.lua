@@ -30,6 +30,7 @@ local surface = require("ui.kit.surface")
 local debounce = require("lib.nvim.debounce")
 local normalize = require("lib.nvim.normalize")
 local autocmd = require("lib.nvim.bindings.autocmd")
+local notify = require("lib.nvim.notify").create("[ui.screenkey]")
 
 local NS = vim.api.nvim_create_namespace("ui_screenkey")
 
@@ -495,6 +496,7 @@ function M.setup(opts)
       setup_issues[#setup_issues + 1] = ("%s is not a known option (ignored)"):format(tostring(key))
     end
   end
+  local hide_from = #setup_issues + 1
   if opts.hide ~= nil then
     if type(opts.hide) == "table" then
       for key in pairs(opts.hide) do
@@ -543,6 +545,11 @@ function M.setup(opts)
       setup_issues[#setup_issues + 1] =
         "hide must be a table { buftypes, filetypes } (kept the current one)"
     end
+  end
+  -- `hide` is a privacy setting: a mistake in it must not wait for someone to run
+  -- :checkhealth, while the keys it was meant to hide are on a recording.
+  if #setup_issues >= hide_from then
+    notify.warn(table.concat(setup_issues, "; ", hide_from))
   end
   if apply_int(opts, "fade_ms", 1) then
     fader.cancel()

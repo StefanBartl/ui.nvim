@@ -655,6 +655,25 @@ describe("ui.screenkey and a prompt that is not the kit's", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("a mistake in hide is announced at setup(), a clean call is silent", function()
+    local seen = {}
+    local original = vim.notify
+    vim.notify = function(msg)
+      seen[#seen + 1] = tostring(msg)
+    end
+    local ok, err = pcall(function()
+      screenkey.setup({ hide = { filetypes = { "pw" } } })
+      assert.same({}, seen, "a clean call says nothing")
+      screenkey.setup({ hide = { filetypes = "pw" } })
+      assert.equals(1, #seen, vim.inspect(seen))
+      assert.is_truthy(seen[1]:find("hide.filetypes must be a list", 1, true), seen[1])
+      screenkey.setup({ fade_ms = 100 })
+      assert.equals(1, #seen, "an unrelated call adds nothing")
+    end)
+    vim.notify = original
+    assert.is_true(ok, tostring(err))
+  end)
+
   it("setup() with something that is no table raises nothing and says so", function()
     for _, bad in ipairs({ "x", 5, true }) do
       assert.has_no.errors(function()
