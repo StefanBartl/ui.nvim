@@ -223,6 +223,17 @@ end
 ---(already filtered/ordered the way the caller wants).
 ---@param new_entries table[]
 function Handle:append(new_entries)
+  -- Live-feed callers (`lib.nvim.messages.on_message`, fed by a
+  -- `vim.ui_attach` callback) can run in a fast event context, where
+  -- `nvim_win_is_valid` and every other window/buffer API is forbidden
+  -- (E5560). Defer to the main loop and re-enter; the entries are kept by
+  -- reference so nothing is lost in between.
+  if vim.in_fast_event() then
+    vim.schedule(function()
+      self:append(new_entries)
+    end)
+    return
+  end
   if not self.surf:is_valid() or #new_entries == 0 then
     return
   end
