@@ -291,6 +291,25 @@ local function render()
 end
 
 ---@internal
+--- Whether a buffer's 'filetype' is on the `hide.filetypes` set. The option can hold several
+--- names joined by dots (`pw.local`: Neovim treats each part as a filetype of its own), so
+--- the whole value matches and so does any single part; an exact lookup alone would show
+--- the keys typed into `pw.local` although `pw` is listed.
+---@param filetype string # the buffer's 'filetype' (may be empty or dotted)
+---@return boolean
+local function hidden_filetype(filetype)
+  if cfg.hide_filetypes[filetype] == true then
+    return true
+  end
+  for part in filetype:gmatch("[^.]+") do
+    if cfg.hide_filetypes[part] == true then
+      return true
+    end
+  end
+  return false
+end
+
+---@internal
 --- Whether what is typed right now must stay off the HUD: a prompt of the kit marked as
 --- secret, a waiting `input()`/`inputsecret()` (command-line type `@` / `-`), a `buftype=prompt`
 --- buffer, or a buffer of the `hide` lists. Asked synchronously in `on_key`, see there.
@@ -306,7 +325,7 @@ local function protected()
   local bo = vim.bo[vim.api.nvim_get_current_buf()]
   return bo.buftype == "prompt"
     or cfg.hide_buftypes[bo.buftype] == true
-    or cfg.hide_filetypes[bo.filetype] == true
+    or hidden_filetype(bo.filetype)
 end
 
 ---@internal
