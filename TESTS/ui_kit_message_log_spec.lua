@@ -558,6 +558,27 @@ describe("ui.kit.message_log", function()
     end)
   end)
 
+  it("CRLF, a trailing newline and a NUL byte do not leak into the buffer", function()
+    handle = message_log.open({
+      now_ms = function()
+        return 0
+      end,
+      entries = {
+        { time_ms = 0, content = "one\r\ntwo\r\n" },
+        { time_ms = 0, content = "nul\0inside" },
+      },
+    })
+    local got = lines(handle)
+    assert.equals(3, #got, "no empty line from the trailing newline")
+    assert.equals("two", got[2], "no stray carriage return")
+    assert.is_nil(got[3]:find("%z"), "no NUL in the buffer")
+    handle:set_collapsed(true)
+    assert.truthy(
+      lines(handle)[1]:match("%(%+1 more line%)$"),
+      "count excludes the trailing newline"
+    )
+  end)
+
   describe("legend", function()
     it("announces the cheatsheet below the last line, with or without a 'newer' hint", function()
       handle = message_log.open({
