@@ -127,6 +127,41 @@ describe("ui.tabline.styles decorators", function()
     assert.equals("xB", chips[1])
   end)
 
+  it("reports a raising decorator once, not once per redraw", function()
+    local warned = {}
+    local notify = require("lib.nvim.notify")
+    local original = notify.create
+    notify.create = function(...)
+      local n = original(...)
+      return setmetatable({
+        warn = function(msg)
+          warned[#warned + 1] = msg
+        end,
+      }, { __index = n })
+    end
+
+    styles.add_decorator("t_boom", function()
+      error("boom")
+    end)
+    for _ = 1, 3 do
+      styles.decorate({ "x" }, { 1 }, 1, false)
+    end
+    notify.create = original
+
+    assert.equals(1, #warned, vim.inspect(warned))
+    assert.is_truthy(warned[1]:find("t_boom", 1, true))
+  end)
+
+  it("picks up a decorator added after the first redraw", function()
+    local chips = { "x" }
+    styles.decorate(chips, { 1 }, 1, false) -- primes the order cache
+    styles.add_decorator("t_a", function(c)
+      c[1] = c[1] .. "A"
+    end)
+    styles.decorate(chips, { 1 }, 1, false)
+    assert.equals("xA", chips[1])
+  end)
+
   it("remove_decorator stops it running and is a no-op for an unknown name", function()
     styles.add_decorator("t_a", function(chips)
       chips[1] = chips[1] .. "A"

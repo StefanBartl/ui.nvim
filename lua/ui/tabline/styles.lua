@@ -109,10 +109,20 @@ end
 ---@type table<string, Ui.Tabline.StyleFn>
 local _decorators = {}
 
+-- The names in `_decorators`, sorted -- rebuilt only when a decorator is
+-- added or removed, not on every redraw (`decorate` runs on nearly every one).
+---@type string[]|nil
+local _decorator_order = nil
+
+-- Decorators that already raised once, so a broken one is reported once
+-- instead of once per redraw.
+---@type table<string, true>
+local _decorator_failed = {}
+
 ---Add (or replace) a decorator under `name`. It is called with exactly the
 ---arguments a style gets, after the style ran, on every tabline redraw -- so
----it must be cheap and must not raise (a raise is caught and skipped, but
----costs a pcall per redraw). It may rewrite `chips[i]` in place; it must
+---it must be cheap and must not raise (a raise is caught and reported once,
+---but costs a pcall per redraw). It may rewrite `chips[i]` in place; it must
 ---not change the display width of a chip (the bar's budget was already
 ---decided) nor the number of chips.
 ---@param name string
@@ -120,6 +130,8 @@ local _decorators = {}
 ---@return nil
 function M.add_decorator(name, fn)
   _decorators[name] = fn
+  _decorator_order = nil
+  _decorator_failed[name] = nil
 end
 
 ---Remove a decorator. No-op if `name` was never added.
@@ -127,6 +139,8 @@ end
 ---@return nil
 function M.remove_decorator(name)
   _decorators[name] = nil
+  _decorator_order = nil
+  _decorator_failed[name] = nil
 end
 
 ---Run every decorator, in name order (so two hosts never depend on load
@@ -138,16 +152,24 @@ end
 ---@param flush_right boolean
 ---@return nil
 function M.decorate(chips, chip_bufs, cur, flush_right)
-  if next(_decorators) == nil then
-    return
+  local order = _decorator_order
+  if not order then
+    order = {}
+    for name in pairs(_decorators) do
+      order[#order + 1] = name
+    end
+    table.sort(order)
+    _decorator_order = order
   end
-  local names = {}
-  for name in pairs(_decorators) do
-    names[#names + 1] = name
-  end
-  table.sort(names)
-  for _, name in ipairs(names) do
-    pcall(_decorators[name], chips, chip_bufs, cur, flush_right)
+  for i = 1, #order do
+    local name = order[i]
+    local ok, err = pcall(_decorators[name], chips, chip_bufs, cur, flush_right)
+    if not ok and not _decorator_failed[name] then
+      _decorator_failed[name] = true
+      require("lib.nvim.notify")
+        .create("[ui.tabline.styles]")
+        .warn(("decorator %q raised: %s"):format(name, tostring(err)))
+    end
   end
 end
 
