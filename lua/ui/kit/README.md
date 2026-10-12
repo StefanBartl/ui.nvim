@@ -366,23 +366,43 @@ values, so an epoch clock works equally well.
 
 | Key | Does |
 | --- | --- |
+| `<CR>`, `<Tab>`, `za` (also a double click) | expand / collapse the **entry under the cursor** |
+| `zo` / `zc` | expand / collapse the entry under the cursor (explicit) |
+| `<C-l>`, `zR` | expand all entries |
+| `<C-h>`, `<BS>`, `zM` | collapse all entries (first content line only, with a "+N more lines" marker) |
+| `<C-e>` | flip between all expanded / all collapsed |
+| `<C-j>`, `+` | load older entries (`opts.load_more("older")`) |
+| `<C-k>`, `-` | load newer entries (`opts.load_more("newer")`) |
+| `?`, `g?` | cheatsheet: this table, built from the very mapping list (plus `opts.extra_cheatsheet_lines`) |
 | `q`, `<Esc>` | close |
-| `<C-j>` | load older entries (`opts.load_more("older")`) |
-| `<C-k>` | load newer entries (`opts.load_more("newer")`) |
-| `<C-l>` | expand (un-collapse) |
-| `<C-h>` | collapse (first content line per entry only, with a "+N more lines" marker) |
-| `<C-e>` | toggle collapsed mode |
-| `?` | cheatsheet (this table, plus `opts.extra_cheatsheet_lines`) |
+
+The cheatsheet is a `kit.viewer` opened **over** the log: the log stays open
+behind it (its dismiss-on-focus-lost is suspended meanwhile), `q`/`<Esc>`/`?`
+closes the sheet and the focus returns to the log. The frame carries a `? keys`
+footer as a reminder. `<BS>` folds too because some terminals send it for
+`<C-h>`; `+`/`-` are the plain-key fallback for the `<C-j>`/`<C-k>` pair,
+which many setups use for window navigation.
+
+Entries with more than one line carry a `▸` (folded) / `▾` (open) marker as
+virtual text -- the buffer text itself is untouched. The cursor line is
+highlighted, since that is the entry `<CR>` acts on. When entries are expanded
+or older ones are loaded the cursor stays on the entry being read; a cursor on
+the newest entry follows the live feed (`append`), anywhere else it stays put.
 
 Pagination hints render as virtual text at the top/bottom edge (`󰁝 more
 above`/`󰁅 more below`) only while `opts.load_more` is set and hasn't yet
-reported "nothing left" in that direction — a `load_more` call returning an
+reported "nothing left" in that direction -- a `load_more` call returning an
 empty list hides that arrow for the rest of the popup's life, it is not
-re-offered. Plain `j`/`k`/arrows always just scroll; pagination is `<C-j>`/
-`<C-k>` only, on purpose (a held `j`/`↓` must never accidentally page).
+re-offered, so `load_more` must only return `{}` when there really is nothing
+older (a gap in a time-window pager is not "nothing"). Pass
+`has_more_older = false` when you already know the source is empty. Plain
+`j`/`k`/arrows always just scroll; pagination is explicit on purpose (a held
+`j`/`↓` must never accidentally page).
 
 `handle:append(entries)`, `handle:load_more(direction)`,
-`handle:set_collapsed(value?)`, `handle:on_close(cb)`, `handle:close()`.
+`handle:set_collapsed(value?)` (all entries), `handle:set_entry_collapsed(value?, entry?)`,
+`handle:toggle_entry()`, `handle:toggle_cheatsheet()`, `handle:on_close(cb)`,
+`handle:close()`.
 
 ### Compare (pick two, view side by side)
 

@@ -383,6 +383,313 @@ describe("ui.kit.message_log", function()
     handle = nil -- already closed, after_each must not double-close
   end)
 
+  ---@param keys string
+  local function press(keys)
+    vim.api.nvim_feedkeys(vim.keycode(keys), "mx", false)
+  end
+
+  ---@param h table
+  ---@return integer
+  local function cursor_line(h)
+    return vim.api.nvim_win_get_cursor(h.surf.winid)[1]
+  end
+
+  local function three_multiline()
+    return {
+      { time_ms = 0, content = "a1\na2\na3" },
+      { time_ms = 0, content = "b1\nb2" },
+      { time_ms = 0, content = "c1" },
+    }
+  end
+
+  describe("per-entry expand / collapse", function()
+    it("<CR> on one entry opens only that entry; a second <CR> folds it again", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        collapsed_default = true,
+        entries = three_multiline(),
+      })
+      assert.equals(3, #lines(handle), "everything starts folded")
+
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      press("<CR>")
+      local got = lines(handle)
+      assert.equals(5, #got, "only the first entry (3 lines) opened: 3 + 1 + 1")
+      assert.truthy(got[2] == "a2" and got[3] == "a3")
+      assert.truthy(got[4]:match("b1"), "the second entry stays folded")
+
+      press("<CR>")
+      assert.equals(3, #lines(handle), "the same key folds it again")
+    end)
+
+    it("works from any line of an open entry, not just its first", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        collapsed_default = false,
+        entries = three_multiline(),
+      })
+      assert.equals(6, #lines(handle))
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 3, 0 }) -- "a3"
+      press("zc")
+      assert.equals(4, #lines(handle), "entry a folded from its third line")
+      assert.equals(1, cursor_line(handle), "the cursor follows the folded entry to its first line")
+    end)
+
+    it("zo / zc are explicit; the cursor stays on the entry when lines shift above it", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        collapsed_default = true,
+        entries = three_multiline(),
+      })
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 2, 0 }) -- entry b
+      press("zo")
+      press("zo") -- idempotent
+      assert.equals(4, #lines(handle))
+      assert.equals(2, cursor_line(handle))
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      press("zo") -- entry a opens above b: b moves down, cursor stays on a
+      assert.equals(1, cursor_line(handle))
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 4, 0 }) -- b1
+      press("zc")
+      assert.equals(4, cursor_line(handle), "b is still at line 4 and folded")
+    end)
+
+    it("zR / zM / <C-e> act on all entries and forget the per-entry choices", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        collapsed_default = true,
+        entries = three_multiline(),
+      })
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      press("zo")
+      press("zM")
+      assert.equals(3, #lines(handle), "zM folds the entry that was opened by hand too")
+      press("zR")
+      assert.equals(6, #lines(handle))
+      press("<C-e>")
+      assert.equals(3, #lines(handle), "<C-e> flips between all open and all folded")
+      press("<C-l>")
+      assert.equals(6, #lines(handle))
+      press("<C-h>")
+      assert.equals(3, #lines(handle))
+      press("<BS>")
+      assert.equals(3, #lines(handle), "<BS> folds as well (a terminal may send it for <C-h>)")
+    end)
+
+    it("the placeholder line is not an entry: toggling it is a harmless no-op", function()
+      handle = message_log.open({ entries = {} })
+      press("<CR>")
+      press("zo")
+      assert.same({ "(no messages)" }, lines(handle))
+    end)
+
+    it("marks folded and open entries with ▸ / ▾ without touching the buffer text", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        collapsed_default = true,
+        entries = { { time_ms = 0, content = "x\ny" }, { time_ms = 0, content = "single" } },
+      })
+      local function mark_texts()
+        local out = {}
+        local marks = vim.api.nvim_buf_get_extmarks(
+          handle.surf.bufnr,
+          vim.api.nvim_create_namespace("ui_kit_message_log_marks"),
+          0,
+          -1,
+          { details = true }
+        )
+        for _, m in ipairs(marks) do
+          out[m[2] + 1] = m[4].virt_text[1][1]
+        end
+        return out
+      end
+      assert.same({ "▸ ", "  " }, mark_texts())
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      press("<CR>")
+      assert.same({ "▾ ", "│ ", "  " }, mark_texts())
+      for _, l in ipairs(lines(handle)) do
+        assert.is_nil(l:find("[▸▾│]"), "the marks are virtual text, not buffer text")
+      end
+    end)
+  end)
+
+  describe("pagination", function()
+    it("keeps the cursor on the entry it was on when older ones are prepended", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "newer" } },
+        load_more = function()
+          return { { time_ms = 0, content = "old1" }, { time_ms = 0, content = "old2" } }
+        end,
+      })
+      assert.equals(1, cursor_line(handle))
+      press("<C-j>")
+      assert.equals(3, #lines(handle))
+      assert.equals(3, cursor_line(handle), "still on 'newer', now line 3")
+      press("+")
+      assert.equals(5, #lines(handle), "'+' pages as well")
+    end)
+
+    it("has_more_older = false shows no hint and no extra row", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "one" }, { time_ms = 0, content = "two" } },
+        has_more_older = false,
+        load_more = function()
+          return {}
+        end,
+      })
+      assert.is_false(handle.has_more_older)
+      assert.equals(2, vim.api.nvim_win_get_config(handle.surf.winid).height)
+    end)
+  end)
+
+  describe("live feed", function()
+    it("a cursor on the newest entry follows an append; elsewhere it stays put", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "one" }, { time_ms = 0, content = "two" } },
+      })
+      assert.equals(2, cursor_line(handle), "the first draw rests on the newest entry")
+      handle:append({ { time_ms = 0, content = "three" } })
+      assert.equals(3, cursor_line(handle), "followed")
+
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      handle:append({ { time_ms = 0, content = "four" } })
+      assert.equals(1, cursor_line(handle), "the entry being read did not move")
+    end)
+
+    it("newest_first starts on line 1 and follows new entries to the top", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        order = "newest_first",
+        entries = { { time_ms = 0, content = "one" }, { time_ms = 0, content = "two" } },
+      })
+      assert.equals(1, cursor_line(handle))
+      handle:append({ { time_ms = 0, content = "three" } })
+      assert.equals(1, cursor_line(handle))
+      assert.truthy(lines(handle)[1]:match("three$"))
+    end)
+  end)
+
+  describe("closing", function()
+    it("q closes the window", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local win = handle.surf.winid
+      press("q")
+      assert.is_false(vim.api.nvim_win_is_valid(win))
+      handle = nil
+    end)
+
+    it("<Esc> closes the window", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local win = handle.surf.winid
+      press("<Esc>")
+      assert.is_false(vim.api.nvim_win_is_valid(win))
+      handle = nil
+    end)
+
+    it("q / <Esc> work with a load_more set and the cheatsheet used before", function()
+      handle = message_log.open({
+        entries = { { time_ms = 0, content = "x" } },
+        load_more = function()
+          return {}
+        end,
+      })
+      local win = handle.surf.winid
+      press("?")
+      press("q") -- closes the cheatsheet only
+      vim.wait(200, function()
+        return vim.api.nvim_get_current_win() == win
+      end)
+      assert.is_true(vim.api.nvim_win_is_valid(win), "the log survived the cheatsheet")
+      press("<Esc>")
+      assert.is_false(vim.api.nvim_win_is_valid(win))
+      handle = nil
+    end)
+  end)
+
+  describe("cheatsheet", function()
+    it("? opens it over the log without closing the log; q gives the focus back", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local log_win = handle.surf.winid
+      press("?")
+      local sheet_win = vim.api.nvim_get_current_win()
+      assert.are_not.equals(log_win, sheet_win, "the sheet took the focus")
+      assert.is_true(vim.api.nvim_win_is_valid(log_win), "the log is still there")
+      local text = table.concat(
+        vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(sheet_win), 0, -1, false),
+        "\n"
+      )
+      assert.truthy(text:find("expand / collapse the entry", 1, true))
+      assert.truthy(text:find("load older entries", 1, true))
+      assert.truthy(text:find("close", 1, true))
+
+      press("q")
+      vim.wait(500, function()
+        return vim.api.nvim_get_current_win() == log_win
+      end)
+      assert.is_false(vim.api.nvim_win_is_valid(sheet_win))
+      assert.equals(log_win, vim.api.nvim_get_current_win(), "focus is back on the log")
+      assert.is_true(vim.api.nvim_win_is_valid(log_win))
+    end)
+
+    it("lists every key that is actually mapped in the log buffer", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      press("?")
+      local sheet_buf = vim.api.nvim_win_get_buf(vim.api.nvim_get_current_win())
+      local text = table.concat(vim.api.nvim_buf_get_lines(sheet_buf, 0, -1, false), "\n")
+      for _, lhs in ipairs({ "<CR>", "<Tab>", "za", "zo", "zc", "<C-l>", "zR", "<C-h>", "zM" }) do
+        assert.truthy(text:find(lhs, 1, true), lhs .. " is documented in the cheatsheet")
+      end
+      for _, lhs in ipairs({ "<C-e>", "<C-j>", "+", "<C-k>", "-", "?", "q", "<Esc>" }) do
+        assert.truthy(text:find(lhs, 1, true), lhs .. " is documented in the cheatsheet")
+      end
+      press("q")
+    end)
+
+    it("extra_cheatsheet_lines are appended; ? again closes the sheet", function()
+      handle = message_log.open({
+        entries = { { time_ms = 0, content = "x" } },
+        extra_cheatsheet_lines = { "custom: something" },
+      })
+      press("?")
+      local sheet_win = vim.api.nvim_get_current_win()
+      local sheet_buf = vim.api.nvim_win_get_buf(sheet_win)
+      local text = table.concat(vim.api.nvim_buf_get_lines(sheet_buf, 0, -1, false), "\n")
+      assert.truthy(text:find("custom: something", 1, true))
+      handle:toggle_cheatsheet()
+      assert.is_false(vim.api.nvim_win_is_valid(sheet_win))
+    end)
+
+    it("closing the log closes its cheatsheet too", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      press("?")
+      local sheet_win = vim.api.nvim_get_current_win()
+      handle:close()
+      assert.is_false(vim.api.nvim_win_is_valid(sheet_win))
+      handle = nil
+    end)
+  end)
+
   it("on_close fires when the window is closed", function()
     local closed = false
     handle = message_log.open({ entries = {} })
