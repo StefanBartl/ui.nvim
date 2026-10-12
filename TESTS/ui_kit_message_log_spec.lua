@@ -195,9 +195,9 @@ describe("ui.kit.message_log", function()
       { time_ms = 0, content = "four" },
     })
     assert.equals(
-      4,
+      5,
       vim.api.nvim_win_get_config(handle.surf.winid).height,
-      "grows with real content once past the 2-row floor"
+      "grows with real content (4) plus the legend row"
     )
   end)
 
@@ -215,9 +215,9 @@ describe("ui.kit.message_log", function()
     -- "more above" virt_line is a real rendered row, so the window must be
     -- content (2) + 1 for the hint, not just content.
     assert.equals(
-      3,
+      4,
       vim.api.nvim_win_get_config(handle.surf.winid).height,
-      "height includes the 'more above' hint row, not just the buffer's own 2 lines"
+      "height includes the 'more above' hint row and the legend, not just the buffer's own 2 lines"
     )
     -- The extra row alone isn't enough -- Neovim's default viewport does
     -- NOT reveal virt_lines_above on line 1 on its own (discovered live-
@@ -235,9 +235,9 @@ describe("ui.kit.message_log", function()
     -- Once load_more reports nothing left, the hint (and its row) go away.
     handle:load_more("older")
     assert.equals(
-      2,
+      3,
       vim.api.nvim_win_get_config(handle.surf.winid).height,
-      "height shrinks back once the pagination hint is gone"
+      "height shrinks back once the pagination hint is gone (the legend stays)"
     )
     vim.api.nvim_win_call(handle.surf.winid, function()
       assert.equals(0, vim.fn.winsaveview().topfill, "topfill resets once the hint is gone")
@@ -554,7 +554,45 @@ describe("ui.kit.message_log", function()
         end,
       })
       assert.is_false(handle.has_more_older)
-      assert.equals(2, vim.api.nvim_win_get_config(handle.surf.winid).height)
+      assert.equals(3, vim.api.nvim_win_get_config(handle.surf.winid).height, "2 lines + legend")
+    end)
+  end)
+
+  describe("legend", function()
+    it("announces the cheatsheet below the last line, with or without a 'newer' hint", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "one" } },
+      })
+      local function legend_rows()
+        local marks = vim.api.nvim_buf_get_extmarks(
+          handle.surf.bufnr,
+          handle._arrow_ns,
+          0,
+          -1,
+          { details = true }
+        )
+        local rows = {}
+        for _, m in ipairs(marks) do
+          for _, vl in ipairs(m[4].virt_lines or {}) do
+            rows[#rows + 1] = vl[1][1]
+          end
+        end
+        return rows
+      end
+      local rows = legend_rows()
+      assert.equals(1, #rows)
+      assert.truthy(rows[1]:find("? cheatsheet", 1, true))
+      assert.is_nil(table.concat(lines(handle), " "):find("cheatsheet", 1, true), "virtual only")
+
+      handle.has_more_newer = true
+      handle:set_collapsed(false)
+      rows = legend_rows()
+      assert.equals(2, #rows)
+      assert.truthy(rows[1]:find("more below", 1, true))
+      assert.truthy(rows[2]:find("? cheatsheet", 1, true))
     end)
   end)
 
