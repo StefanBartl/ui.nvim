@@ -42,7 +42,7 @@
 --- Options of the `tasks_counter` statusline segment. Every field is optional;
 --- the shipped values are `ui.statusline.modules.tasks_counter.config.DEFAULTS`.
 ---@class Ui.Tasks.Opts
----@field vault? string # vault root (the folder holding `<area>/ROADMAP/`); unset: `$TASKS_VAULT`, then `$REPOS_DIR/WKDBooks/Development/wkdbook-myplugins`. No vault found -> the segment is empty
+---@field vault? string # vault root (the folder holding `<area>/ROADMAP/`); unset: `$TASKS_VAULT`, then `$REPOS_DIR/tasks-vault`. No vault found -> the segment is empty
 ---@field area? string|fun(root: string, cwd: string): string|nil # the area of the current project; unset: folder name of the git root above the cwd (else of the cwd)
 ---@field areas? table<string, string> # folder name -> area alias, e.g. `{ nvim = "nvim-config" }`; default `{}`
 ---@field source? "auto"|"index"|"tasks_dir"|fun(ctx: Ui.Tasks.SourceCtx, done: fun(tasks: Ui.Tasks.Entry[]|nil)) # default "auto": the generated `ROADMAP/TASKS.md`, else the `tasks/*.md` files; a function is a pluggable source that calls `done` once

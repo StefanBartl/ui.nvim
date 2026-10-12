@@ -25,7 +25,7 @@ local M = {}
 M.DEFAULTS = {
   -- vault = nil,          -- vault root (the folder holding `<area>/ROADMAP/`);
   --                       -- unset: $TASKS_VAULT, then
-  --                       -- $REPOS_DIR/WKDBooks/Development/wkdbook-myplugins
+  --                       -- $REPOS_DIR/tasks-vault
   -- area = nil,           -- area of the current project: a string, or
   --                       -- fun(root, cwd): string?; unset: the folder name of
   --                       -- the git root above the cwd (else of the cwd)
@@ -202,7 +202,7 @@ local function is_dir(path)
 end
 
 --- The vault root: `opts.vault`, `$TASKS_VAULT`, then
---- `$REPOS_DIR/WKDBooks/Development/wkdbook-myplugins` -- the same order the
+--- `$REPOS_DIR/tasks-vault` -- the same order the
 --- nvim-config engine (`tasks.vault`) uses, repeated here instead of
 --- required so this plugin keeps no dependency on it. `nil` when none of the
 --- three names an existing directory.
@@ -215,7 +215,7 @@ function M.resolve_vault(cfg)
   local candidates = {
     cfg.vault,
     vim.env.TASKS_VAULT,
-    (repos and repos ~= "") and (repos .. "/WKDBooks/Development/wkdbook-myplugins") or nil,
+    (repos and repos ~= "") and (repos .. "/tasks-vault") or nil,
   }
   for i = 1, 3 do
     local path = candidates[i]
