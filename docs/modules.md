@@ -116,7 +116,7 @@ the cwd, the segment is empty and nothing errors. "Open" means the statuses
 that); with `breakdown = true` it adds `P1:n` (prio 1, yellow) and `B:n`
 (blocked, red) when they are non-zero. Where it looks: the vault is
 `opts.vault`, else `$TASKS_VAULT`, else
-`$REPOS_DIR/WKDBooks/Development/wkdbook-myplugins`; the area is the folder
+`$REPOS_DIR/tasks-vault`; the area is the folder
 name of the git root above the cwd (`areas = { nvim = "nvim-config" }` maps a
 folder name to a different area, `area` fixes it or computes it). It never
 blocks a redraw: the files are read asynchronously (`vim.uv`), the result is
