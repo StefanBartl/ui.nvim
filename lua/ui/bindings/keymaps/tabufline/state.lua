@@ -640,6 +640,10 @@ function M.move_buf(n)
 
   local cur = api.nvim_get_current_buf()
   local n_pinned = pinned_count(bufs)
+  -- Whether anything actually swapped: a lone buffer (or a pinned block of
+  -- one) has no partner, and a host must not be told about a move that did
+  -- not happen.
+  local moved = false
   for i, bufnr in ipairs(bufs) do
     if bufnr == cur then
       -- "Pins first" invariant, same as move_buf_to: a swap partner is
@@ -653,6 +657,7 @@ function M.move_buf(n)
       end
 
       if hi > lo then
+        moved = true
         if (n < 0 and i == lo) or (n > 0 and i == hi) then
           bufs[lo], bufs[hi] = bufs[hi], bufs[lo]
         else
@@ -671,7 +676,9 @@ function M.move_buf(n)
 
   vim.t.bufs = bufs
   vim.cmd("redrawtabline")
-  M.notify_reordered(cur)
+  if moved then
+    M.notify_reordered(cur)
+  end
 end
 
 return M

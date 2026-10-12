@@ -286,6 +286,13 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       assert.same({}, fired)
     end)
 
+    it("does not fire from move_buf when there is nothing to swap with", function()
+      vim.t.bufs = { b }
+      vim.api.nvim_set_current_buf(b)
+      state.move_buf(1)
+      assert.same({}, fired)
+    end)
+
     it("fires after move_buf (the swap keymaps) for the moved current buffer", function()
       vim.api.nvim_set_current_buf(b)
       state.move_buf(1)
