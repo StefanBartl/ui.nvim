@@ -80,6 +80,106 @@ describe("ui.tabline.styles", function()
   end)
 end)
 
+describe("ui.tabline.styles decorators", function()
+  local styles = require("ui.tabline.styles")
+
+  after_each(function()
+    styles.remove_decorator("t_a")
+    styles.remove_decorator("t_b")
+    styles.remove_decorator("t_boom")
+  end)
+
+  it("decorate is a no-op without decorators", function()
+    local chips = { "a", "b" }
+    styles.decorate(chips, { 1, 2 }, 1, false)
+    assert.same({ "a", "b" }, chips)
+  end)
+
+  it("runs every decorator in name order, with the style's arguments", function()
+    local seen = {}
+    styles.add_decorator("t_b", function(chips, chip_bufs, cur, flush_right)
+      seen[#seen + 1] = { "b", #chips, chip_bufs[1], cur, flush_right }
+      chips[1] = chips[1] .. "B"
+    end)
+    styles.add_decorator("t_a", function(chips)
+      chips[1] = chips[1] .. "A"
+    end)
+
+    local chips = { "x" }
+    styles.decorate(chips, { 7 }, 7, true)
+
+    assert.equals("xAB", chips[1])
+    assert.same({ { "b", 1, 7, 7, true } }, seen)
+  end)
+
+  it("a raising decorator is skipped without hiding the others", function()
+    styles.add_decorator("t_boom", function()
+      error("boom")
+    end)
+    styles.add_decorator("t_b", function(chips)
+      chips[1] = chips[1] .. "B"
+    end)
+
+    local chips = { "x" }
+    assert.has_no.errors(function()
+      styles.decorate(chips, { 1 }, 1, false)
+    end)
+    assert.equals("xB", chips[1])
+  end)
+
+  it("remove_decorator stops it running and is a no-op for an unknown name", function()
+    styles.add_decorator("t_a", function(chips)
+      chips[1] = chips[1] .. "A"
+    end)
+    styles.remove_decorator("t_a")
+    styles.remove_decorator("never_added")
+
+    local chips = { "x" }
+    styles.decorate(chips, { 1 }, 1, false)
+    assert.equals("x", chips[1])
+  end)
+
+  it("replaces a decorator added twice under one name", function()
+    styles.add_decorator("t_a", function(chips)
+      chips[1] = chips[1] .. "1"
+    end)
+    styles.add_decorator("t_a", function(chips)
+      chips[1] = chips[1] .. "2"
+    end)
+    local chips = { "x" }
+    styles.decorate(chips, { 1 }, 1, false)
+    assert.equals("x2", chips[1])
+  end)
+
+  it("modules.buffers runs decorators after the active style, whichever it is", function()
+    local modules = require("ui.tabline.modules")
+    local bufs = {}
+    for _ = 1, 2 do
+      bufs[#bufs + 1] = vim.api.nvim_create_buf(true, false)
+    end
+    local saved = vim.t.bufs
+    vim.t.bufs = bufs
+
+    styles.add_decorator("t_a", function(chips)
+      for i = 1, #chips do
+        chips[i] = "%#DecoratedByHost#" .. chips[i]
+      end
+    end)
+
+    local out = modules.buffers({ order = { "buffers" }, style = "divider" })
+
+    vim.t.bufs = saved
+    for _, b in ipairs(bufs) do
+      pcall(vim.api.nvim_buf_delete, b, { force = true })
+    end
+
+    local _, decorated = out:gsub("%%#DecoratedByHost#", "")
+    local _, dividers = out:gsub("%%#UiTbDivider#", "")
+    assert.equals(2, decorated, out)
+    assert.equals(1, dividers, out)
+  end)
+end)
+
 describe("ui.tabline.modules.buffers with a host-registered style", function()
   local modules = require("ui.tabline.modules")
   local styles = require("ui.tabline.styles")

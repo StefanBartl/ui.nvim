@@ -151,6 +151,9 @@ local styles = require("ui.tabline.styles")
 local function apply_boundaries(chips, chip_bufs, cur, style, flush_right)
   local style_fn = styles.resolve(style) or styles.resolve("rounded_chip")
   style_fn(chips, chip_bufs, cur, flush_right)
+  -- Host post-passes (`styles.add_decorator`) -- after the style, so they
+  -- see the finished chip strings whichever look is active.
+  styles.decorate(chips, chip_bufs, cur, flush_right)
 end
 
 --- The buffer chip list. Pinned buffers render first and are never dropped;

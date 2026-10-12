@@ -100,6 +100,57 @@ function M.unregister(name)
   _registry[name] = nil
 end
 
+-- Decorators: post-passes that run AFTER the active style, whichever it is.
+-- A style is ONE named choice (`cfg.style`); a decorator is an additive
+-- layer on top of whichever style is active -- what lets a host mark chips
+-- (a per-project underline, a group colour) without replacing the user's
+-- chosen look, and without having to re-register every style under a
+-- wrapper to follow `:UI tabline-style`/`:UI kit-preset` switches.
+---@type table<string, Ui.Tabline.StyleFn>
+local _decorators = {}
+
+---Add (or replace) a decorator under `name`. It is called with exactly the
+---arguments a style gets, after the style ran, on every tabline redraw -- so
+---it must be cheap and must not raise (a raise is caught and skipped, but
+---costs a pcall per redraw). It may rewrite `chips[i]` in place; it must
+---not change the display width of a chip (the bar's budget was already
+---decided) nor the number of chips.
+---@param name string
+---@param fn Ui.Tabline.StyleFn
+---@return nil
+function M.add_decorator(name, fn)
+  _decorators[name] = fn
+end
+
+---Remove a decorator. No-op if `name` was never added.
+---@param name string
+---@return nil
+function M.remove_decorator(name)
+  _decorators[name] = nil
+end
+
+---Run every decorator, in name order (so two hosts never depend on load
+---order), each isolated: one failing decorator does not take the bar down
+---nor skip the others.
+---@param chips string[]
+---@param chip_bufs integer[]
+---@param cur integer
+---@param flush_right boolean
+---@return nil
+function M.decorate(chips, chip_bufs, cur, flush_right)
+  if next(_decorators) == nil then
+    return
+  end
+  local names = {}
+  for name in pairs(_decorators) do
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  for _, name in ipairs(names) do
+    pcall(_decorators[name], chips, chip_bufs, cur, flush_right)
+  end
+end
+
 ---Every registered name, sorted -- shipped styles and host-registered ones
 ---alike. What `:UI tabline-style <Tab>` completes over.
 ---@return string[]

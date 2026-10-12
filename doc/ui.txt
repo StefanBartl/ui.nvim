@@ -328,6 +328,24 @@ reads, and what `cfg.style` resolves through on every redraw: >lua
 `ui.config.setup()` round-trip: it mutates `cfg.style` on the already-`
 enable()`d tabline config directly, then `:redrawtabline` makes it visible.
 
+A style is ONE named choice; a decorator is a post-pass on top of whichever
+style is active -- how a host marks chips (a group colour, an underline)
+without replacing the user's look: >lua
+    local styles = require("ui.tabline.styles")
+    styles.add_decorator("my_marks", function(chips, chip_bufs, cur, flush_right)
+      -- same arguments as a style, runs after it on every redraw; may
+      -- rewrite chips[i], must not change a chip's display width
+    end)
+    styles.remove_decorator("my_marks")
+<
+Decorators run in name order, each isolated by `pcall`.
+
+`User UiTablineReordered` (`data = { bufnr = <moved buffer> }`) fires after
+a user-level move (drag, "move to position", pin/unpin, the swap keymaps)
+has written the new order to `vim.t.bufs`. A host that keeps its own
+ordering invariant re-establishes it from a handler -- by writing
+`vim.t.bufs` directly, not by calling a mover back.
+
 ==============================================================================
 8. HEALTH                                                     *ui-health*
 

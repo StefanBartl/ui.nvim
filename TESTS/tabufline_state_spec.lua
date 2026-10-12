@@ -256,6 +256,44 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
     end)
   end)
 
+  describe("User UiTablineReordered", function()
+    local fired
+    local group
+
+    before_each(function()
+      fired = {}
+      group = vim.api.nvim_create_augroup("ui_spec_reordered", { clear = true })
+      vim.api.nvim_create_autocmd("User", {
+        group = group,
+        pattern = "UiTablineReordered",
+        callback = function(args)
+          fired[#fired + 1] = { bufnr = args.data.bufnr, bufs = vim.deepcopy(vim.t.bufs) }
+        end,
+      })
+    end)
+
+    after_each(function()
+      vim.api.nvim_del_augroup_by_id(group)
+    end)
+
+    it("fires after move_buf_to, with the new order already written", function()
+      assert.is_true(state.move_buf_to(c, 1))
+      assert.same({ { bufnr = c, bufs = { c, a, b } } }, fired)
+    end)
+
+    it("does not fire when move_buf_to changed nothing", function()
+      assert.is_false(state.move_buf_to(b, 2))
+      assert.same({}, fired)
+    end)
+
+    it("fires after move_buf (the swap keymaps) for the moved current buffer", function()
+      vim.api.nvim_set_current_buf(b)
+      state.move_buf(1)
+      assert.equals(1, #fired)
+      assert.equals(b, fired[1].bufnr)
+    end)
+  end)
+
   describe("index_of", function()
     it("is the buffer's 1-based slot in vim.t.bufs, or nil", function()
       assert.equals(1, state.index_of(a))

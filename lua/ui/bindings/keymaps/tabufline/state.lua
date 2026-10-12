@@ -550,6 +550,24 @@ function M.forget_buffer(bufnr, tabpage)
   vim.cmd("redrawtabline")
 end
 
+--- Tell a host that `vim.t.bufs` was reordered by a user-level mover
+--- (`move_buf_to`: a drag, "move to position", a pin/unpin re-place;
+--- `move_buf`: the swap keymaps) -- `User UiTablineReordered`, `data = {
+--- bufnr = <the buffer that moved> }`. Fired AFTER the new order is written
+--- and the bar redrawn, never from `setup()`'s own append-on-BufAdd. A host
+--- that keeps its own ordering invariant over the bar (casedesk's per-case
+--- grouping) re-establishes it from a handler; it must write `vim.t.bufs`
+--- directly rather than call a mover back, or it re-triggers itself.
+---@param bufnr integer
+---@return nil
+function M.notify_reordered(bufnr)
+  pcall(api.nvim_exec_autocmds, "User", {
+    pattern = "UiTablineReordered",
+    modeline = false,
+    data = { bufnr = bufnr },
+  })
+end
+
 --- Place `bufnr` at slot `pos` in `vim.t.bufs`, shifting the buffers in
 --- between by one -- the absolute counterpart of `move_buf` below, which
 --- swaps the CURRENT buffer with a neighbour. This is what a drag on the
@@ -594,6 +612,7 @@ function M.move_buf_to(bufnr, pos)
   table.insert(bufs, pos, bufnr)
   vim.t.bufs = bufs
   vim.cmd("redrawtabline")
+  M.notify_reordered(bufnr)
   return true
 end
 
@@ -652,6 +671,7 @@ function M.move_buf(n)
 
   vim.t.bufs = bufs
   vim.cmd("redrawtabline")
+  M.notify_reordered(cur)
 end
 
 return M
