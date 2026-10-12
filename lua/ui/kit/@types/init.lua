@@ -100,10 +100,11 @@
 ---@field order? "newest_last"|"newest_first"              # default "newest_last"
 ---@field collapsed_default? boolean
 ---@field load_more? fun(direction: "older"|"newer"): Ui.Kit.MessageLog.Entry[]  # pagination; omit to disable
+---@field has_more_older? boolean                         # false = the caller already knows there is nothing older, so no "more above" hint (default true while `load_more` is set)
 ---@field max_entries? integer                            # cap on entries held locally; oldest dropped past it (default: unbounded) -- bounds both memory and the cost of each redraw for a popup left open against a live feed
 ---@field format_entry_time? fun(entry: Ui.Kit.MessageLog.Entry, now_ms: number): string  # default: "Ns ago"/"Nm Ns ago"
 ---@field now_ms? fun(): number                            # default: vim.uv.hrtime()/1e6
----@field extra_cheatsheet_lines? string[]                 # appended to the built-in `?` key list
+---@field extra_cheatsheet_lines? string[]                 # appended to the built-in `?` cheatsheet
 ---@field theme? Ui.Kit.ThemeArg
 ---@field width? integer
 ---@field height? integer
@@ -115,6 +116,9 @@
 ---@field append fun(self: Ui.Kit.MessageLog.Handle, new_entries: Ui.Kit.MessageLog.Entry[])
 ---@field load_more fun(self: Ui.Kit.MessageLog.Handle, direction: "older"|"newer")
 ---@field set_collapsed fun(self: Ui.Kit.MessageLog.Handle, value?: boolean)
+---@field set_entry_collapsed fun(self: Ui.Kit.MessageLog.Handle, value?: boolean, entry?: Ui.Kit.MessageLog.Entry)  # one entry (default: under the cursor); nil flips it
+---@field toggle_entry fun(self: Ui.Kit.MessageLog.Handle)
+---@field toggle_cheatsheet fun(self: Ui.Kit.MessageLog.Handle)
 ---@field on_close fun(self: Ui.Kit.MessageLog.Handle, cb: fun())
 ---@field close fun(self: Ui.Kit.MessageLog.Handle)
 
