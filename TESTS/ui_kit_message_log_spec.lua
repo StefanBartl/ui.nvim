@@ -602,12 +602,12 @@ describe("ui.kit.message_log", function()
         entries = { { time_ms = 0, content = "just one line" } },
       })
       local echoed
-      local orig = vim.api.nvim_echo
-      vim.api.nvim_echo = function(chunks)
-        echoed = chunks[1][1]
+      local orig = vim.notify
+      vim.notify = function(msg)
+        echoed = msg
       end
       press("<CR>")
-      vim.api.nvim_echo = orig
+      vim.notify = orig
       assert.truthy(echoed and echoed:find("nothing to fold", 1, true))
     end)
   end)
