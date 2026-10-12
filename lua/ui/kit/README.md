@@ -379,7 +379,8 @@ values, so an epoch clock works equally well.
 The cheatsheet is a `kit.viewer` opened **over** the log: the log stays open
 behind it (its dismiss-on-focus-lost is suspended meanwhile), `q`/`<Esc>`/`?`
 closes the sheet and the focus returns to the log. The frame carries a `? keys`
-footer as a reminder. `<BS>` folds too because some terminals send it for
+footer, and a legend line under the last entry (`? cheatsheet   <CR> fold/unfold   q close`)
+announces it inside the popup. `<BS>` folds too because some terminals send it for
 `<C-h>`; `+`/`-` are the plain-key fallback for the `<C-j>`/`<C-k>` pair,
 which many setups use for window navigation.
 
