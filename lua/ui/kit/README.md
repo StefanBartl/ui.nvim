@@ -378,9 +378,11 @@ values, so an epoch clock works equally well.
 
 The cheatsheet is a `kit.viewer` opened **over** the log: the log stays open
 behind it (its dismiss-on-focus-lost is suspended meanwhile), `q`/`<Esc>`/`?`
-closes the sheet and the focus returns to the log. The title carries a reminder (`? keys | <CR> fold | q close`), so no row of the popup is spent on it. `<CR>` on a single-line entry says so instead of looking like a dead key. `<BS>` folds too because some terminals send it for
+closes the sheet and the focus returns to the log. The title carries a reminder (`? keys | <CR> fold | q close`), so no row of the popup is spent on it. `<CR>` on a single-line entry shows a short transient hint at the end of the line (inline virtual text, not a notification: that would be recorded as a message and shown in the log itself). `<BS>` folds too because some terminals send it for
 `<C-h>`; `+`/`-` are the plain-key fallback for the `<C-j>`/`<C-k>` pair,
 which many setups use for window navigation.
+
+The window fits itself to the content: at least its default width, growing to the widest line (and the title) up to the editor width, never shrinking, and it stays centered while it grows (`opts.width`/`opts.height` pin a dimension). A progress bar redrawing itself with a lone CR shows only its last frame. `?`/`g?`/`q`/`<Esc>` inside the cheatsheet close it.
 
 Entries with more than one line carry a `▸` (folded) / `▾` (open) marker as
 virtual text -- the buffer text itself is untouched. The cursor line is
