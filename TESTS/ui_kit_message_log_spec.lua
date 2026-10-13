@@ -597,18 +597,332 @@ describe("ui.kit.message_log", function()
       assert.equals(2, vim.api.nvim_win_get_config(handle.surf.winid).height, "no legend row")
     end)
 
-    it("<CR> on a single-line entry says there is nothing to fold", function()
+    it("<CR> on a single-line entry shows a transient inline hint, not a notification", function()
       handle = message_log.open({
-        entries = { { time_ms = 0, content = "just one line" } },
+        entries = { { time_ms = 0, content = "just one line" }, { time_ms = 0, content = "x\n" } },
       })
-      local echoed
+      local notified = 0
       local orig = vim.notify
-      vim.notify = function(msg)
-        echoed = msg
+      vim.notify = function()
+        notified = notified + 1
+      end
+      local hint_ns = vim.api.nvim_create_namespace("ui_kit_message_log_hint")
+      local function hints()
+        return vim.api.nvim_buf_get_extmarks(handle.surf.bufnr, hint_ns, 0, -1, { details = true })
       end
       press("<CR>")
+      press("<CR>") -- held key: still one hint, nothing piles up
+      local marks = hints()
       vim.notify = orig
-      assert.truthy(echoed and echoed:find("nothing to fold", 1, true))
+      assert.equals(0, notified, "no notification (it would be recorded and shown in this log)")
+      assert.equals(1, #marks)
+      assert.truthy(marks[1][4].virt_text[1][1]:find("nothing to fold", 1, true))
+
+      handle:set_collapsed(false)
+      assert.equals(0, #hints(), "the next redraw drops the hint")
+
+      -- A trailing newline does not make an entry multi-line, same as in the renderer.
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      press("<CR>")
+      assert.equals(1, #hints())
+    end)
+
+    it("the hint goes away on its own", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "one line" } } })
+      press("<CR>")
+      local hint_ns = vim.api.nvim_create_namespace("ui_kit_message_log_hint")
+      assert.equals(1, #vim.api.nvim_buf_get_extmarks(handle.surf.bufnr, hint_ns, 0, -1, {}))
+      local gone = vim.wait(3000, function()
+        return #vim.api.nvim_buf_get_extmarks(handle.surf.bufnr, hint_ns, 0, -1, {}) == 0
+      end)
+      assert.is_true(gone)
+    end)
+  end)
+
+  describe("reading position", function()
+    local function stack_entries()
+      local content = {}
+      for i = 1, 30 do
+        content[i] = "frame " .. i
+      end
+      return {
+        { time_ms = 0, content = "first" },
+        { time_ms = 0, content = table.concat(content, "\n") },
+        { time_ms = 0, content = "newest" },
+      }
+    end
+
+    ---@return table
+    local function open_stack()
+      local h = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = stack_entries(),
+        load_more = function()
+          return { { time_ms = 0, content = "older" } }
+        end,
+      })
+      vim.api.nvim_win_call(h.surf.winid, function()
+        vim.fn.winrestview({ topline = 12, lnum = 18 }) -- frame 17 of the long entry
+      end)
+      return h
+    end
+
+    local function view(h)
+      return vim.api.nvim_win_call(h.surf.winid, function()
+        local v = vim.fn.winsaveview()
+        return { lnum = v.lnum, topline = v.topline }
+      end)
+    end
+
+    it("a live append keeps cursor and view inside the long entry being read", function()
+      handle = open_stack()
+      local before = view(handle)
+      assert.equals(18, before.lnum)
+      handle:append({ { time_ms = 0, content = "live" } })
+      assert.same(before, view(handle), "same line of the entry, same screen row")
+    end)
+
+    it("load_more('older') keeps the same line on the same screen row", function()
+      handle = open_stack()
+      local before = view(handle)
+      handle:load_more("older")
+      local after = view(handle)
+      assert.equals(before.lnum + 1, after.lnum, "one older entry pushed everything down by one")
+      assert.equals(before.topline + 1, after.topline, "and the view moved with it")
+    end)
+
+    it("folding the entry puts the cursor on its first line", function()
+      handle = open_stack()
+      press("zc")
+      assert.equals(2, cursor_line(handle))
+    end)
+
+    it("a multi-line live entry is followed to its last line, not just its header", function()
+      local entries = {}
+      for i = 1, 40 do
+        entries[i] = { time_ms = 0, content = "line " .. i }
+      end
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = entries,
+      })
+      assert.equals(40, cursor_line(handle))
+      handle:append({ { time_ms = 0, content = "a\nb\nc\nd" } })
+      assert.equals(
+        vim.api.nvim_buf_line_count(handle.surf.bufnr),
+        cursor_line(handle),
+        "tail -f rests on the last line"
+      )
+      vim.api.nvim_win_set_cursor(handle.surf.winid, { 1, 0 })
+      handle:append({ { time_ms = 0, content = "e\nf" } })
+      assert.equals(1, cursor_line(handle), "a reader elsewhere is not moved")
+    end)
+  end)
+
+  describe("window size", function()
+    local cols
+
+    before_each(function()
+      cols = vim.o.columns
+      vim.o.columns = 200
+    end)
+
+    after_each(function()
+      vim.o.columns = cols
+    end)
+
+    it("grows to a long message instead of cutting it off, and never shrinks", function()
+      local long = string.rep("abcdefghij", 12)
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = long } },
+      })
+      local w = vim.api.nvim_win_get_config(handle.surf.winid).width
+      assert.is_true(w >= #long + 8, "wide enough for '[0s ago] ' + the message + the fold mark")
+      handle:append({ { time_ms = 0, content = "short" } })
+      assert.equals(w, vim.api.nvim_win_get_config(handle.surf.winid).width, "no jitter")
+    end)
+
+    it("keeps its default width for short messages and respects an explicit width", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "short" } } })
+      local default_w = vim.api.nvim_win_get_config(handle.surf.winid).width
+      handle:append({ { time_ms = 0, content = "short again" } })
+      assert.equals(default_w, vim.api.nvim_win_get_config(handle.surf.winid).width)
+      handle:close()
+
+      handle = message_log.open({
+        width = 30,
+        entries = { { time_ms = 0, content = string.rep("x", 100) } },
+      })
+      assert.equals(30, vim.api.nvim_win_get_config(handle.surf.winid).width)
+    end)
+
+    it("is capped to the editor and wide enough for the title", function()
+      handle = message_log.open({
+        title = "A fairly long caller title here",
+        entries = { { time_ms = 0, content = string.rep("y", 500) } },
+      })
+      local cfg = vim.api.nvim_win_get_config(handle.surf.winid)
+      assert.is_true(cfg.width <= vim.o.columns - 4)
+      assert.is_true(cfg.col + cfg.width + 2 <= vim.o.columns, "stays on screen")
+      handle:close()
+      handle = message_log.open({
+        title = "A fairly long caller title here",
+        entries = { { time_ms = 0, content = "x" } },
+      })
+      local title_w =
+        vim.fn.strdisplaywidth("A fairly long caller title here  ? keys | <CR> fold | q close")
+      assert.is_true(vim.api.nvim_win_get_config(handle.surf.winid).width >= title_w)
+    end)
+
+    it("stays centred as the content grows", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = { { time_ms = 0, content = "one" } },
+      })
+      for _, n in ipairs({ 5, 12 }) do
+        local more = {}
+        for i = 1, n do
+          more[i] = { time_ms = 0, content = "m" .. i }
+        end
+        handle:append(more)
+        local cfg = vim.api.nvim_win_get_config(handle.surf.winid)
+        assert.equals(math.max(0, math.floor((vim.o.lines - cfg.height) / 2 - 1)), cfg.row)
+        assert.equals(math.max(0, math.floor((vim.o.columns - cfg.width) / 2)), cfg.col)
+      end
+    end)
+
+    it("a cursor-relative popup is not re-centred", function()
+      handle = message_log.open({
+        relative = "cursor",
+        entries = { { time_ms = 0, content = "one" } },
+      })
+      local before = vim.api.nvim_win_get_config(handle.surf.winid)
+      local more = {}
+      for i = 1, 6 do
+        more[i] = { time_ms = 0, content = "m" .. i }
+      end
+      handle:append(more)
+      local after = vim.api.nvim_win_get_config(handle.surf.winid)
+      assert.equals(before.relative, after.relative)
+      assert.equals(before.row, after.row)
+      assert.equals(before.col, after.col)
+    end)
+  end)
+
+  describe("entry content", function()
+    it("a lone CR (a progress bar) keeps only its last frame; \\r\\r\\n is a line break", function()
+      handle = message_log.open({
+        now_ms = function()
+          return 0
+        end,
+        entries = {
+          { time_ms = 0, content = "10%\r20%\r30%" },
+          { time_ms = 0, content = "a\r\r\nb\r\r\n" },
+          { time_ms = 0, content = "done\r" },
+        },
+      })
+      local got = lines(handle)
+      assert.equals("[0s ago] 30%", got[1])
+      assert.equals("[0s ago] a", got[2])
+      assert.equals("b", got[3])
+      assert.equals("[0s ago] done", got[4])
+      for _, l in ipairs(got) do
+        assert.is_nil(l:find("\r", 1, true))
+      end
+    end)
+
+    it(
+      "the entry list is the caller's entries, not copies: set_entry_collapsed(value, entry)",
+      function()
+        local multi = { time_ms = 0, content = "head\nbody" }
+        handle = message_log.open({
+          now_ms = function()
+            return 0
+          end,
+          collapsed_default = true,
+          entries = { { time_ms = 0, content = "other" }, multi },
+        })
+        assert.equals(2, #lines(handle))
+        handle:set_entry_collapsed(false, multi)
+        assert.equals(3, #lines(handle), "the entry handed to open() can be addressed")
+      end
+    )
+  end)
+
+  describe("cheatsheet keys and focus", function()
+    local function gone(win)
+      return vim.wait(500, function()
+        return not vim.api.nvim_win_is_valid(win)
+      end)
+    end
+
+    it("? and g? inside the sheet close it, as README says", function()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local log_win = handle.surf.winid
+      for _, key in ipairs({ "?", "g?" }) do
+        press("?")
+        local sheet = vim.api.nvim_get_current_win()
+        assert.are_not.equals(log_win, sheet)
+        press(key)
+        assert.is_true(gone(sheet))
+        vim.wait(300, function()
+          return vim.api.nvim_get_current_win() == log_win
+        end)
+        assert.equals(log_win, vim.api.nvim_get_current_win(), "back on the log")
+      end
+    end)
+
+    it("after the sheet the log is armed again: leaving it closes the log", function()
+      local base = vim.api.nvim_get_current_win()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local log_win = handle.surf.winid
+      press("?")
+      press("q")
+      vim.wait(300, function()
+        return vim.api.nvim_get_current_win() == log_win
+      end)
+      vim.api.nvim_set_current_win(base)
+      assert.is_true(gone(log_win), "dismiss-on-focus-lost works again")
+      handle = nil
+    end)
+
+    it("with close_on_focus_lost = false the log survives the sheet and a focus change", function()
+      local base = vim.api.nvim_get_current_win()
+      handle = message_log.open({
+        close_on_focus_lost = false,
+        entries = { { time_ms = 0, content = "x" } },
+      })
+      local log_win = handle.surf.winid
+      press("?")
+      press("q")
+      vim.wait(300, function()
+        return vim.api.nvim_get_current_win() == log_win
+      end)
+      assert.is_true(vim.api.nvim_win_is_valid(log_win))
+      vim.api.nvim_set_current_win(base)
+      vim.wait(200)
+      assert.is_true(vim.api.nvim_win_is_valid(log_win), "opted out of dismissal")
+    end)
+
+    it("moving to another window while the sheet is up closes the sheet and the log", function()
+      local base = vim.api.nvim_get_current_win()
+      handle = message_log.open({ entries = { { time_ms = 0, content = "x" } } })
+      local log_win = handle.surf.winid
+      press("?")
+      local sheet = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(base)
+      assert.is_true(gone(sheet))
+      assert.is_true(gone(log_win))
+      handle = nil
     end)
   end)
 
