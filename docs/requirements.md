@@ -27,6 +27,7 @@ published, or renders nothing.
 | [recommender.nvim](https://github.com/StefanBartl/recommender.nvim) | Count of open alias suggestions for the current buffer (`recommender_badge`) |
 | [sessions.nvim](https://github.com/StefanBartl/sessions.nvim) | Active session name with a dirty marker (`session_status`) |
 | [sandbox.nvim](https://github.com/StefanBartl/sandbox.nvim) | Ambient container summary (`sandbox_ambient`) |
+| [terminal.nvim](https://github.com/StefanBartl/terminal.nvim) | The current terminal and the project's terminal count (`terminal_count`) |
 | [lazy.nvim](https://github.com/folke/lazy.nvim) | Own/external plugin count (`plugin_summary`) |
 | `nvim-treesitter` | Breadcrumb fallback while the LSP has not produced document symbols yet |
 

@@ -98,7 +98,8 @@ case info and SLA badge, `casedesk`), `filetree` (the cwd-mode badge,
 `runtime_analysis_ampel`), `recommender.config` (the alias-suggestion count,
 `recommender_badge`), `sessions.statusline` (the active session name,
 `session_status`), `sandbox.statusline` (the ambient container summary,
-`sandbox_ambient`) and `lazy` (the own/external plugin count,
+`sandbox_ambient`), `terminal` (the current terminal and the count,
+`terminal_count`) and `lazy` (the own/external plugin count,
 `plugin_summary`).
 
 An eleventh, `gitsuite.features.branch`, is different in kind: it never

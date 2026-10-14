@@ -88,6 +88,7 @@ modules = {
 | `session_status` | sessions.nvim's active session name, with a dirty marker (` *`) when the window/buffer layout changed since the last save or load | sessions.nvim | `ui.statusline.modules.session_status` |
 | `sandbox_ambient` | sandbox.nvim's ambient container summary, e.g. `"docker (2/5)"` | sandbox.nvim | `ui.statusline.modules.sandbox_ambient` |
 | `gitsuite_conflict` | gitsuite.nvim's ambient merge-conflict indicator, e.g. `"MERGE 2"` | gitsuite.nvim | `ui.statusline.modules.gitsuite_conflict` |
+| `terminal_count` | terminal.nvim's terminals: the current one with the project's count, e.g. `"build (3)"`, or just the count, e.g. `"2 terminals"` | terminal.nvim | `ui.statusline.modules.terminal_count` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
@@ -206,6 +207,11 @@ documented safe to call on every redraw, so each of these modules is exactly
 the wrapper needed to drop it into an `order` list the same way as any other
 soft-dependency module here — no separate caching, debouncing or error
 handling happens on this side.
+
+`terminal_count` is the other shape: terminal.nvim documents `terminal.summary()`
+(`{ count, visible, current }`, read from its registry only, no multiplexer is asked,
+safe on every redraw) and this module only words it, from `package.loaded` so it never
+pulls terminal.nvim in on the first redraw.
 
 `recommender_badge` calls `recommender.nvim`'s own analyzer directly (the
 one its `analyzer` config option already selects — `regex` by default) with

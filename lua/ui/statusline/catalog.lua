@@ -214,6 +214,14 @@ return {
     used_by = {},
   },
   {
+    key = "terminal_count",
+    summary = 'terminal.nvim\'s terminals: the current one with the project\'s count ("build (3)"), or the count ("2 terminals").',
+    requires = "terminal.nvim",
+    builtin = false,
+    source = "ui.statusline.modules.terminal_count",
+    used_by = {},
+  },
+  {
     key = "since_last_save",
     summary = "Duration since the buffer became modified, escalating muted -> DiagnosticWarn -> DiagnosticError the longer it sits unsaved.",
     builtin = false,
