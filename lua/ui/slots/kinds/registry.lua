@@ -32,7 +32,7 @@ local resolve = require("ui.slots.resolve")
 
 local M = {}
 
-local BUILTIN = { "file", "yank", "url", "cmd", "lua", "mark" }
+local BUILTIN = { "file", "yank", "url", "cmd", "lua", "mark", "expand" }
 
 ---@type table<string, Ui.Slots.Kind>
 local kinds = {}

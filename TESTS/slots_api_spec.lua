@@ -640,7 +640,7 @@ describe("ui.slots", function()
 
     it("lists the kinds", function()
       vim.cmd("UI slots kinds")
-      assert.is_true(said("cmd, file, lua, mark, url, yank"))
+      assert.is_true(said("cmd, expand, file, lua, mark, url, yank"))
     end)
 
     it("opens the editor for edit", function()

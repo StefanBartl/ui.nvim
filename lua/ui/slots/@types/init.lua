@@ -6,7 +6,7 @@
 --- `index`, ...). The number is the slot's identity, there is no upper bound.
 ---@class Ui.Slots.Slot
 ---@field n integer             # positive whole number, assigned by the store
----@field kind string           # "file" | "url" | "yank" | "cmd" | "lua" | "mark" | a registered kind
+---@field kind string           # "file" | "url" | "yank" | "cmd" | "lua" | "mark" | "expand" | a registered kind
 ---@field label? string         # shown text; the kind supplies a default
 ---@field icon? string          # the kind supplies a default
 ---@field style? string|table   # preset name or override table for this slot's chip

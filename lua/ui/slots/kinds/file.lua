@@ -186,6 +186,16 @@ local function target_path(slot, ctx)
   return vim.fs.normalize(vim.fn.fnamemodify(vim.fs.normalize(resolved), ":p")), unknown
 end
 
+--- The absolute path a file slot names (placeholders put in), for kinds that read it.
+---@param slot table
+---@param ctx Ui.Slots.Ctx|nil
+---@return string path
+---@return string[] unknown
+---@return string|nil refused
+function M.resolve_path(slot, ctx)
+  return target_path(slot, ctx)
+end
+
 --- A path on another machine only comes from `setup()` (see `is_network`).
 ---@param slot table
 ---@return string|nil
