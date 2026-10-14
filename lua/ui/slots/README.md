@@ -2,7 +2,7 @@
 
 Numbered **slots**: each one is an action, not just a path. A slot can open a
 file, open an address, copy text to the clipboard, run an Ex command with fixed
-arguments, call a Lua function, or jump to a mark of
+arguments, call a Lua function, fold out a float of look-up text, or jump to a mark of
 [sessions.nvim](https://github.com/StefanBartl/sessions.nvim). They are shown as
 a stack of rounded chips at the edge of the editor, or in a focusable panel with
 a preview. The number of slots has no upper bound in memory; what is saved
@@ -22,6 +22,7 @@ require("ui").setup({
       [3] = { kind = "cmd", cmd = "Telescope", args = "live_grep cwd={cwd}" },
       [4] = { kind = "url", url = "https://neovim.io/doc/" },
       [5] = { kind = "lua", fn = function(ctx) vim.notify("slot " .. ctx.n) end },
+      [6] = { kind = "expand", path = "{root}/docs/ACRONYMS.md", title = "Acronyms" },
     },
   },
 })
@@ -48,6 +49,7 @@ functions that work on slots (`apply`, `add`, `yank`, `clear`, `clear_all`,
 | `mark` | `index` | the n-th mark of sessions.nvim | yes (the index only) |
 | `cmd` | `cmd`, `args?` (a string, split into words before the placeholders go in, or a list that is taken as it is), `bang?`, `raw_values?` | runs an Ex command whose name is letters and digits (`bang = true` for `:Foo!`); a value that a placeholder puts in is refused rather than quoted when it holds `\|` or a backtick, or when it starts the argument with `+` or `!` (the argument is `{clip}` and the value begins with `+`; `x={clip}` is fine), unless `raw_values = true` (for commands that read `<q-args>`/`<f-args>`) | **no** |
 | `lua` | `fn` | calls the function with `{ slot, n, count, ... }` | **no** |
+| `expand` | `path` or `fn`, `title?`, `ft?` | folds a read-only float of look-up text out and in (see below) | **no** |
 
 `cmd` and `lua` run code, so they come from `setup()` or from Lua only; a data
 file that names them is ignored. The same goes for what a data file, the editor
@@ -56,6 +58,19 @@ with the reason, and an entry of a data file is dropped. Your own kinds:
 `require("ui.slots").register_kind(name, kind)`.
 
 Every slot also takes `label`, `icon` and `style`.
+
+### The `expand` kind
+
+An `expand` slot opens a read-only float with text to look things up in -- a
+list of acronyms, a cheat sheet. Applying the slot again, `q` or `<Esc>`, or
+moving to another window closes it; the float scrolls like any window and `/`,
+`n`, `N` search in it. The text is a file (`path`, placeholders put in, read
+like the preview reads a file: at most `preview.max_kb` and `preview.max_lines`)
+or whatever `fn(ctx)` returns, a string or a list of lines (`ctx` is that of a
+`lua` slot). `title` is the float's title (default: the slot's label or the file
+name), `ft` a filetype to highlight it. A missing file or a `fn` that fails
+says so and opens nothing. A `fn` comes from `setup()` or Lua (never a data file), a network path from `setup()` only,
+and the data file never holds an `expand` slot.
 
 ### Placeholders
 

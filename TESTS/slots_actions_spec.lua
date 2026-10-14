@@ -61,7 +61,7 @@ describe("ui.slots action kinds", function()
 
   describe("registry", function()
     it("knows all six built-in kinds", function()
-      assert.same({ "cmd", "file", "lua", "mark", "url", "yank" }, registry.names())
+      assert.same({ "cmd", "expand", "file", "lua", "mark", "url", "yank" }, registry.names())
     end)
 
     it("keeps cmd and lua out of what a data file may hold, and mark in", function()
