@@ -31,6 +31,20 @@ local hl_built = {}
 -- Devicons module lazy-loaded
 local devicons_mod = nil
 
+-- Reset the caches on colorscheme change. Registered on first use, not on `require`: both
+-- caches are empty until then.
+local persisting = false
+local function ensure_persist()
+  if persisting then
+    return
+  end
+  persisting = true
+  require("lib.nvim.ui.hl").persist(function()
+    icon_cache = require("lib.lua.memo.lru").new(256)
+    hl_built = {}
+  end, { name = "UiDeviconsCache", immediate = false })
+end
+
 ---@nodiscard
 ---@param n integer|nil
 ---@return string|nil
@@ -67,6 +81,7 @@ end
 ---@param band_bg string|nil
 ---@return string
 local function ensure_icon_hl(fg, band_bg)
+  ensure_persist()
   local name = "St_FileIcon_" .. hex_key(fg) .. "_" .. hex_key(band_bg)
   if hl_built[name] then
     return name
@@ -84,6 +99,7 @@ end
 ---@param path string
 ---@return string icon, string|nil color
 local function devicon_for_path(path)
+  ensure_persist()
   -- Check cache first
   local cache_key = path
   local cached = icon_cache:get(cache_key)
@@ -258,11 +274,5 @@ function M.file_icon_segment_lsp()
 
   return "%#" .. group .. "#" .. icon .. "%*"
 end
-
--- Clear cache on colorscheme change
-require("lib.nvim.ui.hl").persist(function()
-  icon_cache = require("lib.lua.memo.lru").new(256)
-  hl_built = {}
-end, { name = "UiDeviconsCache", immediate = false })
 
 return M

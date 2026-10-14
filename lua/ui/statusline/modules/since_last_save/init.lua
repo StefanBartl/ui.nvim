@@ -22,12 +22,21 @@ local primitives = require("ui.statusline.utils.primitives")
 ---@type table<integer, integer> bufnr -> epoch when it was first observed modified since its last save
 local became_modified_at = {}
 
-Autocmd.create({ "BufDelete", "BufWipeout" }, function(args)
-  became_modified_at[args.buf] = nil
-end, {
-  group = Autocmd.group("UiStatuslineSinceLastSave", true),
-  desc = "ui.statusline: forget a deleted buffer's since_last_save clock",
-})
+-- Registered when the first clock is recorded, not on `require`: there is nothing to forget
+-- before that.
+local pruning = false
+local function ensure_pruning()
+  if pruning then
+    return
+  end
+  pruning = true
+  Autocmd.create({ "BufDelete", "BufWipeout" }, function(args)
+    became_modified_at[args.buf] = nil
+  end, {
+    group = Autocmd.group("UiStatuslineSinceLastSave", true),
+    desc = "ui.statusline: forget a deleted buffer's since_last_save clock",
+  })
+end
 
 --- "45s" / "12m" / "1h5m" -- same compact, at-most-two-units shape
 --- `ui.statusline.modules.time_in_buffer` uses; duplicated rather than
@@ -121,6 +130,7 @@ return function(opts)
 
   local now = os.time()
   if not became_modified_at[buf] then
+    ensure_pruning()
     became_modified_at[buf] = now
   end
 

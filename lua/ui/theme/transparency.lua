@@ -30,6 +30,23 @@ local GROUPS = {
 ---@type table<string, string|integer|nil>
 local _saved_bg = {}
 local _enabled = false
+local _persisting = false
+
+--- Register the colorscheme/background re-apply on first use, not on `require`: until
+--- transparency has been switched on there is nothing to re-apply.
+---@return nil
+local function ensure_persist()
+  if _persisting then
+    return
+  end
+  _persisting = true
+  require("lib.nvim.ui.hl").persist(function()
+    if _enabled then
+      _enabled = false
+      M.set(true)
+    end
+  end, { name = "UiTransparencyReapply", immediate = false })
+end
 
 ---@return boolean
 function M.is_enabled()
@@ -43,6 +60,9 @@ function M.set(enabled)
     return
   end
   _enabled = enabled
+  if enabled then
+    ensure_persist()
+  end
 
   for _, group in ipairs(GROUPS) do
     local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
@@ -73,11 +93,4 @@ end
 --- Through `hl.persist`, which adds the `OptionSet background` case this
 --- block was missing: a light/dark flip repaints the same groups and would
 --- have left transparency off until the next explicit toggle.
-require("lib.nvim.ui.hl").persist(function()
-  if _enabled then
-    _enabled = false
-    M.set(true)
-  end
-end, { name = "UiTransparencyReapply", immediate = false })
-
 return M

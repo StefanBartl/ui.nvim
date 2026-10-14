@@ -412,11 +412,27 @@ end
 ---@type table<string, true>
 local hl_built = {}
 
+-- Clear both caches on a colorscheme change: devicon colors are absolute
+-- hex, and the UiTbBufOn/Off groups they were built against just changed.
+-- Registered on first use, not on `require`: both caches are empty until then.
+local persisting = false
+local function ensure_persist()
+  if persisting then
+    return
+  end
+  persisting = true
+  require("lib.nvim.ui.hl").persist(function()
+    icon_cache = require("lib.lua.memo.lru").new(256)
+    hl_built = {}
+  end, { name = "ui_tabline_utils_cache", immediate = false })
+end
+
 ---@param fg string|nil
 ---@param is_current boolean
 ---@param mid_flash boolean # mid-"flash" (see M.flash) -- swaps fg/bg instead of the normal pair
 ---@return string
 local function ensure_icon_hl(fg, is_current, mid_flash)
+  ensure_persist()
   local bg_group = is_current and "UiTbBufOn" or "UiTbBufOff"
   local name = "UiTbIcon_"
     .. (fg and fg:gsub("#", "") or "none")
@@ -449,6 +465,7 @@ end
 ---@param bufnr integer
 ---@return string icon, string|nil color
 local function devicon_for_buf(bufnr)
+  ensure_persist()
   local ok_name, path = pcall(api.nvim_buf_get_name, bufnr)
   path = ok_name and path or ""
   local name = path == "" and "" or filename(path)
@@ -637,12 +654,5 @@ function M.style_buf(bufnr, index, width, is_pinned)
   local chip = M.btn(body, nil, "GoToBuf", bufnr) .. close_or_dot
   return M.txt(chip, "Buf" .. hl_suffix)
 end
-
--- Clear both caches on a colorscheme change: devicon colors are absolute
--- hex, and the UiTbBufOn/Off groups they were built against just changed.
-require("lib.nvim.ui.hl").persist(function()
-  icon_cache = require("lib.lua.memo.lru").new(256)
-  hl_built = {}
-end, { name = "ui_tabline_utils_cache", immediate = false })
 
 return M

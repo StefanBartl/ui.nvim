@@ -42,5 +42,25 @@ return {
     spawn = { "git", "nvim" },
   },
   -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
-  conformance = { gate = true },
+  conformance = {
+    gate = true,
+    waivers = {
+      {
+        check = "K15",
+        rule = "LUA-93",
+        file = "README.md",
+        level = "warn",
+        expires = "2027-04-14",
+        reason = "false positive: the matched block is the packer.nvim example (use({...})), not a lazy.nvim spec; packer loads eagerly and the lazy.nvim spec above names lazy = false",
+      },
+      {
+        check = "K15",
+        rule = "NEW-08",
+        file = "lua/ui/bindings",
+        level = "warn",
+        expires = "2027-04-14",
+        reason = "the autocommands belong to their feature modules (context, zen, theme, statusline), none is a user-facing binding; an empty bindings/autocmds would be a stub",
+      },
+    },
+  },
 }
