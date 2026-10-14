@@ -329,6 +329,7 @@ local function check_segments()
     { "recommender.config", "alias-suggestion count badge (recommender_badge)" },
     { "sessions.statusline", "active session name + dirty marker (session_status)" },
     { "sandbox.statusline", "ambient container summary (sandbox_ambient)" },
+    { "terminal", "current terminal and terminal count (terminal_count)" },
     { "lazy", "own/external plugin count (plugin_summary)" },
   }) do
     if has(entry[1]) then
