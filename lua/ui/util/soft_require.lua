@@ -39,6 +39,14 @@ M.PROBED = {
   { mod = "nvim-web-devicons", optional_for = "file icons in the statusline and tabline" },
   { mod = "menu", optional_for = "nvzone/menu as the context-menu renderer" },
   { mod = "lazy", optional_for = "the plugin-count segment" },
+  {
+    mod = "conform",
+    optional_for = "formatting through conform.nvim in the context menu (LSP formatting without it)",
+  },
+  {
+    mod = "emojis.unicode",
+    optional_for = "the unicode table entry of the context menu (emojis.nvim)",
+  },
   { mod = "casedesk.sla", optional_for = "the casedesk SLA badge" },
   { mod = "casedesk.config", optional_for = "the casedesk segment" },
   { mod = "runtime-analysis.telemetry", optional_for = "the runtime-analysis traffic light" },
