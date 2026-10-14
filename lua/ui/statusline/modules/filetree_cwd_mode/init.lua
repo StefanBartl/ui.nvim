@@ -52,15 +52,24 @@ local Autocmd = require("lib.nvim.bindings.autocmd")
 
 -- A colour-derived cache is the same problem as a highlight definition,
 -- so it goes through the same helper -- and picks up `OptionSet background`
--- with it. `immediate = false`: there is nothing to drop at registration.
-require("lib.nvim.ui.hl").persist(function()
-  _hl_built = {}
-end, { name = "UiCwdModeBadgeHl", immediate = false })
+-- with it. `immediate = false`: there is nothing to drop at registration. Registered on the
+-- first group built, not on `require`: the cache is empty until then.
+local _persisting = false
+local function ensure_persist()
+  if _persisting then
+    return
+  end
+  _persisting = true
+  require("lib.nvim.ui.hl").persist(function()
+    _hl_built = {}
+  end, { name = "UiCwdModeBadgeHl", immediate = false })
+end
 
 ---@param color_key string  A palette semantic key, or a literal "#rrggbb".
 ---@return string group
 local function ensure_hl(color_key)
   local is_hex = color_key:match("^#%x%x%x%x%x%x$") ~= nil
+  ensure_persist()
   local group = "St_Cwd_" .. (is_hex and color_key:sub(2) or color_key)
   if _hl_built[group] then
     return group
@@ -84,6 +93,7 @@ end
 --- each glyph instead of just tinting it.
 local function ensure_dot_hl(color_key)
   local is_hex = color_key:match("^#%x%x%x%x%x%x$") ~= nil
+  ensure_persist()
   local group = "St_CwdDot_" .. (is_hex and color_key:sub(2) or color_key)
   if _hl_built[group] then
     return group

@@ -10,6 +10,23 @@ local path_cache = require("lib.lua.memo.lru").new(128)
 local Autocmd = require("lib.nvim.bindings.autocmd")
 local normkey = require("lib.nvim.fs.normkey")
 local tick_cache = {} -- bufnr -> { tick, abs_path }
+local tick_watched = false
+
+--- Clear the tick cache when a buffer is deleted. Registered on the first cached entry, not on
+--- `require`: there is nothing to clear before that.
+---@return nil
+local function watch_tick_cache()
+  if tick_watched then
+    return
+  end
+  tick_watched = true
+  Autocmd.create("BufDelete", function(args)
+    tick_cache[args.buf] = nil
+  end, {
+    group = Autocmd.group("UiPathsCache", true),
+    desc = "Clear path tick cache on buffer delete",
+  })
+end
 
 --- Get current buffer tick (for cache invalidation)
 ---@param bufnr integer
@@ -73,6 +90,7 @@ function M.path_absolute(path_or_buf)
     local result = norm_sep(normkey(abs))
 
     -- Update tick cache
+    watch_tick_cache()
     tick_cache[bufnr] = {
       tick = current_tick,
       abs_path = result,
@@ -308,13 +326,5 @@ function M.display_path_for_buf(bufnr)
     bufnr
   )
 end
-
--- Clear tick cache when buffer is deleted
-Autocmd.create("BufDelete", function(args)
-  tick_cache[args.buf] = nil
-end, {
-  group = Autocmd.group("UiPathsCache", true),
-  desc = "Clear path tick cache on buffer delete",
-})
 
 return M

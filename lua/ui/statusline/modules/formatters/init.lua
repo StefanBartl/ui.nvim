@@ -20,10 +20,18 @@ end
 local escape_cache = require("lib.lua.memo.lru").new(128)
 local ellipsize_cache = require("lib.lua.memo.lru").new(64)
 
--- Clear on colorscheme change
-require("lib.nvim.ui.hl").persist(function()
-  escape_cache = require("lib.lua.memo.lru").new(128)
-end, { name = "UiFormattersCache", immediate = false })
+-- Clear on colorscheme change. Registered on the first escaped string, not on `require`: the
+-- cache is empty until then.
+local persisting = false
+local function ensure_persist()
+  if persisting then
+    return
+  end
+  persisting = true
+  require("lib.nvim.ui.hl").persist(function()
+    escape_cache = require("lib.lua.memo.lru").new(128)
+  end, { name = "UiFormattersCache", immediate = false })
+end
 
 ---@nodiscard
 ---@param s string
@@ -33,6 +41,7 @@ function M.stl_escape(s)
     return ""
   end
 
+  ensure_persist()
   local cached = escape_cache:get(s)
   if cached then
     return cached

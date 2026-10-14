@@ -10,6 +10,24 @@ local M = {}
 -- Cache for mode band groups
 local mode_band_cache = nil
 local last_mode = nil
+local cache_watched = false
+
+--- Clear the cache on mode change. Registered on the first cached lookup, not on `require`:
+--- nothing is cached before that.
+---@return nil
+local function watch_mode()
+  if cache_watched then
+    return
+  end
+  cache_watched = true
+  Autocmd.create("ModeChanged", function()
+    mode_band_cache = nil
+    last_mode = nil
+  end, {
+    group = Autocmd.group("UiHighlightCache", true),
+    desc = "Clear mode band cache on mode change",
+  })
+end
 
 ---@nodiscard
 --- Strip embedded statusline highlights
@@ -60,6 +78,7 @@ function M.mode_band_group()
   end
 
   -- Update cache
+  watch_mode()
   last_mode = m
 
   local utils = require("ui.statusline.utils.primitives")
@@ -73,14 +92,5 @@ function M.mode_band_group()
 
   return mode_band_cache
 end
-
--- Clear cache on mode change
-Autocmd.create("ModeChanged", function()
-  mode_band_cache = nil
-  last_mode = nil
-end, {
-  group = Autocmd.group("UiHighlightCache", true),
-  desc = "Clear mode band cache on mode change",
-})
 
 return M
