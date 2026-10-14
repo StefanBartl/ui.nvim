@@ -48,6 +48,14 @@ describe("ui.statusline.modules.terminal_count", function()
     assert.equals("main", render({ count = 1, visible = 1, current = "main" }))
   end)
 
+  it(
+    "escapes a % in the terminal name so the statusline does not read it as a directive",
+    function()
+      assert.equals("100%% (2)", render({ count = 2, visible = 1, current = "100%" }))
+      assert.equals("a%%b", render({ count = 1, visible = 1, current = "a%b" }))
+    end
+  )
+
   it("counts the terminals when the cursor is elsewhere", function()
     assert.equals("2 terminals", render({ count = 2, visible = 1 }))
     assert.equals("1 terminal", render({ count = 1, visible = 0 }))
