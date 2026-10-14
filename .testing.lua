@@ -41,4 +41,6 @@ return {
     -- `nvim --version` is the cheap long-lived terminal job of the tabline specs that open a terminal buffer.
     spawn = { "git", "nvim" },
   },
+  -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
+  conformance = { gate = true },
 }
