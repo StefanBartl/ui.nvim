@@ -25,8 +25,10 @@ return function()
     return ""
   end
   if summary.current then
-    return summary.count > 1 and ("%s (%d)"):format(summary.current, summary.count)
-      or summary.current
+    -- A terminal name is free text (`:Terminal open 100%`, or a debug configuration's name): a
+    -- literal `%` must not be read as a 'statusline' directive.
+    local name = tostring(summary.current):gsub("%%", "%%%%")
+    return summary.count > 1 and ("%s (%d)"):format(name, summary.count) or name
   end
   return ("%d terminal%s"):format(summary.count, summary.count == 1 and "" or "s")
 end
