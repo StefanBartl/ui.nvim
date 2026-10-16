@@ -207,7 +207,8 @@ Theme overrides go to `ui.config.setup`, not here: >lua
     List the kinds a slot can be.
 
 :UI help
-    The subcommand list, in a float.
+    The subcommand list, printed; generated from the same routes as the
+    option float (a bare :UI opens the float).
 
 No subcommand takes a range or a count: each acts on global state, where
 neither has a meaning.

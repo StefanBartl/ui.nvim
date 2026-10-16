@@ -49,7 +49,7 @@ theme list.
 | `:UI modules` | — | List every statusline segment in `ui.statusline.catalog`, split into builtin/standalone, with wiring hints |
 | `:UI progress` | — | Popup list of whatever `lib.nvim.progress`'s "statusline" style is currently tracking (same registry `plugin_progress` renders inline and its hover tooltip already surfaces, reachable here without a mouse) |
 | `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
-| `:UI help` | — | The subcommand list, in a float |
+| `:UI help` | — | The subcommand list, printed; generated from the routes (a bare `:UI` opens the option float instead) |
 
 **`:KitPreview`** (`ui.kit`'s own command, not a `:UI` subcommand) opens the
 live theme playground: a tab split with an editable Lua config buffer on the

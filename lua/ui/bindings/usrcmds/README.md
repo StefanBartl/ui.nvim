@@ -16,11 +16,24 @@ transparency toggle. Was Base46-specific through step 5 of `ROADMAP.md`; step
 
 `:UI` and `:Theme` are [lib.nvim composer](https://github.com/StefanBartl/lib.nvim) verbs: the route tree
 drives dispatch, `<Tab>` completion and the **option float**. A bare `:UI` (or `:UI sticky ` and then the
-cheatsheet key, `<M-h>` by default) opens a list of what the level offers, each option with a short text;
-`<CR>` puts it into the command line. Every subcommand keeps its own validation and messages: the words
-after the subcommand are handed to the handler as typed, so `values` of an argument are hints, never a
-whitelist. `:UI help` still prints the long help text. Needs a lib.nvim with `composer.help` (the
-argument texts); `TESTS/usrcmd_help_spec.lua` pins that no route, flag or argument lacks a text.
+cheatsheet key) opens a list of what the level offers, each option with a short text; `<CR>` puts it into
+the command line. The cheatsheet key has **no default**: it is the `keymap` of
+`require("lib.nvim.bindings.usercmd.composer").setup({ help = { keymap = "..." } })` (see `help.keymap` in
+the composer's README); a config that sets none still gets the float from a bare `:UI`. Every subcommand
+keeps its own validation and messages: the words after the subcommand are handed to the handler as typed,
+so `values` of an argument are hints, never a whitelist. `:UI help` prints a long help text that is
+generated from the same routes (one row per subcommand, one more per documented value), so it cannot
+differ from the float. Needs a lib.nvim with `composer.help` (the argument texts);
+`TESTS/usrcmd_help_spec.lua` pins that no route, flag or argument lacks a text.
+
+Behavior since the move to composer verbs (2026-10-16):
+
+- `:Theme a b` is no longer refused for the second word: the handler reads the first word and ignores the
+  rest.
+- A bare `:UI` opens the option float instead of printing the help text; `:UI help` prints the text.
+- The argument types of the two verbs (`UI_THEME`, `UI_VARIANT`, `UI_TABLINE_STYLE`, `UI_KIT_PRESET`,
+  `UI_SLOT_WORD`, `UI_STICKY_WORD`) are written into the composer's type registry by `setup()`, not by
+  `require`.
 
 ### Switch theme
 
