@@ -796,86 +796,80 @@ local function ui_toggle(_args)
   end
 end
 
+-- The route table is built below the handlers (it points at them), and `help_text`
+-- reads it: the long help is generated from the routes, so it cannot drift from
+-- what `:UI` offers (it used to be a second, hand-kept list next to the route texts).
+---@type Lib.UserCmd.Composer.Route[]
+local ROUTES
+
+---`:UI sub [optional] <required> variadic...` for one route.
+---@param route Lib.UserCmd.Composer.Route
+---@return string
+local function usage(route)
+  local parts = { ":UI " .. table.concat(route.path, " ") }
+  for _, arg in ipairs(route.args or {}) do
+    local name = arg.variadic and (arg.name .. "...") or arg.name
+    parts[#parts + 1] = arg.optional and ("[" .. name .. "]") or ("<" .. name .. ">")
+  end
+  return table.concat(parts, " ")
+end
+
+---The long help text of `:UI help`, generated from `ROUTES`: one row per route, one
+---more per documented value of an argument (`enum_desc`), and the argument text where
+---there is no per-value text (the slots subcommands).
+---@return string
+local function help_text()
+  local rows = {} ---@type string[][]
+  local width = 0
+  local function add(left, right)
+    rows[#rows + 1] = { left, right }
+    width = math.max(width, vim.fn.strdisplaywidth(left))
+  end
+
+  for _, route in ipairs(ROUTES) do
+    local base = ":UI " .. table.concat(route.path, " ")
+    add(usage(route), route.desc or "")
+    for _, arg in ipairs(route.args or {}) do
+      if arg.enum_desc then
+        -- The order of `values` when the arg has them; the words of a custom type
+        -- (the slots subcommands) are listed alphabetically.
+        local order = arg.values
+        if not order then
+          order = vim.tbl_keys(arg.enum_desc)
+          table.sort(order)
+        end
+        for _, value in ipairs(order) do
+          if arg.enum_desc[value] then
+            add(("  %s %s"):format(base, value), arg.enum_desc[value])
+          end
+        end
+      elseif arg.desc then
+        add(("    %s"):format(arg.name), arg.desc)
+      end
+    end
+  end
+  add(":Theme [name]", "Shortcut for :UI theme")
+
+  local lines = { "UI Command Help (a bare :UI opens the option float)", "" }
+  for _, row in ipairs(rows) do
+    local pad = (" "):rep(width - vim.fn.strdisplaywidth(row[1]) + 2)
+    lines[#lines + 1] = "  " .. row[1] .. pad .. row[2]
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "See also: ui/bindings/usrcmds/themes/README.md for technical details"
+  return table.concat(lines, "\n")
+end
+
 ---Show help information
 ---@param _args string[] # Unused: these subcommands take no argument
 local function ui_help(_args)
-  local help_text = [[
-╭─ UI Command Help ────────────────────────────────────╮
-│                                                      │
-│  :UI transparency           Toggle transparency      │
-│  :UI transparency on        Enable transparency      │
-│  :UI transparency off       Disable transparency     │
-│                                                      │
-│  :UI screenkey              Toggle the screenkey HUD │
-│  :UI screenkey on           Enable screenkey         │
-│  :UI screenkey off          Disable screenkey        │
-│                                                      │
-│  :UI sticky                 Toggle the sticky context│
-│  :UI sticky on|off          Explicit state           │
-│  :UI sticky status          Show state, depth, lines │
-│  :UI sticky depth [1-6]     Deepest heading pinned   │
-│  :UI sticky lines [ft] [n]  Row cap (0 = unlimited)  │
-│  :UI sticky reset           Back to configured values│
-│  :UI sticky up [n]          Jump to the n-th scope   │
-│  :UI context ...            Same command, older name │
-│                                                      │
-│  :UI color [#hex]           Open the colour picker   │
-│                                                      │
-│  :UI zen                    Toggle the zen box       │
-│  :UI zen on                 Enter zen                │
-│  :UI zen off                Leave zen                │
-│                                                      │
-│  :UI winpick                Pick a window by letter, │
-│                             jump to it               │
-│                                                      │
-│  :UI notify                 Toggle notify toasts     │
-│  :UI notify on|off          Explicit state           │
-│  :UI notify history         Open the history         │
-│  :UI notify clear           Forget the history       │
-│                                                      │
-│  :UI keys [prefix]          Mappings under a prefix  │
-│                                                      │
-│  :UI slots                  List the slots           │
-│  :UI slots toggle           Show/hide the slot bar   │
-│  :UI slots panel            Slot panel (work in it)  │
-│  :UI slots edit [n]         Add / change a slot      │
-│  :UI slots <n>              Run slot n               │
-│  :UI slots add [n]          Current file -> slot     │
-│  :UI slots yank <n>         Copy what slot n is      │
-│  :UI slots clear <n>|all    Empty a slot / all       │
-│  :UI slots move <a> <b>     Move or swap two slots   │
-│  :UI slots kinds            List the slot kinds      │
-│                                                      │
-│  :UI theme                  Show the current theme   │
-│  :UI theme <name>           Set a theme              │
-│  :UI themes                 List all themes          │
-│  :UI picker                 Open the visual theme    │
-│                             picker (live preview)    │
-│  :UI toggle                 Switch between themes    │
-│                                                      │
-│  :UI variant                Show the current variant │
-│  :UI variant <name>         Switch variant           │
-│  :UI variants               List all variants        │
-│                                                      │
-│  :UI tabline-style          Show the current style   │
-│  :UI tabline-style <name>   Switch tabline style     │
-│  :UI tabline-styles         List all styles          │
-│                                                      │
-│  :UI kit-preset             Show the current preset  │
-│  :UI kit-preset <name>      Switch popup/toast border│
-│                             + colors (ui.kit.theme)  │
-│  :UI kit-presets            List all presets         │
-│                                                      │
-│  :UI modules                List available segments  │
-│  :UI progress               Show what's running now  │
-│  :UI status                 Show the current config  │
-│  :UI help                   Show this help           │
-│                                                      │
-╰──────────────────────────────────────────────────────╯
+  notify.info(help_text())
+end
 
-See also: ui/bindings/usrcmds/themes/README.md for technical details
-]]
-  notify.info(help_text)
+---The text `:UI help` prints (generated from the routes).
+---@return string
+function M.help_text()
+  return help_text()
 end
 
 -----------------------------------------------------------------------
@@ -883,8 +877,8 @@ end
 -----------------------------------------------------------------------
 
 -- `:UI` and `:Theme` are composer verbs: the route tree is the one source for the
--- dispatch, `<Tab>` completion, the usage text and the help float (`<M-h>` /
--- a bare `:UI`). The handlers above are unchanged and still read the words the
+-- dispatch, `<Tab>` completion, the usage text and the help float (the cheatsheet
+-- key, or a bare `:UI`). The handlers above are unchanged and still read the words the
 -- user typed (`fargs`, `args[1]` is the subcommand), so every subcommand keeps
 -- its own validation and messages. The `values` of an argument are completion
 -- hints only (never enforced), for the same reason.
@@ -925,53 +919,58 @@ local function list_type(name, desc, list)
   })
 end
 
-list_type("UI_THEME", "Name of an installed colorscheme", function()
-  return theme.list_themes()
-end)
--- The registries, not static lists: a host's own `register(name, ...)` shows up
--- the moment it runs, same as the shipped entries.
-list_type("UI_VARIANT", "Name of a statusline variant", function()
-  return require("ui.config.variants").list()
-end)
-list_type("UI_TABLINE_STYLE", "Name of a tabline style", function()
-  return require("ui.tabline.styles").list()
-end)
-list_type("UI_KIT_PRESET", "Name of a popup/toast preset", function()
-  return require("ui.kit.theme").presets()
-end)
+-- The argument types go into lib.nvim's process-wide type registry, so they are
+-- written by `setup()` (once `:UI` is wanted), not as a side effect of `require`.
+---@return nil
+local function register_types()
+  list_type("UI_THEME", "Name of an installed colorscheme", function()
+    return theme.list_themes()
+  end)
+  -- The registries, not static lists: a host's own `register(name, ...)` shows up
+  -- the moment it runs, same as the shipped entries.
+  list_type("UI_VARIANT", "Name of a statusline variant", function()
+    return require("ui.config.variants").list()
+  end)
+  list_type("UI_TABLINE_STYLE", "Name of a tabline style", function()
+    return require("ui.tabline.styles").list()
+  end)
+  list_type("UI_KIT_PRESET", "Name of a popup/toast preset", function()
+    return require("ui.kit.theme").presets()
+  end)
 
--- `:UI slots` takes a subcommand or a slot number, then slot numbers.
-composer.register_type("UI_SLOT_WORD", {
-  desc = "A slots subcommand or the number of a slot",
-  validate = function(raw)
-    return true, raw, nil
-  end,
-  complete = function(lead, _, cmdline)
-    local parts, num_args, arglead = words(cmdline or "", lead)
-    if num_args <= 2 then
-      return require("ui.slots").complete(arglead, nil, 1)
-    end
-    return require("ui.slots").complete(arglead, parts[3], num_args - 1)
-  end,
-})
+  -- `:UI slots` takes a subcommand or a slot number, then slot numbers.
+  composer.register_type("UI_SLOT_WORD", {
+    desc = "A slots subcommand or the number of a slot",
+    validate = function(raw)
+      return true, raw, nil
+    end,
+    complete = function(lead, _, cmdline)
+      local parts, num_args, arglead = words(cmdline or "", lead)
+      if num_args <= 2 then
+        return require("ui.slots").complete(arglead, nil, 1)
+      end
+      return require("ui.slots").complete(arglead, parts[3], num_args - 1)
+    end,
+  })
 
--- The word after `sticky depth` / `sticky lines`.
-composer.register_type("UI_STICKY_WORD", {
-  desc = "A depth level (sticky depth) or a filetype (sticky lines)",
-  validate = function(raw)
-    return true, raw, nil
-  end,
-  complete = function(lead, _, cmdline)
-    local parts, num_args, arglead = words(cmdline or "", lead)
-    if num_args == 3 and parts[3] == "depth" then
-      return filter(arglead, { "1", "2", "3", "4", "5", "6", "all" })
-    end
-    if num_args == 3 and parts[3] == "lines" then
-      return filter(arglead, vim.fn.getcompletion("", "filetype"))
-    end
-    return {}
-  end,
-})
+  -- The word after `sticky depth` / `sticky lines`.
+  composer.register_type("UI_STICKY_WORD", {
+    desc = "A depth level (sticky depth) or a filetype (sticky lines)",
+    validate = function(raw)
+      return true, raw, nil
+    end,
+    complete = function(lead, _, cmdline)
+      local parts, num_args, arglead = words(cmdline or "", lead)
+      if num_args == 3 and parts[3] == "depth" then
+        return filter(arglead, { "1", "2", "3", "4", "5", "6", "all" })
+      end
+      if num_args == 3 and parts[3] == "lines" then
+        return filter(arglead, vim.fn.getcompletion("", "filetype"))
+      end
+      return {}
+    end,
+  })
+end
 
 ---A route's handler: the legacy `ui_*` function with the words as typed, the way
 ---the old dispatcher ran it (errors are told, not thrown).
@@ -986,8 +985,6 @@ local function run(fn)
     end
   end
 end
-
-local ON_OFF = { "on", "off" }
 
 ---@param extra table|nil  # `args` (and any other route field)
 ---@param name string
@@ -1004,41 +1001,45 @@ local function on_off(desc)
     name = "state",
     type = "STRING",
     optional = true,
-    values = ON_OFF,
+    values = { "on", "off" },
     desc = desc,
     enum_desc = { on = "Enable", off = "Disable" },
   }
 end
 
-local STICKY_ARGS = {
-  {
-    name = "action",
-    type = "STRING",
-    optional = true,
-    desc = "What to do; without it the sticky context is toggled",
-    values = { "on", "off", "toggle", "status", "depth", "lines", "reset", "up" },
-    enum_desc = {
-      on = "Enable",
-      off = "Disable",
-      toggle = "Switch",
-      status = "Show state, depth and lines",
-      depth = "Deepest heading pinned (1-6 or all)",
-      lines = "Row cap per filetype (0 = unlimited)",
-      reset = "Back to the configured values",
-      up = "Jump to the n-th scope",
+-- Built per route (not one table both sticky routes point at): a change to the
+-- args of one route must not show up in the other.
+---@return Lib.UserCmd.Composer.ArgSpec[]
+local function sticky_args()
+  return {
+    {
+      name = "action",
+      type = "STRING",
+      optional = true,
+      desc = "What to do; without it the sticky context is toggled",
+      values = { "on", "off", "toggle", "status", "depth", "lines", "reset", "up" },
+      enum_desc = {
+        on = "Enable",
+        off = "Disable",
+        toggle = "Switch",
+        status = "Show state, depth and lines",
+        depth = "Deepest heading pinned (1-6 or all)",
+        lines = "Row cap per filetype (0 = unlimited)",
+        reset = "Back to the configured values",
+        up = "Jump to the n-th scope",
+      },
     },
-  },
-  {
-    name = "a",
-    type = "UI_STICKY_WORD",
-    optional = true,
-    desc = "depth: the level; lines: a filetype or the row cap; up: the n-th scope",
-  },
-  { name = "b", type = "STRING", optional = true, desc = "lines: the row cap after a filetype" },
-}
+    {
+      name = "a",
+      type = "UI_STICKY_WORD",
+      optional = true,
+      desc = "depth: the level; lines: a filetype or the row cap; up: the n-th scope",
+    },
+    { name = "b", type = "STRING", optional = true, desc = "lines: the row cap after a filetype" },
+  }
+end
 
----@type Lib.UserCmd.Composer.Route[]
-local ROUTES = {
+ROUTES = {
   route("transparency", ui_transparency, "Toggle transparency (on/off to set it)", {
     args = { on_off("Set transparency instead of toggling") },
   }),
@@ -1046,9 +1047,9 @@ local ROUTES = {
     args = { on_off("Set the HUD instead of toggling") },
   }),
   route("sticky", ui_sticky, "The sticky context: toggle, depth, line cap, jump", {
-    args = STICKY_ARGS,
+    args = sticky_args(),
   }),
-  route("context", ui_sticky, "Same command as sticky, older name", { args = STICKY_ARGS }),
+  route("context", ui_sticky, "Same command as sticky, older name", { args = sticky_args() }),
   route("color", ui_color, "Open the colour picker, optionally on a colour", {
     args = { { name = "hex", type = "STRING", optional = true, desc = "Start colour, #rrggbb" } },
   }),
@@ -1089,7 +1090,20 @@ local ROUTES = {
         type = "UI_SLOT_WORD",
         optional = true,
         variadic = true,
-        desc = "A subcommand (list, add, yank, clear, move, kinds, toggle, open, close, panel, edit) or a slot number to run",
+        desc = "A subcommand or a slot number to run",
+        enum_desc = {
+          list = "List the slots",
+          add = "Current file -> slot",
+          yank = "Copy what a slot is",
+          clear = "Empty a slot (or all)",
+          move = "Move or swap two slots",
+          kinds = "List the slot kinds",
+          toggle = "Show/hide the slot bar",
+          open = "Show the slot bar",
+          close = "Hide the slot bar",
+          panel = "Slot panel (work in it)",
+          edit = "Add or change a slot",
+        },
       },
     },
   }),
@@ -1131,6 +1145,8 @@ function M.setup()
   pcall(function()
     require("ui.kit.preview").ensure_command()
   end)
+
+  register_types()
 
   composer.verb("UI", {
     desc = "UI Kontrolle (Theme, Transparenz, Varianten, Tabline-Stil, ... -- siehe :UI help)",
