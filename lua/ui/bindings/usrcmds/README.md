@@ -14,6 +14,14 @@ transparency toggle. Was Base46-specific through step 5 of `ROADMAP.md`; step
 
 ## Usage
 
+`:UI` and `:Theme` are [lib.nvim composer](https://github.com/StefanBartl/lib.nvim) verbs: the route tree
+drives dispatch, `<Tab>` completion and the **option float**. A bare `:UI` (or `:UI sticky ` and then the
+cheatsheet key, `<M-h>` by default) opens a list of what the level offers, each option with a short text;
+`<CR>` puts it into the command line. Every subcommand keeps its own validation and messages: the words
+after the subcommand are handed to the handler as typed, so `values` of an argument are hints, never a
+whitelist. `:UI help` still prints the long help text. Needs a lib.nvim with `composer.help` (the
+argument texts); `TESTS/usrcmd_help_spec.lua` pins that no route, flag or argument lacks a text.
+
 ### Switch theme
 
 ```vim

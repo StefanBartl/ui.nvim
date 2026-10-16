@@ -2,7 +2,6 @@
 ---Provides :UI usercommand for runtime UI configuration (theme, transparency).
 
 local notify = require("lib.nvim.notify").create("[ui.bindings.usrcmds]")
-local usercmd = require("lib.nvim.bindings.usercmd")
 
 local M = {}
 
@@ -880,169 +879,243 @@ See also: ui/bindings/usrcmds/themes/README.md for technical details
 end
 
 -----------------------------------------------------------------------
--- Subcommand registry
+-- The verbs (lib.nvim composer)
 -----------------------------------------------------------------------
 
--- Single source of truth for both the dispatcher and completion() below,
--- so a new subcommand can't be wired into one without the other.
-local SUBCOMMANDS = {
-  { name = "transparency", fn = ui_transparency },
-  { name = "screenkey", fn = ui_screenkey },
-  { name = "sticky", fn = ui_sticky },
-  { name = "context", fn = ui_sticky }, -- the older name; same command
-  { name = "color", fn = ui_color },
-  { name = "zen", fn = ui_zen },
-  { name = "winpick", fn = ui_winpick },
-  { name = "notify", fn = ui_notify_cmd },
-  { name = "keys", fn = ui_keys_cmd },
-  { name = "slots", fn = ui_slots_cmd },
-  { name = "theme", fn = ui_theme },
-  { name = "themes", fn = ui_themes },
-  { name = "variant", fn = ui_variant },
-  { name = "variants", fn = ui_variants },
-  { name = "tabline-style", fn = ui_tabline_style },
-  { name = "tabline-styles", fn = ui_tabline_styles },
-  { name = "kit-preset", fn = ui_kit_preset },
-  { name = "kit-presets", fn = ui_kit_presets },
-  { name = "picker", fn = ui_picker },
-  { name = "modules", fn = ui_modules },
-  { name = "progress", fn = ui_progress },
-  { name = "toggle", fn = ui_toggle },
-  { name = "status", fn = ui_status },
-  { name = "help", fn = ui_help },
-}
+-- `:UI` and `:Theme` are composer verbs: the route tree is the one source for the
+-- dispatch, `<Tab>` completion, the usage text and the help float (`<M-h>` /
+-- a bare `:UI`). The handlers above are unchanged and still read the words the
+-- user typed (`fargs`, `args[1]` is the subcommand), so every subcommand keeps
+-- its own validation and messages. The `values` of an argument are completion
+-- hints only (never enforced), for the same reason.
 
-local actions = {}
-local subcommand_names = {}
-for _, entry in ipairs(SUBCOMMANDS) do
-  actions[entry.name] = entry.fn
-  table.insert(subcommand_names, entry.name)
-end
+local composer = require("lib.nvim.bindings.usercmd.composer")
 
------------------------------------------------------------------------
--- Dispatcher
------------------------------------------------------------------------
-
----@param opts table
-local function dispatcher(opts)
-  local args = vim.split(vim.trim(opts.args or ""), "%s+")
-
-  -- Handle empty command
-  if #args == 0 or args[1] == "" then
-    ui_help({})
-    return
-  end
-
-  local sub = args[1]
-  local action = actions[sub]
-
-  if action then
-    local ok, err = pcall(action, args)
-    if not ok then
-      notify.error(("UI %s error: %s"):format(sub, tostring(err)))
-    end
-  else
-    notify.error(("Unknown command: '%s'\nUse :UI help for help"):format(sub))
-  end
-end
-
------------------------------------------------------------------------
--- Completion
------------------------------------------------------------------------
-
----@param arglead string
+---Words of the command line as the old completion read them.
 ---@param cmdline string
----@param _cursorpos number # Unused: the split below reads the whole cmdline
----@return string[]
-local function complete(arglead, cmdline, _cursorpos)
-  -- Split the command line into parts
+---@param arglead string
+---@return string[] parts
+---@return integer num_args  # words after `:UI`, counting the one being completed
+---@return string arglead
+local function words(cmdline, arglead)
   local parts = {}
   for part in cmdline:gmatch("%S+") do
-    table.insert(parts, part)
+    parts[#parts + 1] = part
   end
-
-  -- Count how many arguments we have (excluding the command itself)
   local num_args = #parts - 1
-
-  -- If the line ends with a space, we're completing the next argument
   if cmdline:match("%s$") then
     num_args = num_args + 1
     arglead = ""
   end
+  return parts, num_args, arglead
+end
 
-  -- Complete first argument (subcommands)
-  if num_args == 1 then
-    return filter(arglead, subcommand_names)
-  end
+---@param name string
+---@param desc string
+---@param list fun(): string[]
+local function list_type(name, desc, list)
+  composer.register_type(name, {
+    desc = desc,
+    validate = function(raw)
+      return true, raw, nil
+    end,
+    complete = function(lead)
+      return filter(lead, list())
+    end,
+  })
+end
 
-  -- Complete second argument based on subcommand
-  if num_args == 2 then
-    local subcmd = parts[2]
+list_type("UI_THEME", "Name of an installed colorscheme", function()
+  return theme.list_themes()
+end)
+-- The registries, not static lists: a host's own `register(name, ...)` shows up
+-- the moment it runs, same as the shipped entries.
+list_type("UI_VARIANT", "Name of a statusline variant", function()
+  return require("ui.config.variants").list()
+end)
+list_type("UI_TABLINE_STYLE", "Name of a tabline style", function()
+  return require("ui.tabline.styles").list()
+end)
+list_type("UI_KIT_PRESET", "Name of a popup/toast preset", function()
+  return require("ui.kit.theme").presets()
+end)
 
-    if subcmd == "transparency" then
-      return filter(arglead, { "on", "off" })
-    end
-
-    if subcmd == "screenkey" then
-      return filter(arglead, { "on", "off" })
-    end
-
-    if subcmd == "sticky" or subcmd == "context" then
-      return filter(arglead, { "on", "off", "toggle", "status", "depth", "lines", "reset", "up" })
-    end
-
-    if subcmd == "zen" then
-      return filter(arglead, { "on", "off" })
-    end
-
-    if subcmd == "notify" then
-      return filter(arglead, { "on", "off", "history", "clear" })
-    end
-
-    if subcmd == "slots" then
+-- `:UI slots` takes a subcommand or a slot number, then slot numbers.
+composer.register_type("UI_SLOT_WORD", {
+  desc = "A slots subcommand or the number of a slot",
+  validate = function(raw)
+    return true, raw, nil
+  end,
+  complete = function(lead, _, cmdline)
+    local parts, num_args, arglead = words(cmdline or "", lead)
+    if num_args <= 2 then
       return require("ui.slots").complete(arglead, nil, 1)
     end
-
-    if subcmd == "theme" then
-      return filter(arglead, theme.list_themes())
-    end
-
-    if subcmd == "variant" then
-      -- The registry, not a static list: a host's own require("ui.config
-      -- .variants").register(name, ...) shows up here the moment it runs,
-      -- same as the four shipped presets.
-      return filter(arglead, require("ui.config.variants").list())
-    end
-
-    if subcmd == "tabline-style" then
-      -- Same registry-not-static-list reasoning as "variant" above, one
-      -- module over: require("ui.tabline.styles").register(name, fn).
-      return filter(arglead, require("ui.tabline.styles").list())
-    end
-
-    if subcmd == "kit-preset" then
-      return filter(arglead, require("ui.kit.theme").presets())
-    end
-  end
-
-  -- Slots take up to two more words (`move 1 3`).
-  if parts[2] == "slots" and num_args >= 3 then
     return require("ui.slots").complete(arglead, parts[3], num_args - 1)
-  end
+  end,
+})
 
-  -- Complete third argument: only `sticky` has one, its `depth` level and the
-  -- filetype of its `lines`.
-  if num_args == 3 and (parts[2] == "sticky" or parts[2] == "context") then
-    if parts[3] == "depth" then
+-- The word after `sticky depth` / `sticky lines`.
+composer.register_type("UI_STICKY_WORD", {
+  desc = "A depth level (sticky depth) or a filetype (sticky lines)",
+  validate = function(raw)
+    return true, raw, nil
+  end,
+  complete = function(lead, _, cmdline)
+    local parts, num_args, arglead = words(cmdline or "", lead)
+    if num_args == 3 and parts[3] == "depth" then
       return filter(arglead, { "1", "2", "3", "4", "5", "6", "all" })
     end
-    if parts[3] == "lines" then
+    if num_args == 3 and parts[3] == "lines" then
       return filter(arglead, vim.fn.getcompletion("", "filetype"))
     end
-  end
+    return {}
+  end,
+})
 
-  return {}
+---A route's handler: the legacy `ui_*` function with the words as typed, the way
+---the old dispatcher ran it (errors are told, not thrown).
+---@param fn fun(args: string[])
+---@return fun(ctx: Lib.UserCmd.Composer.Ctx)
+local function run(fn)
+  return function(ctx)
+    local fargs = ctx.raw and ctx.raw.fargs or {}
+    local ok, err = pcall(fn, fargs)
+    if not ok then
+      notify.error(("UI %s error: %s"):format(tostring(fargs[1]), tostring(err)))
+    end
+  end
 end
+
+local ON_OFF = { "on", "off" }
+
+---@param extra table|nil  # `args` (and any other route field)
+---@param name string
+---@param fn fun(args: string[])
+---@param desc string
+local function route(name, fn, desc, extra)
+  return vim.tbl_extend("force", { path = { name }, desc = desc, run = run(fn) }, extra or {})
+end
+
+---@param desc string
+---@return Lib.UserCmd.Composer.ArgSpec
+local function on_off(desc)
+  return {
+    name = "state",
+    type = "STRING",
+    optional = true,
+    values = ON_OFF,
+    desc = desc,
+    enum_desc = { on = "Enable", off = "Disable" },
+  }
+end
+
+local STICKY_ARGS = {
+  {
+    name = "action",
+    type = "STRING",
+    optional = true,
+    desc = "What to do; without it the sticky context is toggled",
+    values = { "on", "off", "toggle", "status", "depth", "lines", "reset", "up" },
+    enum_desc = {
+      on = "Enable",
+      off = "Disable",
+      toggle = "Switch",
+      status = "Show state, depth and lines",
+      depth = "Deepest heading pinned (1-6 or all)",
+      lines = "Row cap per filetype (0 = unlimited)",
+      reset = "Back to the configured values",
+      up = "Jump to the n-th scope",
+    },
+  },
+  {
+    name = "a",
+    type = "UI_STICKY_WORD",
+    optional = true,
+    desc = "depth: the level; lines: a filetype or the row cap; up: the n-th scope",
+  },
+  { name = "b", type = "STRING", optional = true, desc = "lines: the row cap after a filetype" },
+}
+
+---@type Lib.UserCmd.Composer.Route[]
+local ROUTES = {
+  route("transparency", ui_transparency, "Toggle transparency (on/off to set it)", {
+    args = { on_off("Set transparency instead of toggling") },
+  }),
+  route("screenkey", ui_screenkey, "Toggle the screenkey HUD", {
+    args = { on_off("Set the HUD instead of toggling") },
+  }),
+  route("sticky", ui_sticky, "The sticky context: toggle, depth, line cap, jump", {
+    args = STICKY_ARGS,
+  }),
+  route("context", ui_sticky, "Same command as sticky, older name", { args = STICKY_ARGS }),
+  route("color", ui_color, "Open the colour picker, optionally on a colour", {
+    args = { { name = "hex", type = "STRING", optional = true, desc = "Start colour, #rrggbb" } },
+  }),
+  route("zen", ui_zen, "Toggle the zen box", { args = { on_off("Enter or leave zen") } }),
+  route("winpick", ui_winpick, "Pick a window by letter and jump to it"),
+  route("notify", ui_notify_cmd, "Toggle notify toasts, open or clear the history", {
+    args = {
+      {
+        name = "action",
+        type = "STRING",
+        optional = true,
+        desc = "What to do; without it the toasts are toggled",
+        values = { "on", "off", "history", "clear" },
+        enum_desc = {
+          on = "Enable toasts",
+          off = "Disable toasts",
+          history = "Open the history",
+          clear = "Forget the history",
+        },
+      },
+    },
+  }),
+  route("keys", ui_keys_cmd, "List the mappings under a prefix", {
+    args = {
+      {
+        name = "prefix",
+        type = "STRING",
+        optional = true,
+        variadic = true,
+        desc = "Key prefix such as <leader>; the default prefix when left out",
+      },
+    },
+  }),
+  route("slots", ui_slots_cmd, "Numbered slots: list, run, add, edit, move, clear, panel, bar", {
+    args = {
+      {
+        name = "word",
+        type = "UI_SLOT_WORD",
+        optional = true,
+        variadic = true,
+        desc = "A subcommand (list, add, yank, clear, move, kinds, toggle, open, close, panel, edit) or a slot number to run",
+      },
+    },
+  }),
+  route("theme", ui_theme, "Show the current colorscheme, or switch to one", {
+    args = { { name = "name", type = "UI_THEME", optional = true } },
+  }),
+  route("themes", ui_themes, "List every colorscheme, the active one marked"),
+  route("variant", ui_variant, "Show the current statusline variant, or switch to one", {
+    args = { { name = "name", type = "UI_VARIANT", optional = true } },
+  }),
+  route("variants", ui_variants, "List all statusline variants"),
+  route("tabline-style", ui_tabline_style, "Show the current tabline style, or switch to one", {
+    args = { { name = "name", type = "UI_TABLINE_STYLE", optional = true } },
+  }),
+  route("tabline-styles", ui_tabline_styles, "List all tabline styles"),
+  route("kit-preset", ui_kit_preset, "Show or switch the popup/toast border and colors", {
+    args = { { name = "name", type = "UI_KIT_PRESET", optional = true } },
+  }),
+  route("kit-presets", ui_kit_presets, "List all popup/toast presets"),
+  route("picker", ui_picker, "Open the visual theme picker with live preview"),
+  route("modules", ui_modules, "List the available statusline segments"),
+  route("progress", ui_progress, "Show what is running now"),
+  route("toggle", ui_toggle, "Switch between the two configured themes"),
+  route("status", ui_status, "Show the current UI configuration"),
+  route("help", ui_help, "Print the long help text"),
+}
 
 -----------------------------------------------------------------------
 -- Public API
@@ -1059,27 +1132,25 @@ function M.setup()
     require("ui.kit.preview").ensure_command()
   end)
 
-  usercmd.create("UI", dispatcher, {
-    nargs = "*",
-    complete = complete,
+  composer.verb("UI", {
     desc = "UI Kontrolle (Theme, Transparenz, Varianten, Tabline-Stil, ... -- siehe :UI help)",
+    help = true,
+    routes = ROUTES,
   })
 
-  -- Optional: Create shorter aliases
-  usercmd.create("Theme", function(opts)
-    dispatcher({ args = "theme " .. opts.args })
-  end, {
-    nargs = "?",
-    -- The `unused-local` suppression that used to sit here covered exactly
-    -- one of the eleven `_`-prefixed unused parameters in this file and
-    -- carried no reason for being on that one (LLS-40). The `_` prefix is
-    -- this repo's marker for a parameter kept only for signature parity;
-    -- LuaLS still hints on it, uniformly, and that uniform hint is easier to
-    -- read than one arbitrarily silenced case.
-    complete = function(arglead, _cmdline, _cursorpos)
-      return filter(arglead, theme.list_themes())
-    end,
+  composer.verb("Theme", {
     desc = "Theme ändern (Shortcut für :UI theme)",
+    help = true,
+    routes = {
+      {
+        path = {},
+        desc = "Show the current colorscheme, or switch to one",
+        args = { { name = "name", type = "UI_THEME", optional = true } },
+        run = run(function(fargs)
+          ui_theme({ "theme", fargs[1] })
+        end),
+      },
+    },
   })
 end
 
