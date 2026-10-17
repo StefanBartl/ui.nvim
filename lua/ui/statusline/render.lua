@@ -25,6 +25,7 @@ local highlights = require("ui.statusline.highlights")
 local layout = require("ui.statusline.layout")
 local hover = require("ui.statusline.hover")
 local clickable = require("ui.statusline.utils.clickable")
+local showcmd_loc = require("ui.statusline.modules.showcmd.loc")
 
 local M = {}
 
@@ -445,6 +446,10 @@ function M.enable(cfg)
   apply_saved_order(cfg)
 
   current = cfg
+  -- `'showcmdloc'` follows the `showcmd` segment's presence in `order`
+  -- (ui.statusline.modules.showcmd.loc): taken now for a variant that has
+  -- it, handed back now for one that does not.
+  showcmd_loc.apply(showcmd_loc.wanted(cfg.order))
   highlights.ensure()
   vim.o.statusline = "%!v:lua.require('ui.statusline.render').render()"
   primitives.autocmds()
@@ -457,6 +462,9 @@ function M.render()
   if not current then
     return ""
   end
+  -- Catches an `order` edited in place (the menu's "Add module"/"Remove");
+  -- deferred, so no option is set mid-redraw.
+  showcmd_loc.sync(current.order)
   return M.generate(current)
 end
 
@@ -468,6 +476,7 @@ end
 ---@return nil
 function M.disable()
   current = nil
+  showcmd_loc.apply(false)
   vim.o.statusline = ""
   hover.disable()
   -- The next `enable()` is a fresh start again (see `apply_saved_order`'s

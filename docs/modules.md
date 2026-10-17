@@ -81,6 +81,7 @@ modules = {
 | `tasks_counter` | Open tasks of the project in the cwd, read from the wkdbook task vault, e.g. `"T:7"` (`breakdown = true`: `"T:7 P1:2 B:1"`) | a task vault (optional) | `ui.statusline.modules.tasks_counter` |
 | `diagnostics_sparkline` | A 20-glyph density row showing WHERE diagnostics sit in the buffer, not just how many | — | `ui.statusline.modules.diagnostics_sparkline` |
 | `macro_counter` | Live keystroke count for the macro currently recording, e.g. `"@a · 23"` | — | `ui.statusline.modules.macro_counter` |
+| `showcmd` | The pending key sequence (`'showcmd'`), e.g. `"2d"`; takes `'showcmdloc'` only while the key is in the active `order` | — | `ui.statusline.modules.showcmd` |
 | `time_in_buffer` | Elapsed time since this buffer was first entered this session, e.g. `"12m"` | — | `ui.statusline.modules.time_in_buffer` |
 | `github_stats_badge` | This week's view count for the repo the buffer is in, e.g. `"42 views this week"` — only inside a repo github_stats.nvim tracks | github_stats.nvim | `ui.statusline.modules.github_stats_badge` |
 | `runtime_analysis_ampel` | Traffic-light glyph (🟢/🟡/🔴) for whether any runtime-analysis.nvim-instrumented plugin errored or ran slow today | runtime-analysis.nvim | `ui.statusline.modules.runtime_analysis_ampel` |
@@ -140,6 +141,32 @@ keystroke count while it records — Neovim has no API to read a register's
 content mid-recording, so the count comes from a `vim.on_key()` hook
 bracketed by `RecordingEnter`/`RecordingLeave`, registered once at first
 render.
+
+`showcmd` moves the pending key sequence (`2d`, `"a`, `<C-w>`, ...) from the
+last screen line into the statusline. It renders only Neovim's own `%S`
+item, inside a `%( %)` group, so it takes no columns while nothing is
+pending. `'showcmdloc'` is what makes `%S` non-empty, and it belongs to the
+segment only while the key `"showcmd"` is in the active `order`
+(`ui.statusline.modules.showcmd.loc`): `render.enable()` sets it to
+`"statusline"` for a variant that has the key and hands the earlier value
+back for one that does not, `render.disable()` hands it back, and an `order`
+edited in place (the menu's "Add module"/"Remove") is picked up on the next
+redraw, applied from a `vim.schedule` callback, never mid-redraw. A value
+somebody else set in the meantime is left alone. `'showcmd'` itself must be
+on (Neovim's default).
+
+- **Global statusline (`laststatus=3`)**: works the same — there is one
+  statusline row, and `%S` there shows the keys typed in whichever window is
+  current.
+- **`:UI zen`**: with its defaults (`hide_statusline`, `hide_ruler`) zen sets
+  `laststatus=0` and `showcmd` off, so nothing shows the pending keys while it
+  is open — the segment's `'showcmdloc'` stays `"statusline"` and is not
+  touched. Closing zen gives both options back and the segment shows keys
+  again. `hide_ruler` is the option that turns `showcmd` off; the spec covers
+  zen's defaults only.
+
+Both are covered by `TESTS/statusline_showcmd_spec.lua`, which types a real
+`2d` into a UI-attached child Neovim and reads the statusline back.
 
 `time_in_buffer` is per-session, not persisted across restarts or
 aggregated across sessions — a `sessions.nvim`-based cross-session total is
