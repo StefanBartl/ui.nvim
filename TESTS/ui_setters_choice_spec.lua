@@ -90,6 +90,61 @@ describe("UI-05: setters without a name open a choice", function()
       assert.is_nil(seen)
       assert.equals("ascii", kit_theme.default())
     end)
+
+    it("an installed vim.ui.select gets the choice; nil cancels, a name switches", function()
+      -- The real `ui.kit.select` this time: an override defined here (not
+      -- in the runtime's vim/ui.lua) is what `respect_override` hands to.
+      kit_select.open = real_open
+      local real_ui_select = vim.ui.select
+      local calls = {}
+      vim.ui.select = function(items, opts, cb)
+        calls[#calls + 1] = { items = items, opts = opts, cb = cb }
+      end
+      local ok, err = pcall(function()
+        vim.cmd("UI kit-preset solid")
+        vim.cmd("UI kit-preset")
+        assert.equals(1, #calls)
+        assert.same(kit_theme.presets(), calls[1].items)
+        assert.equals("✓ solid", calls[1].opts.format_item("solid"))
+        calls[1].cb(nil)
+        assert.equals("solid", kit_theme.default())
+
+        vim.cmd("UI kit-preset")
+        assert.equals(2, #calls)
+        calls[2].cb("minimal", 1)
+        assert.equals("minimal", kit_theme.default())
+      end)
+      vim.ui.select = real_ui_select
+      assert.is_true(ok, tostring(err))
+    end)
+
+    it("an error while switching after a pick is reported, not raised", function()
+      -- The pick arrives from the picker's own callback, outside the pcall
+      -- the command runs under; without its own guard the error escaped raw.
+      local real_setup = kit_theme.setup
+      local real_notify = vim.notify
+      local messages = {}
+      vim.notify = function(msg, level)
+        messages[#messages + 1] = { msg = tostring(msg), level = level }
+      end
+      vim.cmd("UI kit-preset")
+      kit_theme.setup = function()
+        error("boom from setup")
+      end
+      local ok, err = pcall(seen.on_select, "minimal", 1)
+      kit_theme.setup = real_setup
+      vim.notify = real_notify
+      assert.is_true(ok, tostring(err))
+      local reported = false
+      for _, m in ipairs(messages) do
+        if
+          m.msg:find("UI kit-preset error", 1, true) and m.msg:find("boom from setup", 1, true)
+        then
+          reported = m.level == vim.log.levels.ERROR
+        end
+      end
+      assert.is_true(reported, vim.inspect(messages))
+    end)
   end)
 
   describe(":UI tabline-style", function()
@@ -105,6 +160,28 @@ describe("UI-05: setters without a name open a choice", function()
       local current = cfg.style or "rounded"
       vim.cmd("UI tabline-style")
       assert_choice(require("ui.tabline.styles").list(), current)
+    end)
+
+    it("without an enabled tabline, says so instead of opening a choice", function()
+      -- Every pick would fail there ("tabline not enabled yet?"), so a
+      -- choice that cannot switch anything must not open.
+      require("ui.tabline.render").disable()
+      local real_notify = vim.notify
+      local messages = {}
+      vim.notify = function(msg, level)
+        messages[#messages + 1] = { msg = tostring(msg), level = level }
+      end
+      local ok, err = pcall(vim.cmd, "UI tabline-style")
+      vim.notify = real_notify
+      assert.is_true(ok, tostring(err))
+      assert.is_nil(seen, "a choice was opened without a tabline")
+      local said = false
+      for _, m in ipairs(messages) do
+        if m.msg:find("not enabled", 1, true) and m.level == vim.log.levels.ERROR then
+          said = true
+        end
+      end
+      assert.is_true(said, vim.inspect(messages))
     end)
 
     it("a pick switches, a cancel does not", function()
