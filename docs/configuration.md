@@ -412,11 +412,14 @@ same way `separator_style` resolves through
 
 | Style | What it does |
 | --- | --- |
-| `rounded` (default) | A cap on every internal chip boundary; square only where the visible run actually meets an edge |
-| `square` | Nothing added; chips sit flush against each other |
+| `rounded_chip` (default) | A cap on every internal chip boundary; square only where the visible run actually meets an edge |
+| `chip` | Nothing added; chips sit flush against each other |
 | `divider` | One plain vertical bar per internal boundary, no rounding |
 
-An unrecognized or unset name falls back to `rounded` rather than throwing.
+The older names `rounded` (= `rounded_chip`) and `square` (= `chip`) stay
+registered as aliases; `hacker` is the flush look again, under the name of the
+`ui.kit.theme` preset, so `:UI kit-preset hacker` switches the tabline too. An
+unrecognized or unset name falls back to `rounded_chip` rather than throwing.
 
 ### `ui.tabline.styles` — registering your own look
 
