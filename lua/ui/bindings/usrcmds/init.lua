@@ -76,6 +76,49 @@ local function filter(arg, list)
   return filtered
 end
 
+---Open a choice over a closed set of names, the current one marked and
+---preselected; a pick hands the name to `on_pick`, a cancel does nothing.
+---Uses `ui.kit.select` (which defers to a user-installed `vim.ui.select`
+---override via `respect_override`) and falls back to `vim.ui.select` itself
+---when the kit cannot be loaded.
+---@param title string
+---@param names string[]
+---@param current string|nil
+---@param on_pick fun(name: string)
+local function choose(title, names, current, on_pick)
+  local initial
+  for i, name in ipairs(names) do
+    if name == current then
+      initial = i
+    end
+  end
+
+  local function format_item(name)
+    return ((name == current) and "✓ " or "  ") .. name
+  end
+
+  local ok, kit_select = pcall(require, "ui.kit.select")
+  if ok and type(kit_select) == "table" and type(kit_select.open) == "function" then
+    kit_select.open({
+      title = title,
+      items = names,
+      format_item = format_item,
+      initial_index = initial,
+      respect_override = true,
+      on_select = function(name)
+        on_pick(name)
+      end,
+    })
+    return
+  end
+
+  vim.ui.select(names, { prompt = title, format_item = format_item }, function(name)
+    if name ~= nil then
+      on_pick(name)
+    end
+  end)
+end
+
 -----------------------------------------------------------------------
 -- Actions
 -----------------------------------------------------------------------
@@ -514,13 +557,9 @@ local function ui_variant(args)
   local variants = require("ui.config.variants")
 
   if not name or name == "" then
-    local current = require("ui.config").get_variant()
-    notify.info(
-      string.format(
-        "Current variant: %s\nUse :UI variant <name> to switch",
-        current or "(unnamed -- passed directly as a table)"
-      )
-    )
+    choose("Statusline variant", variants.list(), require("ui.config").get_variant(), function(pick)
+      ui_variant({ args[1], pick })
+    end)
     return
   end
 
@@ -592,9 +631,9 @@ local function ui_tabline_style(args)
   if not name or name == "" then
     local cfg = require("ui.tabline.render").current()
     local current = (cfg and cfg.style) or "rounded"
-    notify.info(
-      string.format("Current tabline style: %s\nUse :UI tabline-style <name> to switch", current)
-    )
+    choose("Tabline style", styles.list(), current, function(pick)
+      ui_tabline_style({ args[1], pick })
+    end)
     return
   end
 
@@ -656,12 +695,9 @@ local function ui_kit_preset(args)
   local name = args[2]
 
   if not name or name == "" then
-    notify.info(
-      string.format(
-        "Current kit preset: %s\nUse :UI kit-preset <name> to switch",
-        kit_theme.default()
-      )
-    )
+    choose("Kit preset", kit_theme.presets(), kit_theme.default(), function(pick)
+      ui_kit_preset({ args[1], pick })
+    end)
     return
   end
 
@@ -1111,15 +1147,15 @@ ROUTES = {
     args = { { name = "name", type = "UI_THEME", optional = true } },
   }),
   route("themes", ui_themes, "List every colorscheme, the active one marked"),
-  route("variant", ui_variant, "Show the current statusline variant, or switch to one", {
+  route("variant", ui_variant, "Pick a statusline variant from a list, or switch to one", {
     args = { { name = "name", type = "UI_VARIANT", optional = true } },
   }),
   route("variants", ui_variants, "List all statusline variants"),
-  route("tabline-style", ui_tabline_style, "Show the current tabline style, or switch to one", {
+  route("tabline-style", ui_tabline_style, "Pick a tabline style from a list, or switch to one", {
     args = { { name = "name", type = "UI_TABLINE_STYLE", optional = true } },
   }),
   route("tabline-styles", ui_tabline_styles, "List all tabline styles"),
-  route("kit-preset", ui_kit_preset, "Show or switch the popup/toast border and colors", {
+  route("kit-preset", ui_kit_preset, "Pick or switch the popup/toast border and colors", {
     args = { { name = "name", type = "UI_KIT_PRESET", optional = true } },
   }),
   route("kit-presets", ui_kit_presets, "List all popup/toast presets"),

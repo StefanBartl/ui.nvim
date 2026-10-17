@@ -95,10 +95,19 @@ describe(":UI variant / :UI variants", function()
     assert.is_not_nil(render.current())
   end)
 
-  it(":UI variant with no argument does not throw", function()
-    assert.has_no.errors(function()
-      vim.cmd("UI variant")
-    end)
+  it(":UI variant with no argument opens a choice without throwing", function()
+    -- The choice itself is covered by TESTS/ui_setters_choice_spec.lua;
+    -- stubbed here so no prompt is left unanswered.
+    local kit_select = require("ui.kit.select")
+    local real_open = kit_select.open
+    local opened = false
+    kit_select.open = function()
+      opened = true
+    end
+    local ok, err = pcall(vim.cmd, "UI variant")
+    kit_select.open = real_open
+    assert.is_true(ok, tostring(err))
+    assert.is_true(opened)
   end)
 
   it("UI variant <unknown> leaves the active variant unchanged", function()

@@ -178,8 +178,8 @@ the long form of each row.
 
                                                                *:UI-variant*
 :UI variant [{name}]
-    Switch the active statusline preset at runtime; without {name}, show the
-    current one. {name} completes over the variant registry (see
+    Switch the active statusline preset at runtime; without {name}, open a
+    choice with the current one marked. {name} completes over the variant registry (see
     |ui-variants| below): the four shipped presets, plus anything a host
     registered under its own name.
 
@@ -190,7 +190,7 @@ the long form of each row.
                                                          *:UI-tabline-style*
 :UI tabline-style [{name}]
     Switch the active tabline chip-boundary look at runtime; without {name},
-    show the current one. {name} completes over the tabline-style registry
+    open a choice with the current one marked. {name} completes over the tabline-style registry
     (see |ui-tabline-styles| below): the shipped looks, plus anything a host
     registered under its own name.
 
@@ -201,7 +201,8 @@ the long form of each row.
                                                             *:UI-kit-preset*
 :UI kit-preset [{name}]
     Switch the preset (border and colours) every `ui.kit` popup and toast
-    resolves through; without {name}, show the current one. A preset name
+    resolves through; without {name}, open a choice with the current one
+    marked. A preset name
     that is also a tabline style switches the tabline style too.
 
                                                            *:UI-kit-presets*

@@ -47,7 +47,7 @@ theme list.
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
 | `:UI tabline-styles` | — | List the registered tabline styles (`rounded_chip`/`chip`/`divider`, the older alias names `rounded`/`square`, plus anything a host registered), marking the active one |
-| `:UI kit-preset [name]` | completes over the `ui.kit.theme` preset registry | Switch the preset (border and colours) every `ui.kit` popup and toast resolves through; without a name, show the current one. A preset name that is also a registered tabline style switches the tabline style too |
+| `:UI kit-preset [name]` | completes over the `ui.kit.theme` preset registry | Switch the preset (border and colours) every `ui.kit` popup and toast resolves through; without a name, open a choice with the current one marked. A preset name that is also a registered tabline style switches the tabline style too |
 | `:UI kit-presets` | — | List the registered kit presets, marking the active one |
 | `:UI modules` | — | List every statusline segment in `ui.statusline.catalog`, split into builtin/standalone, with wiring hints |
 | `:UI progress` | — | Popup list of whatever `lib.nvim.progress`'s "statusline" style is currently tracking (same registry `plugin_progress` renders inline and its hover tooltip already surfaces, reachable here without a mouse) |
