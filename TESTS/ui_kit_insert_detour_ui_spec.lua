@@ -58,7 +58,8 @@ local function input(keys)
 end
 
 --- A picker whose caller keys open a viewer (`<C-v>`), a viewer after the caller
---- ended Insert mode itself (`<C-s>`) and a float that is typed into (`<C-e>`).
+--- ended Insert mode itself (`<C-s>`), a float that is typed into (`<C-e>`), a
+--- kit.input (`<C-t>`) and a nested picker (`<C-g>`).
 local CHILD = [[
   vim.o.showmode = false
   local kit = require("ui.kit")
@@ -67,6 +68,7 @@ local CHILD = [[
 
   function _G.detour_open()
     _G.V = nil
+    _G.SUBMITTED = nil
     _G.P = kit.picker({
       items = { "alpha", "beta", "gamma" },
       on_submit = function() end,
@@ -85,6 +87,17 @@ local CHILD = [[
             width = 20,
             height = 1,
           })
+        end,
+        ["<C-t>"] = function()
+          kit.input({
+            prompt = "name",
+            on_submit = function(line)
+              _G.SUBMITTED = line
+            end,
+          })
+        end,
+        ["<C-g>"] = function()
+          kit.picker({ items = { "inner" }, on_submit = function() end })
         end,
       },
     })
@@ -238,6 +251,55 @@ describe("a float opened from a picker's Insert-mode key", function()
     -- and it stays so once the keys are through
     vim.wait(100)
     assert.equals("n", state().mode, "still in Normal mode")
+  end)
+
+  -- A window that is typed into closes back into the prompt while its own Insert mode is
+  -- still on, and its closer ends that Insert mode right after: the prompt still gets it back.
+  it("resumes Insert mode at its column after a kit.input", function()
+    input("ab<Left>")
+    expect(function(s)
+      return s.query == "ab" and s.col == 1
+    end, "the cursor stands between a and b")
+    input("<C-t>")
+    expect(function(s)
+      return not s.in_prompt and s.mode == "i"
+    end, "the kit.input is focused in Insert mode")
+    -- one batch: the resume must run before the letter, not after it
+    input("foo<CR>x")
+    local s = expect(function(st)
+      return st.in_prompt and st.query ~= "ab"
+    end, "back in the prompt, the letter typed")
+    assert.equals("foo", lua("return _G.SUBMITTED"), "the kit.input submitted what was typed")
+    assert.equals("i", s.mode, "back from a kit.input, the prompt is in Insert mode")
+    assert.equals("axb", s.query, "typing resumes at the column Insert mode had")
+  end)
+
+  it("resumes Insert mode after a cancelled kit.input", function()
+    input("ab")
+    input("<C-t>")
+    expect(function(s)
+      return not s.in_prompt and s.mode == "i"
+    end, "the kit.input is focused in Insert mode")
+    input("foo<Esc>x")
+    local s = expect(function(st)
+      return st.in_prompt and st.query ~= "ab"
+    end, "back in the prompt, the letter typed")
+    assert.equals("i", s.mode, "back from a cancelled kit.input, the prompt is in Insert mode")
+    assert.equals("abx", s.query, "after a cancelled kit.input, typing appends")
+  end)
+
+  it("resumes Insert mode after a nested picker", function()
+    input("ab")
+    input("<C-g>")
+    expect(function(s)
+      return not s.in_prompt
+    end, "the nested picker is focused")
+    input("<Esc>x")
+    local s = expect(function(st)
+      return st.in_prompt and st.query ~= "ab"
+    end, "back in the prompt, the letter typed")
+    assert.equals("i", s.mode, "back from a nested picker, the prompt is in Insert mode")
+    assert.equals("abx", s.query, "after a nested picker, the next letter goes into the query")
   end)
 
   it("keeps Insert mode in a float that is typed into", function()
