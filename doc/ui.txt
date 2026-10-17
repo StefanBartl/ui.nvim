@@ -389,8 +389,10 @@ chip-boundary look between buffer chips:
     divider       one plain vertical bar per internal boundary, no rounding
 
 The older names `rounded` (= `rounded_chip`) and `square` (= `chip`) stay
-registered as aliases. An unrecognized or unset name falls back to the
-rounded look rather than throwing.
+registered as aliases; `hacker` is the flush look again, under the name of
+the `ui.kit.theme` preset, so `:UI kit-preset hacker` switches the tabline
+too. An unrecognized or unset name falls back to `rounded_chip` rather than
+throwing.
 
 `ui.tabline.styles` is the registry both the three shipped looks and any
 host-registered style live in -- what `:UI tabline-style`'s completion

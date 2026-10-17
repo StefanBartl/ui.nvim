@@ -107,3 +107,47 @@ describe("docs list every :UI subcommand", function()
     assert.are.equal("", table.concat(missing, ", "))
   end)
 end)
+
+--- The tabline style tables name the canonical styles (`rounded_chip` the default,
+--- `chip`, `divider`), not the older alias names; each named style must be registered.
+describe("docs name the canonical tabline styles", function()
+  local styles = require("ui.tabline.styles")
+
+  ---@type { file: string, rows: string[], stale: string[] }[]
+  local cases = {
+    {
+      file = "docs/configuration.md",
+      rows = { "| `rounded_chip` (default) |", "| `chip` |", "| `divider` |" },
+      stale = { "| `rounded` (default)", "| `square` |", "falls back to `rounded` " },
+    },
+    {
+      file = "doc/ui.txt",
+      rows = { "\n    rounded_chip  (default)", "\n    chip ", "\n    divider " },
+      stale = { "\n    rounded   (default)", "\n    square ", "falls back to `rounded` " },
+    },
+  }
+
+  for _, case in ipairs(cases) do
+    it(case.file .. " lists rounded_chip/chip/divider", function()
+      local text = read(case.file)
+      local problems = {}
+      for _, row in ipairs(case.rows) do
+        if not text:find(row, 1, true) then
+          problems[#problems + 1] = "missing " .. vim.trim(row)
+        end
+      end
+      for _, row in ipairs(case.stale) do
+        if text:find(row, 1, true) then
+          problems[#problems + 1] = "stale " .. vim.trim(row)
+        end
+      end
+      assert.are.equal("", table.concat(problems, "; "))
+    end)
+  end
+
+  it("each documented name is registered", function()
+    for _, name in ipairs({ "rounded_chip", "chip", "divider", "rounded", "square", "hacker" }) do
+      assert.is_true(styles.exists(name), name)
+    end
+  end)
+end)
