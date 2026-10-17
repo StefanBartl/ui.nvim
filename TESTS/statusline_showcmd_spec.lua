@@ -21,6 +21,31 @@ describe("ui.statusline.modules.showcmd", function()
     assert.is_truthy(out:find("%(", 1, true), out)
     assert.is_truthy(out:find("%)", 1, true), out)
   end)
+
+  -- While the key is in `order`, 'showcmdloc' is "statusline": a responsive
+  -- statusline dropping the segment in a narrow window would leave the
+  -- pending keys drawn nowhere.
+  it("is kept by responsive mode in a narrow window", function()
+    local columns = vim.o.columns
+    vim.o.columns = 200
+    vim.cmd("vsplit")
+    local win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_width(win, 20)
+    local saved_winid = vim.g.statusline_winid
+    vim.g.statusline_winid = win
+    local ok, out = pcall(render.generate, {
+      order = { "git", "showcmd" },
+      modules = { git = "G", showcmd = showcmd },
+      responsive = true,
+      responsive_width = 80,
+    })
+    vim.g.statusline_winid = saved_winid
+    pcall(vim.api.nvim_win_close, win, true)
+    vim.o.columns = columns
+    assert.is_true(ok, out)
+    assert.is_falsy(out:find("G", 1, true), "the non-essential git segment is dropped: " .. out)
+    assert.is_truthy(out:find("%S", 1, true), "the showcmd segment stays: " .. out)
+  end)
 end)
 
 describe("ui.statusline.modules.showcmd.loc", function()

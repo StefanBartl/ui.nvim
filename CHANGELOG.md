@@ -7,7 +7,7 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ### Added
 
-- Statusline segment `showcmd` (`ui.statusline.modules.showcmd`, opt-in): the pending key sequence, e.g. `2d`, drawn through Neovim's own `%S` item. While the key is in the active `order`, `'showcmdloc'` is `"statusline"`; a variant switch without it, the menu's "Remove" and `render.disable()` hand the earlier value back.
+- Statusline segment `showcmd` (`ui.statusline.modules.showcmd`, opt-in): the pending key sequence, e.g. `2d`, drawn through Neovim's own `%S` item. While the key is in the active `order`, `'showcmdloc'` is `"statusline"`; a variant switch without it, the menu's "Remove" and `render.disable()` hand the earlier value back. Tagged `essential`, so `responsive` mode keeps it in a narrow window (it takes no columns while idle).
 
 ### Fixed
 

@@ -164,6 +164,10 @@ return {
     builtin = false,
     source = "ui.statusline.modules.showcmd",
     used_by = {},
+    -- Kept in a narrow window too: while it is in `order`, 'showcmdloc' is
+    -- "statusline", so dropping the segment would show the pending keys
+    -- nowhere at all. It takes no columns while nothing is pending.
+    essential = true,
   },
   {
     key = "time_in_buffer",

@@ -401,7 +401,9 @@ top of each other.
 `essential` in the catalog while the statusline's own window
 (`vim.g.statusline_winid`) is narrower than `responsive_width` (default 80
 columns) — a narrow split falls back to "just the essentials" (`mode`,
-`file`, `diagnostics`, `cursor`) instead of either hard-truncating every
+`file`, `diagnostics`, `cursor`, and `showcmd` if it is in `order`: it owns
+`'showcmdloc'` there, so dropping it would show the pending keys nowhere,
+and it takes no columns while idle) instead of either hard-truncating every
 segment's own text or requiring a hand-maintained second, "compact" `order`
 list per preset that would drift from the real one the moment either
 changes (IDEEN-statusline.md's "Adaptive Segmentauswahl nach
