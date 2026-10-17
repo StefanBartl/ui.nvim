@@ -34,9 +34,10 @@ theme list.
 | `:UI themes` | — | List the available themes, marking the active one |
 | `:UI picker` | — | Open a floating theme picker (`ui.kit.select`) that applies the highlighted theme live as you move; `<CR>` keeps it, `<Esc>`/`q` restores the theme that was active before it opened |
 | `:UI toggle` | — | Swap between the two themes in `theme.theme_toggle` |
-| `:UI transparency` | — | Toggle background transparency |
+| `:UI transparency` | `on`/`off` for an explicit state | Toggle background transparency |
 | `:UI screenkey` | `on`/`off` for an explicit state | Toggle the in-editor keystroke HUD (`ui.screenkey`) -- off by default, for recording demos/GIFs; keys typed into a secret `ui.kit` prompt or sheet, `input()`/`inputsecret()`, a `buftype=prompt` buffer or a `setup({ hide })` buffer are never shown |
 | `:UI color [#hex]` | an optional start colour | Open the interactive colour picker (`ui.colorpicker`): a hue row, a saturation × lightness grid, a shades row; the window cursor selects, `<CR>` replaces the `#hex` the picker opened on (or inserts after the cursor), `y` yanks, `q` closes |
+| `:UI winpick` | — | Pick a window by letter (`ui.windowpicker`: a floating hint over every eligible window, one keypress) and jump to it |
 | `:UI zen` | `on`/`off` for an explicit state | Toggle the distraction-free box (`ui.zen`): the current buffer alone in a centred 120-column float over a dimmed backdrop, statusline/tabline/ruler hidden and the gutter emptied; closing the float any way restores everything |
 | `:UI notify` | `on`/`off` for an explicit state; `history` opens the recorded notifications in a viewer; `clear` forgets them | Toggle `ui.notify`: `vim.notify` rendered as level-coloured `ui.kit.toast`s with per-level timeouts, every message recorded in a ring buffer -- off by default; `ui.setup({ notify = true })` turns it on at startup |
 | `:UI keys [prefix]` | a key prefix as typed (`<leader>s`, `<C-w>`, `g`); default `<leader>` | Open the mappings under that prefix as a `ui.kit.menu`: one row per next key with the mapping's `desc`, prefixes with more below them as drill-down groups (named via `ui.keys.setup({ groups = ... })`), picking a row runs the mapping. Asked for, never timeout-triggered -- which-key's popup without the pending-key interception |
@@ -45,7 +46,9 @@ theme list.
 | `:UI variant {name}` | completes over the statusline-variant registry | Switch the active statusline preset at runtime |
 | `:UI variants` | — | List the registered variants (four shipped presets plus anything a host registered), marking the active one |
 | `:UI tabline-style {name}` | completes over the tabline-style registry | Switch the active chip-boundary look at runtime |
-| `:UI tabline-styles` | — | List the registered tabline styles (`rounded`/`square`/`divider` plus anything a host registered), marking the active one |
+| `:UI tabline-styles` | — | List the registered tabline styles (`rounded_chip`/`chip`/`divider`, the older alias names `rounded`/`square`, plus anything a host registered), marking the active one |
+| `:UI kit-preset [name]` | completes over the `ui.kit.theme` preset registry | Switch the preset (border and colours) every `ui.kit` popup and toast resolves through; without a name, show the current one. A preset name that is also a registered tabline style switches the tabline style too |
+| `:UI kit-presets` | — | List the registered kit presets, marking the active one |
 | `:UI modules` | — | List every statusline segment in `ui.statusline.catalog`, split into builtin/standalone, with wiring hints |
 | `:UI progress` | — | Popup list of whatever `lib.nvim.progress`'s "statusline" style is currently tracking (same registry `plugin_progress` renders inline and its hover tooltip already surfaces, reachable here without a mouse) |
 | `:UI status` | — | Current theme, transparency state, statusline variant, tabline style |
@@ -64,7 +67,7 @@ in-buffer reference block, or `EVAL_DEBOUNCE_MS` in `preview.lua`).
 **Completion is two-level, three for `sticky`:** the first argument completes
 over the subcommands, the argument after `theme`/`variant`/`tabline-style` over the
 theme list / the variant registry / the tabline-style registry
-respectively (`screenkey`/`transparency`/`zen` complete `on`/`off` the same way, `sticky`/`context` add `toggle`/`status`/`depth`/`lines`/`reset`/`up`, `notify` adds `history`/`clear`). A third argument completes after `sticky depth` (`1`-`6`, `all`) and `sticky lines` (filetypes). The theme list is `vim.fn.getcompletion("", "color")` at the
+respectively (`screenkey`/`transparency`/`zen` complete `on`/`off` the same way, `sticky`/`context` add `toggle`/`status`/`depth`/`lines`/`reset`/`up`, `notify` adds `history`/`clear`, `kit-preset` the `ui.kit.theme` presets). A third argument completes after `sticky depth` (`1`-`6`, `all`) and `sticky lines` (filetypes). The theme list is `vim.fn.getcompletion("", "color")` at the
 moment `<Tab>` is pressed, so a colorscheme installed mid-session is
 offered; the variant and tabline-style lists are
 `ui.config.variants.list()`/`ui.tabline.styles.list()`, so an entry a host

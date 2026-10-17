@@ -27,8 +27,9 @@ return {
   tree_offset_ft = "filetree",
 
   -- `style` deliberately left unset too -- `ui.tabline.modules.buffers`
-  -- falls back to "rounded" (a cap between every pair of chips, square only
-  -- where the visible run actually meets an edge). Set to "square" for
+  -- falls back to "rounded_chip" (a cap between every pair of chips, square
+  -- only where the visible run actually meets an edge). Set to "chip" for
   -- chips flush against each other with no boundary decoration, or
   -- "divider" for a plain vertical bar between them instead of rounding.
+  -- The older names "rounded"/"square" stay registered as aliases.
 }

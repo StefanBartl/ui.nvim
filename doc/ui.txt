@@ -106,51 +106,125 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 4. COMMANDS                                                  *ui-commands*
 
                                                                        *:UI*
-:UI theme {name}
-    Switch to a colorscheme (`:colorscheme {name}`). {name} completes over
-    every colorscheme Neovim can see, read at the moment <Tab> is pressed.
+One verb with subcommands; <Tab> completes the subcommand and, where it takes
+one, its argument. A bare `:UI` opens the option float. docs/BINDINGS.md has
+the long form of each row.
 
+                                                                 *:UI-theme*
+:UI theme [{name}]
+    Switch to a colorscheme (`:colorscheme {name}`); without {name}, show the
+    current one. {name} completes over every colorscheme Neovim can see,
+    read at the moment <Tab> is pressed. `:Theme [{name}]` is a shortcut.
+
+                                                                *:UI-themes*
 :UI themes
     List available themes, marking the active one.
 
+                                                                *:UI-picker*
 :UI picker
-    Open a floating theme picker (via lib.nvim's `ui.kit.select`): the
+    Open a floating theme picker (this plugin's own `ui.kit.select`): the
     highlighted theme applies live as the cursor moves over the list, `<CR>`
     keeps it, `<Esc>`/`q`/closing the float any other way restores whatever
     theme was active before the picker opened.
 
+                                                                *:UI-toggle*
 :UI toggle
     Swap between the two themes in `theme.theme_toggle`.
 
-:UI transparency
-    Toggle background transparency.
+                                                          *:UI-transparency*
+:UI transparency [on|off]
+    Toggle background transparency, or set it.
 
-:UI variant {name}
-    Switch the active statusline preset at runtime. {name} completes over
-    the variant registry (see |ui-variants| below): the four shipped
-    presets, plus anything a host registered under its own name.
+                                                             *:UI-screenkey*
+:UI screenkey [on|off]
+    Toggle the keystroke HUD (`ui.screenkey`), for recording demos. Off by
+    default. Keys typed into a secret prompt, `input()`/`inputsecret()`, a
+    `buftype=prompt` buffer or a buffer listed in `setup({ hide })` are never
+    shown.
 
+                                                  *:UI-sticky* *:UI-context*
+:UI sticky [{action} [{a} [{b}]]]
+:UI context ...
+    The sticky code context (`ui.context`): the enclosing function, class or
+    loop lines (in Markdown the heading chain) pinned over the window's first
+    rows. Without {action} it toggles. {action} is one of `on`, `off`,
+    `toggle`, `status`, `depth [1-6|all]`, `lines [{filetype}] [{n}]`,
+    `reset` or `up [{n}]` (jump to the n-th enclosing scope). `context` is
+    the older name of the same command.
+
+                                                                 *:UI-color*
+:UI color [{#rrggbb}]
+    Open the colour picker (`ui.colorpicker`), optionally on a start colour.
+    `<CR>` writes the pick back over the literal it opened on, `y` yanks.
+
+                                                                   *:UI-zen*
+:UI zen [on|off]
+    Toggle the zen box (`ui.zen`): the current buffer alone in a centred
+    float over a dimmed backdrop; closing the float restores everything.
+
+                                                               *:UI-winpick*
+:UI winpick
+    Pick a window by letter (`ui.windowpicker`) and jump to it.
+
+                                                                *:UI-notify*
+:UI notify [on|off|history|clear]
+    Toggle `ui.notify` (`vim.notify` as level-coloured toasts), open the
+    recorded history, or forget it. Off by default.
+
+                                                                  *:UI-keys*
+:UI keys [{prefix}]
+    List the mappings under {prefix} (default `<leader>`) as a menu
+    (`ui.keys`); picking a row runs the mapping.
+
+                                                               *:UI-variant*
+:UI variant [{name}]
+    Switch the active statusline preset at runtime; without {name}, show the
+    current one. {name} completes over the variant registry (see
+    |ui-variants| below): the four shipped presets, plus anything a host
+    registered under its own name.
+
+                                                              *:UI-variants*
 :UI variants
     List registered variants, marking the active one.
 
-:UI tabline-style {name}
-    Switch the active tabline chip-boundary look at runtime. {name}
-    completes over the tabline-style registry (see |ui-tabline-styles|
-    below): the three shipped looks, plus anything a host registered under
-    its own name.
+                                                         *:UI-tabline-style*
+:UI tabline-style [{name}]
+    Switch the active tabline chip-boundary look at runtime; without {name},
+    show the current one. {name} completes over the tabline-style registry
+    (see |ui-tabline-styles| below): the shipped looks, plus anything a host
+    registered under its own name.
 
+                                                        *:UI-tabline-styles*
 :UI tabline-styles
     List registered tabline styles, marking the active one.
 
+                                                            *:UI-kit-preset*
+:UI kit-preset [{name}]
+    Switch the preset (border and colours) every `ui.kit` popup and toast
+    resolves through; without {name}, show the current one. A preset name
+    that is also a tabline style switches the tabline style too.
+
+                                                           *:UI-kit-presets*
+:UI kit-presets
+    List the registered kit presets, marking the active one.
+
+                                                               *:UI-modules*
 :UI modules
     List every catalogued statusline segment (built into the "default"
     theme, or a standalone module), what each shows, what it needs, and
     which shipped presets already use it. Same data as docs/modules.md.
 
+                                                              *:UI-progress*
+:UI progress
+    Popup list of what `lib.nvim.progress` is tracking right now (the same
+    registry the `plugin_progress` segment renders).
+
+                                                                *:UI-status*
 :UI status
     Current theme, transparency state, statusline variant and tabline
     style.
 
+                                                                 *:UI-slots*
 :UI slots
     List the numbered action slots (see docs/BINDINGS.md).
 
@@ -206,6 +280,7 @@ Theme overrides go to `ui.config.setup`, not here: >lua
 :UI slots kinds
     List the kinds a slot can be.
 
+                                                                  *:UI-help*
 :UI help
     The subcommand list, printed; generated from the same routes as the
     option float (a bare :UI opens the float).
@@ -308,12 +383,14 @@ Unlike a statusline variant (a whole {order, modules} table), the tabline
 has one shipped config -- `cfg.style` is a single field of it, picking the
 chip-boundary look between buffer chips:
 
-    rounded   (default) a cap on every internal boundary; square only where
-              the visible run actually meets an edge
-    square    nothing added; chips sit flush against each other
-    divider   one plain vertical bar per internal boundary, no rounding
+    rounded_chip  (default) a cap on every internal boundary; square only
+                  where the visible run actually meets an edge
+    chip          nothing added; chips sit flush against each other
+    divider       one plain vertical bar per internal boundary, no rounding
 
-An unrecognized or unset name falls back to `rounded` rather than throwing.
+The older names `rounded` (= `rounded_chip`) and `square` (= `chip`) stay
+registered as aliases. An unrecognized or unset name falls back to the
+rounded look rather than throwing.
 
 `ui.tabline.styles` is the registry both the three shipped looks and any
 host-registered style live in -- what `:UI tabline-style`'s completion
