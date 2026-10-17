@@ -81,11 +81,17 @@ end
 ---Uses `ui.kit.select` (which defers to a user-installed `vim.ui.select`
 ---override via `respect_override`) and falls back to `vim.ui.select` itself
 ---when the kit cannot be loaded.
+---
+---The pick arrives later, from the picker's own callback, outside the
+---`pcall` that `run()` puts around the command itself -- so it gets its own
+---here: an error while switching is reported like one from the named form
+---(`UI <sub> error: ...`) instead of escaping raw out of the picker's keymap.
+---@param sub string  # the subcommand, for the error message
 ---@param title string
 ---@param names string[]
 ---@param current string|nil
 ---@param on_pick fun(name: string)
-local function choose(title, names, current, on_pick)
+local function choose(sub, title, names, current, on_pick)
   local initial
   for i, name in ipairs(names) do
     if name == current then
@@ -97,6 +103,13 @@ local function choose(title, names, current, on_pick)
     return ((name == current) and "✓ " or "  ") .. name
   end
 
+  local function pick(name)
+    local ok, err = pcall(on_pick, name)
+    if not ok then
+      notify.error(("UI %s error: %s"):format(sub, tostring(err)))
+    end
+  end
+
   local ok, kit_select = pcall(require, "ui.kit.select")
   if ok and type(kit_select) == "table" and type(kit_select.open) == "function" then
     kit_select.open({
@@ -106,7 +119,7 @@ local function choose(title, names, current, on_pick)
       initial_index = initial,
       respect_override = true,
       on_select = function(name)
-        on_pick(name)
+        pick(name)
       end,
     })
     return
@@ -114,7 +127,7 @@ local function choose(title, names, current, on_pick)
 
   vim.ui.select(names, { prompt = title, format_item = format_item }, function(name)
     if name ~= nil then
-      on_pick(name)
+      pick(name)
     end
   end)
 end
@@ -557,7 +570,8 @@ local function ui_variant(args)
   local variants = require("ui.config.variants")
 
   if not name or name == "" then
-    choose("Statusline variant", variants.list(), require("ui.config").get_variant(), function(pick)
+    local current = require("ui.config").get_variant()
+    choose("variant", "Statusline variant", variants.list(), current, function(pick)
       ui_variant({ args[1], pick })
     end)
     return
@@ -630,8 +644,15 @@ local function ui_tabline_style(args)
 
   if not name or name == "" then
     local cfg = require("ui.tabline.render").current()
-    local current = (cfg and cfg.style) or "rounded"
-    choose("Tabline style", styles.list(), current, function(pick)
+    -- Without an enabled tabline every pick would fail (see
+    -- `switch_tabline_style`), so say that now instead of offering a choice
+    -- that cannot switch anything.
+    if not cfg then
+      notify.error("The tabline is not enabled, so there is no style to switch")
+      return
+    end
+    local current = cfg.style or "rounded"
+    choose("tabline-style", "Tabline style", styles.list(), current, function(pick)
       ui_tabline_style({ args[1], pick })
     end)
     return
@@ -695,7 +716,7 @@ local function ui_kit_preset(args)
   local name = args[2]
 
   if not name or name == "" then
-    choose("Kit preset", kit_theme.presets(), kit_theme.default(), function(pick)
+    choose("kit-preset", "Kit preset", kit_theme.presets(), kit_theme.default(), function(pick)
       ui_kit_preset({ args[1], pick })
     end)
     return

@@ -15,7 +15,7 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ### Changed
 
-- `:UI variant`, `:UI tabline-style` and `:UI kit-preset` without a name open a choice (`ui.kit.select`, or the installed `vim.ui.select` override) with the current value marked and preselected; a pick switches, a cancel changes nothing. Before, they only printed the current value and a "Use :UI ... <name> to switch" hint. With a name they switch as before.
+- `:UI variant`, `:UI tabline-style` and `:UI kit-preset` without a name open a choice (`ui.kit.select`, or the installed `vim.ui.select` override) with the current value marked and preselected; a pick switches, a cancel changes nothing, an error while switching is reported like the named form's. `:UI tabline-style` reports an error instead while the tabline is not enabled (no pick could switch it). Before, they only printed the current value and a "Use :UI ... <name> to switch" hint. With a name they switch as before.
 - `:UI` and `:Theme` are lib.nvim composer verbs (`834591a`): one route per subcommand, `<Tab>` completion as before, and the option float (cheatsheet key set in the composer's `help.keymap`, no default; a bare `:UI`).
   - `:Theme a b` is no longer refused for the second word; the handler takes the first word and ignores the rest.
   - A bare `:UI` opens the option float instead of printing the help text.
