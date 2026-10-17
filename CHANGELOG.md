@@ -5,6 +5,10 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ## [Unreleased]
 
+### Fixed
+
+- `kit.picker` drops its per-instance `lib_kit_picker_<winid>` augroup when it closes, on every close path; before, one empty group stayed behind for each picker opened.
+
 ### Changed
 
 - `:UI` and `:Theme` are lib.nvim composer verbs (`834591a`): one route per subcommand, `<Tab>` completion as before, and the option float (cheatsheet key set in the composer's `help.keymap`, no default; a bare `:UI`).
