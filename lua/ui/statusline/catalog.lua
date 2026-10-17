@@ -159,6 +159,13 @@ return {
     used_by = {},
   },
   {
+    key = "showcmd",
+    summary = 'The pending key sequence (showcmd), e.g. "2d"; sets showcmdloc=statusline only while this key is in the active order.',
+    builtin = false,
+    source = "ui.statusline.modules.showcmd",
+    used_by = {},
+  },
+  {
     key = "time_in_buffer",
     summary = 'Elapsed time since this buffer was first entered this session, e.g. "12m".',
     builtin = false,

@@ -5,6 +5,10 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ## [Unreleased]
 
+### Added
+
+- Statusline segment `showcmd` (`ui.statusline.modules.showcmd`, opt-in): the pending key sequence, e.g. `2d`, drawn through Neovim's own `%S` item. While the key is in the active `order`, `'showcmdloc'` is `"statusline"`; a variant switch without it, the menu's "Remove" and `render.disable()` hand the earlier value back.
+
 ### Fixed
 
 - `kit.picker` drops its per-instance `lib_kit_picker_<winid>` augroup when it closes, on every close path; before, one empty group stayed behind for each picker opened.
