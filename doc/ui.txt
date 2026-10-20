@@ -337,6 +337,10 @@ to start / to end, Copy path, Open in split / vertical split, Move to new tab
 page. `context_menu`, `drag` and `middle_click_close` on the tabline config
 each turn one gesture off (back to a plain switch).
 
+`min_contrast` (default 4.5) on the tabline config lifts the foreground of the
+inactive chips toward Normal's foreground when the scheme's TabLine colors
+do not reach that WCAG contrast (symbols: 3 at most); `false` turns it off.
+
 A host's own global `<RightMouse>` mapping keeps working if it replays the
 native click (`normal! <RightMouse>`) and then returns when
 `require("ui.tabline.menu").pointer_on_tabline()` is true. See

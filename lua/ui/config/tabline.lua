@@ -26,6 +26,11 @@ return {
   -- open, so the buffer chips do not draw underneath it.
   tree_offset_ft = "filetree",
 
+  -- Minimum WCAG contrast of the inactive chips' text against their ground (the close/pin symbols get 3 at most).
+  -- A colorscheme whose `TabLine` colors sit too close together gets its foreground lifted toward `Normal.fg`
+  -- until it reads; `false` takes the scheme's colors as they are.
+  min_contrast = 4.5,
+
   -- `style` deliberately left unset too -- `ui.tabline.modules.buffers`
   -- falls back to "rounded_chip" (a cap between every pair of chips, square
   -- only where the visible run actually meets an edge). Set to "chip" for

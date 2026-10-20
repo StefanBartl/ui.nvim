@@ -148,6 +148,69 @@ function M.contrast_fg(bg_hex)
   return luminance(bg_hex) > 0.5 and "#000000" or "#ffffff"
 end
 
+---WCAG relative luminance of a "#rrggbb" hex (with the sRGB gamma curve, unlike the simplified `luminance`
+---above, which only picks black or white), 0..1.
+---@param hex string
+---@return number
+local function wcag_luminance(hex)
+  local function channel(from)
+    local c = tonumber(hex:sub(from, from + 1), 16) / 255
+    return c <= 0.03928 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
+  end
+  return 0.2126 * channel(2) + 0.7152 * channel(4) + 0.0722 * channel(6)
+end
+
+---WCAG contrast ratio of two "#rrggbb" colors, 1 (identical) .. 21 (black on white).
+---@param a string
+---@param b string
+---@return number
+function M.contrast_ratio(a, b)
+  local la, lb = wcag_luminance(a), wcag_luminance(b)
+  if la < lb then
+    la, lb = lb, la
+  end
+  return (la + 0.05) / (lb + 0.05)
+end
+
+---@param from string
+---@param to string
+---@param t number 0..1
+---@return string
+local function mix(from, to, t)
+  local out = { "#" }
+  for i = 2, 6, 2 do
+    local x = tonumber(from:sub(i, i + 1), 16)
+    local y = tonumber(to:sub(i, i + 1), 16)
+    out[#out + 1] = string.format("%02x", math.floor(x + (y - x) * t + 0.5))
+  end
+  return table.concat(out)
+end
+
+---`fg` itself when it reads on `bg` with at least `min` contrast; otherwise `fg` moved toward `toward` (default:
+---black or white, whichever contrasts with `bg`) in small steps until it does, so the hue of the scheme survives
+---as far as it can. A missing `fg` counts as `toward`. If even `toward` is not enough, `toward` is returned.
+---@param fg string|nil
+---@param bg string
+---@param min number Required ratio (4.5 for text, 3 for symbols)
+---@param toward? string
+---@return string hex
+function M.ensure_contrast(fg, bg, min, toward)
+  toward = toward or M.contrast_fg(bg)
+  if not fg then
+    return toward
+  end
+  if M.contrast_ratio(fg, bg) >= min then
+    return fg
+  end
+  for step = 1, 20 do
+    local candidate = mix(fg, toward, step / 20)
+    if M.contrast_ratio(candidate, bg) >= min then
+      return candidate
+    end
+  end
+  return toward
+end
+
 ---The color to fade a separator into when there is no bespoke "empty
 ---statusline area" group to read -- the statusline's own background.
 ---@return string hex

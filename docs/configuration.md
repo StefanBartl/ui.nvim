@@ -461,6 +461,21 @@ require("ui.config").setup({
 What each gesture does, and what the menu holds, is in
 [BINDINGS.md](BINDINGS.md#tabline-mouse).
 
+## Tabline text contrast
+
+The inactive chips take their colors from the scheme's `TabLine` group. A scheme whose `TabLine.fg` sits next to
+its `TabLine.bg` (or has no `fg`) used to leave the chips blank. `apply()` now checks the WCAG contrast of every
+inactive pair and lifts a failing foreground toward `Normal.fg` just far enough: 4.5:1 for text, 3:1 for the close,
+modified and pin symbols.
+
+```lua
+require("ui.config").setup({
+  tabline = {
+    min_contrast = 4.5, -- default; a lower number relaxes it, false takes the scheme's colors as they are
+  },
+})
+```
+
 ---
 
 ## Where the values live

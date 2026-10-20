@@ -36,6 +36,19 @@ local function read(group, field)
   return to_hex(hl[field])
 end
 
+---The contrast the tabline text must reach: `tabline.min_contrast` of the live config (default 4.5), or nil when the
+---correction is switched off with `min_contrast = false`.
+---@return number|nil
+local function min_contrast()
+  local ok, config = pcall(require, "ui.config")
+  local last = ok and config.last() or nil
+  local value = last and last.ui and last.ui.tabline and last.ui.tabline.min_contrast
+  if value == false then
+    return nil
+  end
+  return type(value) == "number" and value or 4.5
+end
+
 --- (Re)derive every `UiTb*` group from the active colorscheme. Safe to call
 --- any time -- each call re-reads the groups below fresh, so it is also the
 --- `ColorScheme` handler `M.ensure()` registers.
@@ -52,21 +65,40 @@ function M.apply()
   local flash_bg = read("Visual", "bg") or read("CursorLine", "bg") or warn_fg
   local flash_fg = read("Visual", "fg") or sel_fg
 
+  -- Colors the scheme hands over are taken as they are only when they read: a scheme whose `TabLine.fg` sits
+  -- next to `TabLine.bg` (or has none, and the fallback lands on a purple ground) made the inactive chips blank.
+  -- `ensure` lifts a failing foreground toward `Normal.fg` (else black/white) just far enough, text 4.5:1 and the
+  -- close/pin symbols 3:1 (`tabline.min_contrast` = 4.5; `false` turns it off).
+  local palette = require("ui.theme.palette")
+  local ratio = min_contrast()
+  local toward = read("Normal", "fg")
+  local function ensure(fg, bg, symbol)
+    if not ratio then
+      return fg
+    end
+    return palette.ensure_contrast(fg, bg, symbol and math.min(3, ratio) or ratio, toward)
+  end
+  off_fg = ensure(off_fg, off_bg)
+  local off_warn = ensure(warn_fg, off_bg, true)
+  local off_muted = ensure(muted_fg, off_bg, true)
+  local off_info = ensure(info_fg, off_bg, true)
+  local title_fg = ensure(off_fg, fill_bg)
+
   local set = api.nvim_set_hl
   set(0, "UiTbFill", { bg = fill_bg })
 
   set(0, "UiTbBufOn", { fg = sel_fg, bg = sel_bg, bold = true })
   set(0, "UiTbBufOff", { fg = off_fg, bg = off_bg })
   set(0, "UiTbBufOnModified", { fg = warn_fg, bg = sel_bg })
-  set(0, "UiTbBufOffModified", { fg = warn_fg, bg = off_bg })
+  set(0, "UiTbBufOffModified", { fg = off_warn, bg = off_bg })
   set(0, "UiTbBufOnClose", { fg = muted_fg, bg = sel_bg })
-  set(0, "UiTbBufOffClose", { fg = muted_fg, bg = off_bg })
+  set(0, "UiTbBufOffClose", { fg = off_muted, bg = off_bg })
 
   -- A pinned chip's pin glyph (see ui.tabline.utils.style_buf) -- a distinct
   -- accent, not a shade of the muted close/modified colors, so a pin reads
   -- as "protected" at a glance rather than blending into the chip.
   set(0, "UiTbBufOnPinned", { fg = info_fg, bg = sel_bg })
-  set(0, "UiTbBufOffPinned", { fg = info_fg, bg = off_bg })
+  set(0, "UiTbBufOffPinned", { fg = off_info, bg = off_bg })
 
   -- Click-flash (see ui.tabline.utils.flash) -- a distinct, momentary color,
   -- not a shade of On/Off, so a click reads as feedback rather than an
@@ -87,7 +119,7 @@ function M.apply()
   set(0, "UiTbTabOn", { fg = sel_fg, bg = sel_bg, bold = true })
   set(0, "UiTbTabOff", { fg = off_fg, bg = off_bg })
   set(0, "UiTbTabNewBtn", { fg = sel_fg, bg = fill_bg })
-  set(0, "UiTbTitle", { fg = off_fg, bg = fill_bg })
+  set(0, "UiTbTitle", { fg = title_fg, bg = fill_bg })
 
   set(0, "UiTbThemeToggleBtn", { fg = sel_fg, bg = fill_bg })
   set(0, "UiTbCloseAllBufsBtn", { fg = warn_fg, bg = fill_bg })
