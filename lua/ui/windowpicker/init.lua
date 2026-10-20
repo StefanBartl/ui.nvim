@@ -37,7 +37,7 @@ local M = {}
 ---overridden there either, so they carry nvim-window-picker's own upstream
 ---defaults for continuity.
 ---@type Ui.WindowPicker.Opts
-local cfg = {
+local DEFAULTS = {
   chars = "FJDKSLA;CMRUEIWOQP",
   include_current_win = false,
   autoselect_one = true,
@@ -49,6 +49,10 @@ local cfg = {
   buftype = { "terminal", "quickfix" },
   debug = false,
 }
+
+---The options in force: DEFAULTS plus what the last `setup()` was given.
+---@type Ui.WindowPicker.Opts
+local cfg = vim.deepcopy(DEFAULTS)
 
 ---Cells a hint spans. Three, not one: `make_scratch` used to read any
 ---resolved width <= 2 as "no size given" and fall back to 60 columns, so a
@@ -324,10 +328,11 @@ function M.pick(opts)
   return picked
 end
 
----Override the shipped defaults. Merged, not replaced.
+---Override the shipped defaults. Every call starts from them, so an option an
+---earlier call set and this one leaves out is back at its default.
 ---@param opts Ui.WindowPicker.Opts|nil
 function M.setup(opts)
-  cfg = vim.tbl_extend("force", cfg, opts or {})
+  cfg = vim.tbl_extend("force", vim.deepcopy(DEFAULTS), opts or {})
 end
 
 ---The most recent `pick()` call (caller traceback, candidate count, whether it

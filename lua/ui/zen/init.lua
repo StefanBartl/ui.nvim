@@ -33,7 +33,7 @@ local M = {}
 ---@field on_close? fun()
 
 ---@class Ui.Zen.Config: Ui.Zen.Opts
-local cfg = {
+local DEFAULTS = {
   width = 120,
   height = 1,
   backdrop = 0.6,
@@ -52,6 +52,10 @@ local cfg = {
   hide_tabline = true,
   hide_ruler = true,
 }
+
+---The tunables in force: DEFAULTS plus what the last `setup()` was given.
+---@type Ui.Zen.Config
+local cfg = vim.deepcopy(DEFAULTS)
 
 ---@class Ui.Zen.State
 ---@field win integer
@@ -330,10 +334,13 @@ function M.win()
   return nil
 end
 
----Override the shipped tunables. `wo` is merged, not replaced.
+---Override the shipped tunables. Every call starts from them, so an option an
+---earlier call set and this one leaves out is back at its default. `wo` is
+---merged into the default window options, not replaced.
 ---@param opts Ui.Zen.Opts|nil
 function M.setup(opts)
   opts = opts or {}
+  cfg = vim.deepcopy(DEFAULTS)
   for k, v in pairs(opts) do
     if k == "wo" and type(v) == "table" then
       cfg.wo = vim.tbl_extend("force", cfg.wo, v)

@@ -13,15 +13,7 @@ end
 
 describe("ui.windowpicker", function()
   after_each(function()
-    windowpicker.setup({
-      chars = "FJDKSLA;CMRUEIWOQP",
-      include_current_win = false,
-      autoselect_one = true,
-      include_unfocusable_windows = false,
-      filetype = { "neo-tree", "neo-tree-popup", "notify", "replacer-progress" },
-      buftype = { "terminal", "quickfix" },
-      debug = false,
-    })
+    windowpicker.setup() -- every setup() starts from the shipped defaults
     vim.cmd("silent! only")
     vim.cmd("silent! %bwipeout!")
   end)
@@ -38,6 +30,20 @@ describe("ui.windowpicker", function()
     local other = vim.api.nvim_get_current_win()
     vim.cmd("wincmd p") -- back to the origin, which is now excluded as "current"
     -- No feed() call at all: if this reached getchar() the test would hang.
+    assert.equals(other, windowpicker.pick())
+  end)
+
+  it("setup() starts from the defaults: an option left out of a later call is back", function()
+    vim.cmd("only")
+    vim.cmd("vsplit")
+    local other = vim.api.nvim_get_current_win()
+    vim.cmd("wincmd p")
+    -- With autoselect_one off this would wait for a key; the second setup() must undo that.
+    windowpicker.setup({ autoselect_one = false })
+    windowpicker.setup({})
+    assert.equals(other, windowpicker.pick())
+    windowpicker.setup({ autoselect_one = false })
+    windowpicker.setup(nil)
     assert.equals(other, windowpicker.pick())
   end)
 
