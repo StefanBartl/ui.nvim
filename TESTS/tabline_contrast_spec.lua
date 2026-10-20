@@ -26,6 +26,29 @@ describe("ui.theme.palette contrast", function()
     assert.is_true(palette.contrast_ratio(fg, "#f4f4fa") >= 4.5)
   end)
 
+  it(
+    "goes to the better extreme when the wanted side cannot reach it (a ground in the middle)",
+    function()
+      -- light grey text on mid grey, lighter is the wrong way: torte, wildcharm
+      local fg = palette.ensure_contrast("#cccccc", "#7f7f7f", 4.5, "#ffffff")
+      assert.is_true(palette.contrast_ratio(fg, "#7f7f7f") >= 4.5)
+      fg = palette.ensure_contrast("#000000", "#737373", 4.5, "#000000")
+      assert.is_true(palette.contrast_ratio(fg, "#737373") >= 4.5)
+      fg = palette.ensure_contrast(nil, "#7f7f7f", 4.5, "#cccccc")
+      assert.is_true(palette.contrast_ratio(fg, "#7f7f7f") >= 4.5)
+    end
+  )
+
+  it("meets 4.5 on any ground, steps through the whole grey scale", function()
+    for v = 0, 255, 5 do
+      local bg = string.format("#%02x%02x%02x", v, v, v)
+      for _, from in ipairs({ "#000000", "#808080", "#ffffff" }) do
+        local fg = palette.ensure_contrast(from, bg, 4.5, from)
+        assert.is_true(palette.contrast_ratio(fg, bg) >= 4.5, ("%s on %s"):format(from, bg))
+      end
+    end
+  end)
+
   it("uses black or white when the foreground is missing", function()
     assert.equals("#ffffff", palette.ensure_contrast(nil, "#101010", 4.5))
     assert.equals("#000000", palette.ensure_contrast(nil, "#f0f0f0", 4.5))
@@ -59,6 +82,20 @@ describe("ui.tabline.highlights contrast", function()
     assert.is_true(palette.contrast_ratio(fg, bg) >= 3, "close symbol")
     local tfg, tbg = fg_bg("UiTbTitle")
     assert.is_true(palette.contrast_ratio(tfg, tbg) >= 4.5, "title")
+  end)
+
+  it("reaches the contrast on a ground in the middle of the scale (torte)", function()
+    vim.api.nvim_set_hl(0, "TabLine", { fg = "#cccccc", bg = "#7f7f7f" })
+    vim.api.nvim_set_hl(0, "Normal", { fg = "#cccccc", bg = "#000000" })
+    highlights.apply()
+    for _, group in ipairs({ "UiTbBufOff", "UiTbTabOff" }) do
+      local fg, bg = fg_bg(group)
+      assert.is_true(palette.contrast_ratio(fg, bg) >= 4.5, group)
+    end
+    for _, group in ipairs({ "UiTbBufOffModified", "UiTbBufOffClose", "UiTbBufOffPinned" }) do
+      local fg, bg = fg_bg(group)
+      assert.is_true(palette.contrast_ratio(fg, bg) >= 3, group)
+    end
   end)
 
   it("takes the scheme as it is when min_contrast is false", function()

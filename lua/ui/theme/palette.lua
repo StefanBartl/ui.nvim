@@ -188,7 +188,9 @@ end
 
 ---`fg` itself when it reads on `bg` with at least `min` contrast; otherwise `fg` moved toward `toward` (default:
 ---black or white, whichever contrasts with `bg`) in small steps until it does, so the hue of the scheme survives
----as far as it can. A missing `fg` counts as `toward`. If even `toward` is not enough, `toward` is returned.
+---as far as it can. A missing `fg` counts as `toward`. On a ground in the middle of the scale `toward` can be the
+---wrong side (light grey text on mid grey: lighter does not help): then `fg` moves toward black or white, whichever
+---contrasts better with `bg`, which reaches 4.58:1 on any ground, so every `min` up to 4.5 is met.
 ---@param fg string|nil
 ---@param bg string
 ---@param min number Required ratio (4.5 for text, 3 for symbols)
@@ -196,19 +198,36 @@ end
 ---@return string hex
 function M.ensure_contrast(fg, bg, min, toward)
   toward = toward or M.contrast_fg(bg)
-  if not fg then
-    return toward
-  end
-  if M.contrast_ratio(fg, bg) >= min then
+  if fg and M.contrast_ratio(fg, bg) >= min then
     return fg
   end
-  for step = 1, 20 do
-    local candidate = mix(fg, toward, step / 20)
-    if M.contrast_ratio(candidate, bg) >= min then
-      return candidate
+  ---@param target string
+  ---@return string|nil
+  local function lift(target)
+    if not fg then
+      return nil
+    end
+    for step = 1, 20 do
+      local candidate = mix(fg, target, step / 20)
+      if M.contrast_ratio(candidate, bg) >= min then
+        return candidate
+      end
+    end
+    return nil
+  end
+  if not fg then
+    if M.contrast_ratio(toward, bg) >= min then
+      return toward
+    end
+  else
+    local lifted = lift(toward)
+    if lifted then
+      return lifted
     end
   end
-  return toward
+  local extreme = M.contrast_ratio("#000000", bg) >= M.contrast_ratio("#ffffff", bg) and "#000000"
+    or "#ffffff"
+  return fg and lift(extreme) or extreme
 end
 
 ---The color to fade a separator into when there is no bespoke "empty
