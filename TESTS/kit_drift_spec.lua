@@ -233,9 +233,8 @@ describe("ui.kit and lib.nvim's frozen copy", function()
 
     local drifted = {}
     for _, rel in ipairs(files) do
-      if UI_ONLY[rel] then
-        -- exists only here, on purpose (see UI_ONLY)
-      elseif ADDITIVE[rel] then
+      -- A `UI_ONLY` file exists only here, on purpose, and is not compared at all.
+      if ADDITIVE[rel] then
         local mine = line_set(as_lib(read(ui_dir .. "/" .. rel)))
         for line in pairs(line_set(read(lib_dir .. "/" .. rel))) do
           if not mine[line] then
@@ -243,7 +242,7 @@ describe("ui.kit and lib.nvim's frozen copy", function()
             break
           end
         end
-      else
+      elseif not UI_ONLY[rel] then
         local mine = flatten(as_lib(read(ui_dir .. "/" .. rel)))
         local theirs = flatten(read(lib_dir .. "/" .. rel))
         if mine ~= theirs then
@@ -285,19 +284,6 @@ describe("ui.contextmenu and lib.nvim's frozen copy", function()
 
   local ui_dir = vim.fn.getcwd() .. "/lua/ui/contextmenu"
   local their_dir = lib_dir .. "/lua/lib/nvim/contextmenu"
-
-  ---@param text string
-  ---@return table<string, true>
-  local function line_set(text)
-    local out = {}
-    for line in text:gmatch("[^\n]+") do
-      local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
-      if trimmed ~= "" then
-        out[trimmed] = true
-      end
-    end
-    return out
-  end
 
   it("has kept every line lib.nvim's copy still relies on", function()
     local lost = {}
