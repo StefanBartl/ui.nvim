@@ -51,10 +51,14 @@ local M = {}
 ---@param entries { lhs: string, legend?: string }[]
 ---@return string
 function M.legend(entries)
+  -- a `%` in a key or a text is a statusline item to the winbar (`%{...}` even evaluates an expression)
+  local function plain(s)
+    return (tostring(s):gsub("%%", "%%%%"))
+  end
   local parts = {}
   for _, e in ipairs(entries) do
     if e.legend then
-      parts[#parts + 1] = ("%%#Special#%s %%#Comment#%s"):format(e.lhs, e.legend)
+      parts[#parts + 1] = ("%%#Special#%s %%#Comment#%s"):format(plain(e.lhs), plain(e.legend))
     end
   end
   parts[#parts + 1] = "%#Special#? %#Comment#Keys"

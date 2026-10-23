@@ -55,6 +55,12 @@ describe("ui.kit.viewer keys", function()
       assert.is_truthy(bar:find("%? %%#Comment#Keys%%#Normal#$"))
     end)
 
+    it("escapes `%` in a key or a text, so the winbar never evaluates it", function()
+      local bar = viewer_keys.legend({ { lhs = "%", legend = "50%{&shell}" } })
+      assert.is_truthy(bar:find("%%#Special#%%%% %%#Comment#50%%%%{&shell}", 1))
+      assert.is_nil(bar:find("[^%%]%%{"))
+    end)
+
     it("is just `? Keys` for a list with nothing to advertise", function()
       assert.is_truthy(viewer_keys.legend({}):find("%? %%#Comment#Keys"))
     end)
