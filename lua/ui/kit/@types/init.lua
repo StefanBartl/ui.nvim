@@ -13,6 +13,10 @@
 ---@field error     string|Lib.Highlight.Opts # error/destructive (default: link DiagnosticError)
 ---@field flash     string|Lib.Highlight.Opts # momentary pick feedback (default: link IncSearch)
 ---@field hover     string|Lib.Highlight.Opts # row under the mouse pointer (default: link Visual)
+---@field ok        string|Lib.Highlight.Opts # status: passed/healthy (default: link DiagnosticOk)
+---@field warn      string|Lib.Highlight.Opts # status: needs a look (default: link DiagnosticWarn)
+---@field info      string|Lib.Highlight.Opts # status: neutral information (default: link DiagnosticInfo)
+---@field dim       string|Lib.Highlight.Opts # status: skipped/inactive (default: link Comment)
 
 --- A resolved theme: design tokens read by every component.
 ---@class Ui.Kit.Theme

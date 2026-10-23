@@ -115,7 +115,10 @@ local UI_ONLY = { ["viewer_keys.lua"] = true }
 --- `viewer_keys` when `keys`/`table_view`/`on_lines` is given. The check is the
 --- weaker one the contextmenu gets below: every line lib.nvim's copy still has
 --- must be present here, so a fix (which rewrites a line) is still caught.
-local ADDITIVE = { ["viewer.lua"] = true }
+---
+--- `theme.lua` and `@types/init.lua` gained the status tokens (`ok`, `warn`, `info`, `dim`): lines added to a table,
+--- none changed, so a fix to an existing line is still caught.
+local ADDITIVE = { ["viewer.lua"] = true, ["theme.lua"] = true, ["@types/init.lua"] = true }
 
 ---@param text string
 ---@return table<string, true>
