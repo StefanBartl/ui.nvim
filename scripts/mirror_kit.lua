@@ -121,6 +121,28 @@ end
 local ui_kit = ui_root .. "/lua/ui/kit"
 local lib_kit = lib_root .. "/lua/lib/nvim/ui/kit"
 
+--- Files that exist only in ui.nvim's kit ("no new features" in lib.nvim's frozen
+--- copy): never mirrored. A copy of `TESTS/kit_drift_spec.lua`'s table.
+local UI_ONLY = { ["viewer_keys.lua"] = true }
+
+--- Files that only GAINED lines here, for a feature the frozen copy does not get:
+--- not overwritten, only checked -- every line lib.nvim's copy has must still be
+--- here (a fix rewrites a line, so the old one vanishes and this reports it).
+local ADDITIVE = { ["viewer.lua"] = true }
+
+---@param text string
+---@return table<string, true>
+local function line_set(text)
+  local out = {}
+  for line in text:gmatch("[^\n]+") do
+    local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed ~= "" then
+      out[trimmed] = true
+    end
+  end
+  return out
+end
+
 ---@param dir string
 ---@return string[]
 local function kit_files(dir)
@@ -134,7 +156,9 @@ local function kit_files(dir)
   return out
 end
 
-local ui_files = kit_files(ui_kit)
+local ui_files = vim.tbl_filter(function(rel)
+  return not UI_ONLY[rel]
+end, kit_files(ui_kit))
 local all_ui_files = ui_files -- the "only in lib.nvim" report below is about the whole kit, not the --only subset
 if only then
   for name in pairs(only) do
@@ -158,7 +182,18 @@ local written, same = {}, 0
 for _, rel in ipairs(ui_files) do
   local want = as_lib(read(ui_kit .. "/" .. rel) or "")
   local have = read(lib_kit .. "/" .. rel)
-  if have ~= nil and flatten(have) == flatten(want) then
+  local in_sync = have ~= nil and flatten(have) == flatten(want)
+  if ADDITIVE[rel] and have ~= nil then
+    local mine = line_set(want)
+    in_sync = true
+    for line in pairs(line_set(have)) do
+      if not mine[line] then
+        in_sync = false
+        break
+      end
+    end
+  end
+  if in_sync then
     same = same + 1
   else
     written[#written + 1] = rel

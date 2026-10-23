@@ -104,6 +104,32 @@ local function as_lib(text)
   return out
 end
 
+--- Files that exist only in ui.nvim's kit, on purpose. lib.nvim's copy is frozen
+--- ("no new features"), and these hold a feature the frozen copy does not get:
+--- `viewer_keys.lua` is the keys / winbar legend / `?` cheatsheet of
+--- `ui.kit.viewer` (needed by runtime-analysis.nvim and hover.nvim, both of
+--- which depend on ui.nvim). A file listed here must stay out of `lib.nvim`.
+local UI_ONLY = { ["viewer_keys.lua"] = true }
+
+--- Files that only GAINED lines here, for the same reason: `viewer.lua` calls
+--- `viewer_keys` when `keys`/`table_view`/`on_lines` is given. The check is the
+--- weaker one the contextmenu gets below: every line lib.nvim's copy still has
+--- must be present here, so a fix (which rewrites a line) is still caught.
+local ADDITIVE = { ["viewer.lua"] = true }
+
+---@param text string
+---@return table<string, true>
+local function line_set(text)
+  local out = {}
+  for line in text:gmatch("[^\n]+") do
+    local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed ~= "" then
+      out[trimmed] = true
+    end
+  end
+  return out
+end
+
 ---@param path string
 ---@return string
 local function read(path)
@@ -164,7 +190,12 @@ describe("ui.kit and lib.nvim's frozen copy", function()
   end
 
   it("carries the same set of files on both sides", function()
-    local ui_files, lib_files = kit_files(ui_dir), kit_files(lib_dir)
+    local ui_files, lib_files = {}, kit_files(lib_dir)
+    for _, rel in ipairs(kit_files(ui_dir)) do
+      if not UI_ONLY[rel] then
+        ui_files[#ui_files + 1] = rel
+      end
+    end
     -- An empty result on either side means the glob itself came back empty
     -- (e.g. the 8.3 short-name trap XP-01 guards against), which must fail
     -- loudly here rather than let the next test compare two empty lists and
@@ -180,6 +211,16 @@ describe("ui.kit and lib.nvim's frozen copy", function()
     assert.same(ui_files, lib_files)
   end)
 
+  it("keeps the ui-only files out of lib.nvim's copy", function()
+    for rel in pairs(UI_ONLY) do
+      assert.are.equal(
+        0,
+        vim.fn.filereadable(lib_dir .. "/" .. rel),
+        rel .. " must not be mirrored into lib.nvim (frozen: no new features)"
+      )
+    end
+  end)
+
   it("has not drifted from lib.nvim's copy", function()
     local files = kit_files(ui_dir)
     -- Same reasoning as the file-set test above: zero files here means this
@@ -192,10 +233,22 @@ describe("ui.kit and lib.nvim's frozen copy", function()
 
     local drifted = {}
     for _, rel in ipairs(files) do
-      local mine = flatten(as_lib(read(ui_dir .. "/" .. rel)))
-      local theirs = flatten(read(lib_dir .. "/" .. rel))
-      if mine ~= theirs then
-        drifted[#drifted + 1] = rel
+      if UI_ONLY[rel] then
+        -- exists only here, on purpose (see UI_ONLY)
+      elseif ADDITIVE[rel] then
+        local mine = line_set(as_lib(read(ui_dir .. "/" .. rel)))
+        for line in pairs(line_set(read(lib_dir .. "/" .. rel))) do
+          if not mine[line] then
+            drifted[#drifted + 1] = rel .. ": " .. line
+            break
+          end
+        end
+      else
+        local mine = flatten(as_lib(read(ui_dir .. "/" .. rel)))
+        local theirs = flatten(read(lib_dir .. "/" .. rel))
+        if mine ~= theirs then
+          drifted[#drifted + 1] = rel
+        end
       end
     end
 

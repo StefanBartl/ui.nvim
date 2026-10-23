@@ -123,6 +123,36 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | `compare` | pick two items out of one picker, then view them side by side — see [Compare](#compare-pick-two-view-side-by-side) below |
 | `shortlist` | promptless list+preview for a handful of items — see [Shortlist](#shortlist-promptless-list--preview) below |
 
+### Viewer keys (`keys`, `table_view`, `on_lines`)
+
+A viewer can carry its own bindings and describe them, so a read-only result float
+does not hand-roll a winbar legend and a cheatsheet next to its keymaps:
+
+```lua
+kit.viewer({
+  title = " Report ",
+  lines = lines,
+  table_view = true,                      -- no wrap, cursorline, cursor on the first content row
+  on_lines = function(bufnr, lines) end,  -- decoration (highlights); runs again after every set_lines
+  desc_prefix = "myplugin",               -- keymap descriptions: "myplugin: Refresh"
+  keys = {
+    { lhs = "r", desc = "Refresh", legend = "Refresh", run = function(view)
+      view.set_lines(fresh_lines())       -- on_lines runs again
+      view.set_title(" Report (fresh) ")
+    end },
+    { lhs = "gO", desc = "Open as HTML", run = function(view) end },  -- no legend: works, not advertised
+  },
+})
+```
+
+The winbar legend (`r Refresh  │  ? Keys`), the `?` cheatsheet and the keymaps are all
+derived from the one `keys` list, so a float never advertises a key it did not wire.
+`?` is always last and always there; the winbar's row is added to an auto-sized height
+(a `height` you pass is yours). `run` gets `view = { bufnr, winid, set_lines, set_title,
+close }`. `help_title` / `help_filetype` name the cheatsheet. This is ui.nvim only (see
+[the drift note](../../../docs/modules.md#the-kit-exists-twice-on-purpose)); the code is
+`viewer_keys.lua`.
+
 ## Chip (persistent corner status)
 
 `kit.chip` is `kit.toast`'s opposite number: instead of an ephemeral,

@@ -536,8 +536,22 @@ validation; it shares three small helpers of `kit.input`, the secret mask, the
 guard of a secret buffer -- marked for a keystroke HUD, closed to buffer-word completion -- and
 the completion popup). The drift spec compares code, not intent, so a kit
 feature left on one side is a red CI run; the features are off unless asked
-for, so lib.nvim's own call sites behave as before. Until the spec learns a way to name a deliberate
-difference, a kit feature has to be mirrored like a fix — see below.
+for, so lib.nvim's own call sites behave as before. A kit feature is mirrored like a
+fix — see below — unless the difference is named as deliberate (next paragraph).
+
+**A deliberate difference** is named in the spec, not left to the file set to
+decide. `TESTS/kit_drift_spec.lua` has two small tables (and
+`scripts/mirror_kit.lua` a copy of them): `UI_ONLY` files exist only here and
+must stay out of lib.nvim, and `ADDITIVE` files may only have gained lines
+here, with every line lib.nvim's copy still has required to be present
+(a fix rewrites a line, so it is still caught). The first user is
+`ui.kit.viewer`'s `keys` (`lua/ui/kit/viewer_keys.lua`, ui.nvim only):
+extra bindings of a read-only viewer, from which the winbar legend, the `?`
+cheatsheet and the keymaps are all derived, plus `table_view` and an
+`on_lines` decoration hook that survives `set_lines`. It exists for
+runtime-analysis.nvim's result float and hover.nvim's status board, both of
+which depend on ui.nvim; lib.nvim's own call sites do not need it, so its
+copy of `viewer.lua` stays as it is.
 
 The newest one is `kit.message_log` (`lua/ui/kit/message_log.lua`): a
 scrollable, time-ordered, paginated list of entries that fold open and
