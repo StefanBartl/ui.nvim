@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Neovim | **0.10+** |
-| [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required; commit `863952e` or newer recommended (older: a float title with control characters is drawn raw instead of spelled out) |
+| [lib.nvim](https://github.com/WKDSteve/lib.nvim) | required; commit `863952e` or newer recommended (older: a float title with control characters is drawn raw instead of spelled out) |
 
 [NvChad](https://github.com/NvChad/NvChad) is **not** required, and is not
 even installed any more in the reference host this plugin was extracted
@@ -20,14 +20,14 @@ published, or renders nothing.
 | --- | --- |
 | `nvim-web-devicons` | File icons; without it `lib.nvim.ui.icons` (a curated devicons subset shipped as data) fills the column |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) | Branch name and added/changed/removed counts (`git`, `git_clickable`) |
-| [casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim) | Case info plus the SLA urgency badge (`casedesk`) |
-| [filetree.nvim](https://github.com/StefanBartl/filetree.nvim) | The cwd-mode badge (`filetree_cwd_mode`) |
-| [github_stats.nvim](https://github.com/StefanBartl/github_stats.nvim) | This week's view count for the repo the buffer is in (`github_stats_badge`) |
-| [runtime-analysis.nvim](https://github.com/StefanBartl/runtime-analysis.nvim) | The health traffic light across instrumented plugins (`runtime_analysis_ampel`) |
-| [recommender.nvim](https://github.com/StefanBartl/recommender.nvim) | Count of open alias suggestions for the current buffer (`recommender_badge`) |
-| [sessions.nvim](https://github.com/StefanBartl/sessions.nvim) | Active session name with a dirty marker (`session_status`) |
-| [sandbox.nvim](https://github.com/StefanBartl/sandbox.nvim) | Ambient container summary (`sandbox_ambient`) |
-| [terminal.nvim](https://github.com/StefanBartl/terminal.nvim) | The current terminal and the project's terminal count (`terminal_count`) |
+| [casedesk.nvim](https://github.com/WKDSteve/casedesk.nvim) | Case info plus the SLA urgency badge (`casedesk`) |
+| [filetree.nvim](https://github.com/WKDSteve/filetree.nvim) | The cwd-mode badge (`filetree_cwd_mode`) |
+| [github_stats.nvim](https://github.com/WKDSteve/github_stats.nvim) | This week's view count for the repo the buffer is in (`github_stats_badge`) |
+| [runtime-analysis.nvim](https://github.com/WKDSteve/runtime-analysis.nvim) | The health traffic light across instrumented plugins (`runtime_analysis_ampel`) |
+| [recommender.nvim](https://github.com/WKDSteve/recommender.nvim) | Count of open alias suggestions for the current buffer (`recommender_badge`) |
+| [sessions.nvim](https://github.com/WKDSteve/sessions.nvim) | Active session name with a dirty marker (`session_status`) |
+| [sandbox.nvim](https://github.com/WKDSteve/sandbox.nvim) | Ambient container summary (`sandbox_ambient`) |
+| [terminal.nvim](https://github.com/WKDSteve/terminal.nvim) | The current terminal and the project's terminal count (`terminal_count`) |
 | [lazy.nvim](https://github.com/folke/lazy.nvim) | Own/external plugin count (`plugin_summary`) |
 | `nvim-treesitter` | Breadcrumb fallback while the LSP has not produced document symbols yet |
 

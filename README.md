@@ -19,9 +19,9 @@
 [![Neovim](https://img.shields.io/badge/Neovim-0.10%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2FLuaJIT-2C2D72?logo=lua&logoColor=white)](https://www.lua.org)
 ![Status](https://img.shields.io/badge/status-alpha-red)
-[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://stefanbartl.github.io/wkd/p/ui/)
+[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://wkdsteve.github.io/wkd/p/ui/)
 
-> Part of the [wkd](https://stefanbartl.github.io/wkd/) family — see this plugin's [page](https://stefanbartl.github.io/wkd/p/ui/) on the site.
+> Part of the [wkd](https://wkdsteve.github.io/wkd/) family — see this plugin's [page](https://wkdsteve.github.io/wkd/p/ui/) on the site.
 
 The frame around the window: statusline, tabline, theme assembly — standing on
 Neovim's own APIs rather than a distribution's. Started from roughly 4,500
@@ -41,26 +41,26 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 
 ## Around it
 
-> **[casedesk.nvim](https://github.com/StefanBartl/casedesk.nvim)**,
-> **[filetree.nvim](https://github.com/StefanBartl/filetree.nvim)**,
-> **[github_stats.nvim](https://github.com/StefanBartl/github_stats.nvim)**,
-> **[runtime-analysis.nvim](https://github.com/StefanBartl/runtime-analysis.nvim)**,
-> **[recommender.nvim](https://github.com/StefanBartl/recommender.nvim)**,
-> **[sessions.nvim](https://github.com/StefanBartl/sessions.nvim)** and
-> **[sandbox.nvim](https://github.com/StefanBartl/sandbox.nvim)** — each
+> **[casedesk.nvim](https://github.com/WKDSteve/casedesk.nvim)**,
+> **[filetree.nvim](https://github.com/WKDSteve/filetree.nvim)**,
+> **[github_stats.nvim](https://github.com/WKDSteve/github_stats.nvim)**,
+> **[runtime-analysis.nvim](https://github.com/WKDSteve/runtime-analysis.nvim)**,
+> **[recommender.nvim](https://github.com/WKDSteve/recommender.nvim)**,
+> **[sessions.nvim](https://github.com/WKDSteve/sessions.nvim)** and
+> **[sandbox.nvim](https://github.com/WKDSteve/sandbox.nvim)** — each
 > contributes one optional statusline segment (a case-info badge, a cwd-mode
 > badge, a weekly-views badge, a health ampel, an alias-suggestion count, the
 > active session name, an ambient container summary); none is a dependency,
 > and the segment is simply absent without it. The full list, with the exact
 > wiring snippet for each, is [docs/modules.md](docs/modules.md).
 >
-> **[my.nvim](https://github.com/StefanBartl/my.nvim)** — the winbar's actual content owner. `ui.winbar.set()` is the
+> **[my.nvim](https://github.com/WKDSteve/my.nvim)** — the winbar's actual content owner. `ui.winbar.set()` is the
 > frame's scheduled, window-validity-checked write; my.nvim's breadcrumbs
 > module keeps the debouncing, skip-rules and the string itself, and hands
 > the result over.
 >
 > All of the above are soft: without them everything else works unchanged.
-> [lib.nvim](https://github.com/StefanBartl/lib.nvim) is the one real
+> [lib.nvim](https://github.com/WKDSteve/lib.nvim) is the one real
 > dependency (commit `863952e` or newer recommended) — see
 > [Requirements](docs/requirements.md).
 >
@@ -82,9 +82,9 @@ config, and replaced the coupling to NvChad and base46 symbol by symbol from the
 
 ```lua
 {
-  "StefanBartl/ui.nvim",
+  "WKDSteve/ui.nvim",
   lazy = false,
-  dependencies = { "StefanBartl/lib.nvim" },
+  dependencies = { "WKDSteve/lib.nvim" },
   config = function()
     require("ui").setup({ all = true })
   end,
@@ -106,8 +106,8 @@ With [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use({
-  "StefanBartl/ui.nvim",
-  requires = { "StefanBartl/lib.nvim" },
+  "WKDSteve/ui.nvim",
+  requires = { "WKDSteve/lib.nvim" },
   config = function()
     require("ui").setup({ all = true })
   end,
@@ -118,8 +118,8 @@ Or with Neovim 0.12's built-in `vim.pack`:
 
 ```lua
 vim.pack.add({
-  { src = "https://github.com/StefanBartl/lib.nvim" },
-  { src = "https://github.com/StefanBartl/ui.nvim" },
+  { src = "https://github.com/WKDSteve/lib.nvim" },
+  { src = "https://github.com/WKDSteve/ui.nvim" },
 })
 require("ui").setup({ all = true })
 ```
@@ -148,7 +148,7 @@ Start at [docs/README.md](docs/README.md), which says what is where.
 - [Slots](lua/ui/slots/README.md) — numbered slots that open files and addresses, copy text, run commands; chips or panel, with previews.
 - [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
 - [Credits & the NvChad migration record](docs/nvchad-migration.md) — where this started, and the step-by-step decision record of how the NvChad/base46 coupling was replaced.
-- [Feedback](https://github.com/StefanBartl/ui.nvim/issues)
+- [Feedback](https://github.com/WKDSteve/ui.nvim/issues)
 
 `:help ui` is the same reference inside the editor.
 

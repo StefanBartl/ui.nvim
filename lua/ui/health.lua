@@ -58,8 +58,8 @@ local function check_dependencies()
 
   if not has("lib.nvim") then
     health.error("lib.nvim is not on the runtimepath", {
-      "Install StefanBartl/lib.nvim",
-      "In lazy.nvim: dependencies = { 'StefanBartl/lib.nvim' }",
+      "Install WKDSteve/lib.nvim",
+      "In lazy.nvim: dependencies = { 'WKDSteve/lib.nvim' }",
     })
     return false
   end

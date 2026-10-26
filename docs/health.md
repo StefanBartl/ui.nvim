@@ -17,7 +17,7 @@ out of it, one gap at a time, and step 6 did the same for base46.
 | --- | --- |
 | ✅ `lib.nvim is available` | The root module resolves |
 | ✅ `all 11 required lib.nvim modules resolve` | Every module this plugin requires by name was found |
-| ❌ `lib.nvim is not on the runtimepath` | Fatal — install `StefanBartl/lib.nvim`. Only failure that stops the report |
+| ❌ `lib.nvim is not on the runtimepath` | Fatal — install `WKDSteve/lib.nvim`. Only failure that stops the report |
 | ℹ️ `NvChad is present` / `NvChad is not present` | Neither is an error, and this plugin's own code does not need either answer -- it just reports what this particular host looks like. NvChad is not required and (in the reference host this plugin was extracted from, as of step 7, 2026-09-13) not installed at all any more |
 
 `nvconfig`, `nvchad.stl.utils`, `nvchad.tabufline`, `base46` and

@@ -14,7 +14,7 @@ transparency toggle. Was Base46-specific through step 5 of `ROADMAP.md`; step
 
 ## Usage
 
-`:UI` and `:Theme` are [lib.nvim composer](https://github.com/StefanBartl/lib.nvim) verbs: the route tree
+`:UI` and `:Theme` are [lib.nvim composer](https://github.com/WKDSteve/lib.nvim) verbs: the route tree
 drives dispatch, `<Tab>` completion and the **option float**. A bare `:UI` (or `:UI sticky ` and then the
 cheatsheet key) opens a list of what the level offers, each option with a short text; `<CR>` puts it into
 the command line. The cheatsheet key has **no default**: it is the `keymap` of

@@ -69,7 +69,7 @@ local opts = require("docmap.config").build(root, {
   source = "lua/ui",
   title = "ui.nvim",
   out_dir = "docs/map",
-  repo_url = "https://github.com/StefanBartl/ui.nvim",
+  repo_url = "https://github.com/WKDSteve/ui.nvim",
   branch = "main",
 
   -- Layer rules that would otherwise rot in silence. Each is stated in a

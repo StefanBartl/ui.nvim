@@ -3,7 +3,7 @@
 Numbered **slots**: each one is an action, not just a path. A slot can open a
 file, open an address, copy text to the clipboard, run an Ex command with fixed
 arguments, call a Lua function, fold out a float of look-up text, or jump to a mark of
-[sessions.nvim](https://github.com/StefanBartl/sessions.nvim). They are shown as
+[sessions.nvim](https://github.com/WKDSteve/sessions.nvim). They are shown as
 a stack of rounded chips at the edge of the editor, or in a focusable panel with
 a preview. The number of slots has no upper bound in memory; what is saved
 between sessions is limited (see "The data file").
@@ -99,7 +99,7 @@ address itself, and the scheme that comes out is checked.
 - **The preview** (`K`): a file shows its lines at the position it was last left
   at (capped by `preview.max_kb` and `preview.max_lines`); a directory its
   entries; an address its host -- or, with `preview.fetch = true` **and**
-  [hover.nvim](https://github.com/StefanBartl/hover.nvim) installed, its page as
+  [hover.nvim](https://github.com/WKDSteve/hover.nvim) installed, its page as
   hover.nvim shows it, "loading ..." first. Fetching is a request to that host,
   so it is off by default, and once on it happens for the slot under the cursor
   whenever the preview is shown (also while it follows the cursor). An address

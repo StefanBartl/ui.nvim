@@ -2,7 +2,7 @@
 
 Headless spec suite for ui.nvim, written in the busted style
 (`describe`/`it`, luassert `assert.*`) and run by
-[testing.nvim](https://github.com/StefanBartl/testing.nvim).
+[testing.nvim](https://github.com/WKDSteve/testing.nvim).
 
 ## Run
 
