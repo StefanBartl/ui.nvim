@@ -49,16 +49,48 @@ local function spec()
   confirm.cancel()
   eq(calls, { "nil" }, "cancel with choices -> nil, once")
 
-  -- closed from outside: the float vanishes without confirm/cancel
+  -- closed from outside: the float vanishes without confirm/cancel. The answer is scheduled
+  -- (the hook runs inside WinClosed under pcall, where an error in on_answer would vanish).
+  local function answered(c, n)
+    vim.wait(500, function()
+      return #c >= n
+    end, 5)
+  end
   local surf
   calls, surf = open()
   api.nvim_win_close(surf.winid, true)
-  eq(calls, { false }, "float closed from outside -> false, once")
   eq(confirm.is_open(), false, "and the dialog is no longer open")
+  answered(calls, 1)
+  eq(calls, { false }, "float closed from outside -> false, once")
 
   calls, surf = open({ choices = { "a", "b" } })
   api.nvim_win_close(surf.winid, true)
+  answered(calls, 1)
   eq(calls, { "nil" }, "float closed from outside with choices -> nil, once")
+
+  -- a dialog opened right after an external close is not answered by the late answer
+  local late, late_surf = open({ question = "late" })
+  api.nvim_win_close(late_surf.winid, true)
+  local next_calls = open({ question = "next" })
+  answered(late, 1)
+  eq(late, { false }, "the externally closed dialog is answered once")
+  eq(next_calls, {}, "the dialog opened right after it is untouched")
+  confirm.confirm()
+  eq(next_calls, { true }, "and answers on its own")
+
+  -- an ask-owned dialog closed from outside answers the question with "no", once
+  local asked = {}
+  kit.ask({
+    question = "asked?",
+    on_answer = function(v)
+      asked[#asked + 1] = v
+    end,
+  })
+  assert(confirm.is_open(), "the ask is showing")
+  -- the dialog's float is entered, so it is the current window
+  api.nvim_win_close(api.nvim_get_current_win(), true)
+  answered(asked, 1)
+  eq(asked, { false }, "ask: float closed from outside -> false, once")
 
   -- replaced by a second dialog: the first one is answered as cancelled
   local first = open()
@@ -68,6 +100,26 @@ local function spec()
   confirm.confirm()
   eq(second, { true }, "the new one answers on its own")
   eq(first, { false }, "the replaced one does not answer twice")
+
+  -- a replaced dialog whose answer opens a dialog itself: that one replaces the replacement
+  -- (last one wins, every dialog is answered once) and is not left orphaned on screen
+  local reopened = {}
+  local from_cb = {}
+  kit.confirm({
+    question = "old",
+    on_answer = function(v)
+      from_cb[#from_cb + 1] = v
+      reopened = open({ question = "opened from the answer" })
+    end,
+  })
+  local replacement = open({ question = "replacement" })
+  eq(from_cb, { false }, "the replaced dialog was answered once")
+  eq(replacement, { false }, "the replacement was replaced in turn and answered once")
+  eq(reopened, {}, "the dialog opened from the answer is still waiting")
+  eq(confirm.is_open(), true, "and open: its float is not orphaned")
+  confirm.confirm()
+  eq(reopened, { true }, "it answers on its own")
+  eq(confirm.is_open(), false, "and no float is left behind")
 
   -- confirm.close() ends the dialog and answers as cancelled
   calls = open()
