@@ -35,6 +35,7 @@
 --- Options for `kit.surface.open`.
 ---@class Ui.Kit.SurfaceOpts
 ---@field lines? string[]        # initial content
+---@field modal? boolean           # a dialog that takes the keyboard: registered in ui.kit.modal while open (what kit.ask waits for)
 ---@field theme? Ui.Kit.ThemeArg
 ---@field title? string
 ---@field title_pos? "left"|"center"|"right"  # overrides the theme
@@ -378,7 +379,7 @@
 ---@field prompt fun(opts: table): any                       # ask: confirm (yes/no) or text
 ---@field picker fun(opts: table): table|nil                 # interactive picker (prompt drives results)
 ---@field confirm fun(opts: table): Ui.Kit.Surface|nil    # button-confirm dialog (horizontal buttons)
----@field ask fun(opts: table)                                 # yes/no that waits for an open dialog, answers false when unanswered, falls back to vim.ui.select
+---@field ask fun(opts: table)                                 # a question (yes/no or choices) that waits for every open modal dialog, answers false/nil when unanswered, falls back to vim.ui.select
 ---@field menu fun(opts: table): Ui.Kit.Surface|nil       # cursor-anchored action list (label → callback)
 ---@field compare fun(opts: Ui.Kit.CompareOpts): Ui.Kit.CompareHandle|nil  # pick two items, view them side by side
 ---@field progress fun(opts: table): table                     # passthrough to lib.nvim.progress.create

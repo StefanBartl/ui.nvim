@@ -32,13 +32,13 @@ local M = {}
 
 --- Single active confirm dialog (mirrors the chooser's single-instance model).
 local state = {
-  surf = nil,
-  labels = {},
-  focus = 1,
-  ranges = {}, -- per-button { row, start_col, end_col } (0-based, byte cols)
-  custom = false,
-  on_answer = nil,
-  ns = api.nvim_create_namespace("lib_kit_confirm"),
+	surf = nil,
+	labels = {},
+	focus = 1,
+	ranges = {}, -- per-button { row, start_col, end_col } (0-based, byte cols)
+	custom = false,
+	on_answer = nil,
+	ns = api.nvim_create_namespace("lib_kit_confirm"),
 }
 
 ---@internal
@@ -49,43 +49,43 @@ local state = {
 ---@param width integer
 ---@return string[]
 local function wrap_line(line, width)
-  if vim.fn.strdisplaywidth(line) <= width then
-    return { line }
-  end
-  local out, cur = {}, ""
-  local function push_word(word)
-    local sep = cur == "" and "" or " "
-    if vim.fn.strdisplaywidth(cur .. sep .. word) <= width then
-      cur = cur .. sep .. word
-      return
-    end
-    if cur ~= "" then
-      out[#out + 1] = cur
-      cur = ""
-    end
-    -- A word wider than the width: break it between characters.
-    while vim.fn.strdisplaywidth(word) > width do
-      local piece, used = "", 0
-      for _, ch in ipairs(vim.fn.split(word, "\\zs")) do
-        local w = vim.fn.strdisplaywidth(ch)
-        if used + w > width and piece ~= "" then
-          break
-        end
-        piece = piece .. ch
-        used = used + w
-      end
-      out[#out + 1] = piece
-      word = word:sub(#piece + 1)
-    end
-    cur = word
-  end
-  for word in line:gmatch("%S+") do
-    push_word(word)
-  end
-  if cur ~= "" or #out == 0 then
-    out[#out + 1] = cur
-  end
-  return out
+	if vim.fn.strdisplaywidth(line) <= width then
+		return { line }
+	end
+	local out, cur = {}, ""
+	local function push_word(word)
+		local sep = cur == "" and "" or " "
+		if vim.fn.strdisplaywidth(cur .. sep .. word) <= width then
+			cur = cur .. sep .. word
+			return
+		end
+		if cur ~= "" then
+			out[#out + 1] = cur
+			cur = ""
+		end
+		-- A word wider than the width: break it between characters.
+		while vim.fn.strdisplaywidth(word) > width do
+			local piece, used = "", 0
+			for _, ch in ipairs(vim.fn.split(word, "\\zs")) do
+				local w = vim.fn.strdisplaywidth(ch)
+				if used + w > width and piece ~= "" then
+					break
+				end
+				piece = piece .. ch
+				used = used + w
+			end
+			out[#out + 1] = piece
+			word = word:sub(#piece + 1)
+		end
+		cur = word
+	end
+	for word in line:gmatch("%S+") do
+		push_word(word)
+	end
+	if cur ~= "" or #out == 0 then
+		out[#out + 1] = cur
+	end
+	return out
 end
 
 ---@internal
@@ -93,20 +93,20 @@ end
 ---@param width integer
 ---@return string
 local function center(s, width)
-  local pad = math.max(0, math.floor((width - vim.fn.strdisplaywidth(s)) / 2))
-  return string.rep(" ", pad) .. s
+	local pad = math.max(0, math.floor((width - vim.fn.strdisplaywidth(s)) / 2))
+	return string.rep(" ", pad) .. s
 end
 
 ---@internal
 --- Repaint the focus highlight on the current button.
 local function render_focus()
-  buttons.paint(state.surf and state.surf.bufnr, state.ns, state.ranges, state.focus)
+	buttons.paint(state.surf and state.surf.bufnr, state.ns, state.ranges, state.focus)
 end
 
 --- Whether a confirm dialog is currently open.
 ---@return boolean
 function M.is_open()
-  return state.surf ~= nil and state.surf:is_valid()
+	return state.surf ~= nil and state.surf:is_valid()
 end
 
 ---@internal
@@ -118,15 +118,14 @@ end
 ---@return string[] labels
 ---@return integer focus
 local function take_state()
-  local surf, cb, custom, labels, focus =
-    state.surf, state.on_answer, state.custom, state.labels, state.focus
-  state.surf = nil
-  state.labels = {}
-  state.ranges = {}
-  state.focus = 1
-  state.custom = false
-  state.on_answer = nil
-  return surf, cb, custom, labels, focus
+	local surf, cb, custom, labels, focus = state.surf, state.on_answer, state.custom, state.labels, state.focus
+	state.surf = nil
+	state.labels = {}
+	state.ranges = {}
+	state.focus = 1
+	state.custom = false
+	state.on_answer = nil
+	return surf, cb, custom, labels, focus
 end
 
 ---@internal
@@ -138,20 +137,20 @@ end
 ---@param focus integer
 ---@param confirmed boolean
 local function deliver(cb, custom, labels, focus, confirmed)
-  if not cb then
-    return
-  end
-  if confirmed then
-    if custom then
-      cb(labels[focus])
-    else
-      cb(focus == 1)
-    end
-  elseif custom then
-    cb(nil)
-  else
-    cb(false)
-  end
+	if not cb then
+		return
+	end
+	if confirmed then
+		if custom then
+			cb(labels[focus])
+		else
+			cb(focus == 1)
+		end
+	elseif custom then
+		cb(nil)
+	else
+		cb(false)
+	end
 end
 
 ---@internal
@@ -162,12 +161,12 @@ end
 ---@return string[] labels
 ---@return integer focus
 local function retire()
-  local surf, cb, custom, labels, focus = take_state()
-  if surf then
-    -- A float that cannot be closed must not take the answer with it.
-    pcall(surf.close, surf)
-  end
-  return cb, custom, labels, focus
+	local surf, cb, custom, labels, focus = take_state()
+	if surf then
+		-- A float that cannot be closed must not take the answer with it.
+		pcall(surf.close, surf)
+	end
+	return cb, custom, labels, focus
 end
 
 ---@internal
@@ -175,27 +174,27 @@ end
 --- cancel value otherwise. Idempotent.
 ---@param confirmed boolean
 local function finish(confirmed)
-  local cb, custom, labels, focus = retire()
-  deliver(cb, custom, labels, focus, confirmed)
+	local cb, custom, labels, focus = retire()
+	deliver(cb, custom, labels, focus, confirmed)
 end
 
 --- Close the dialog (idempotent). An open dialog is answered as cancelled: the module
 --- promises an answer on every path, and a `kit.ask` or a caller waiting on it relies on that.
 function M.close()
-  finish(false)
+	finish(false)
 end
 
 --- A copy of the open dialog's button ranges (`{ row, start_col, end_col }`, 0-based, byte
 --- columns), in button order. Empty when no dialog is open.
 ---@return Ui.Kit.ButtonRange[]
 function M.button_ranges()
-  return vim.deepcopy(state.ranges)
+	return vim.deepcopy(state.ranges)
 end
 
 --- 1-based index of the currently focused button.
 ---@return integer
 function M.current_focus()
-  return state.focus
+	return state.focus
 end
 
 ---@internal
@@ -203,10 +202,10 @@ end
 --- (live `getmousepos()` against `state.ranges`) is `ui.kit.buttons.hit`.
 ---@return integer|nil
 local function button_at_mousepos()
-  if not M.is_open() then
-    return nil
-  end
-  return (buttons.hit(state.ranges, state.surf.winid))
+	if not M.is_open() then
+		return nil
+	end
+	return (buttons.hit(state.ranges, state.surf.winid))
 end
 
 --- Focus and confirm whichever button is under the mouse, if any. A click
@@ -214,42 +213,43 @@ end
 --- cancel — matches clicking empty space anywhere else in the kit, which
 --- never dismisses the surface either.
 function M.click()
-  local i = button_at_mousepos()
-  if not i then
-    return
-  end
-  state.focus = i
-  render_focus()
-  M.confirm()
+	local i = button_at_mousepos()
+	if not i then
+		return
+	end
+	state.focus = i
+	render_focus()
+	M.confirm()
 end
 
 --- Move focus by `delta` buttons, wrapping around.
 ---@param delta integer
 function M.move(delta)
-  if not M.is_open() then
-    return
-  end
-  state.focus = buttons.wrap(state.focus, delta, #state.labels)
-  render_focus()
+	if not M.is_open() then
+		return
+	end
+	state.focus = buttons.wrap(state.focus, delta, #state.labels)
+	render_focus()
 end
 
 --- Confirm the focused button, fire on_answer, then close.
 function M.confirm()
-  if not M.is_open() then
-    return
-  end
-  finish(true)
+	if not M.is_open() then
+		return
+	end
+	finish(true)
 end
 
 --- Cancel the dialog (Esc/q), fire on_answer with the cancelled value, close.
 function M.cancel()
-  if not M.is_open() then
-    return
-  end
-  finish(false)
+	if not M.is_open() then
+		return
+	end
+	finish(false)
 end
 
---- How often a waiting `ask` looks again, and how long it waits at most.
+--- How long a waiting `ask` waits for a free moment at most, before it is answered "no".
+--- (`ASK_POLL_MS` is kept for callers that set it; nothing polls any more.)
 M.ASK_POLL_MS = 300
 M.ASK_MAX_WAIT_MS = 10 * 60 * 1000
 
@@ -259,236 +259,276 @@ local waiting = {}
 
 ---@param ticket table
 local function leave_queue(ticket)
-  for i, t in ipairs(waiting) do
-    if t == ticket then
-      table.remove(waiting, i)
-      return
-    end
-  end
+	for i, t in ipairs(waiting) do
+		if t == ticket then
+			table.remove(waiting, i)
+			return
+		end
+	end
 end
 
---- Yes/no question that waits its turn and always answers, "no" included.
+--- A question that waits its turn and always answers, "no" included.
 ---
 --- `open` is single-instance: opening a dialog closes the open one and answers it as
 --- cancelled, so a question raised while another is showing (a stream that ends minutes
---- after the command was typed) would be dropped with a "no" nobody gave, and the
---- user's open dialog would vanish under their hands.
---- `ask` instead polls until no dialog is open, then shows its own. Anything
---- that is not an explicit yes -- a dialog that stays open for `max_wait_ms`
---- -- calls `on_answer(false)`, so callers treat an unanswered question as
---- "no" without a second code path. When the float cannot be opened at all
---- it falls back to `vim.ui.select` (Yes/No).
+--- after the command was typed) would be dropped with a "no" nobody gave, and the user's open
+--- dialog would vanish under their hands. `ask` instead waits until no modal kit dialog is
+--- open (a confirm, but also an input, a select or a sheet: `ui.kit.modal`), then shows its
+--- own. It subscribes once and is woken when the last one closes; nothing polls. Anything
+--- that is not an explicit answer -- the wait lasts `max_wait_ms` -- calls `on_answer` with the
+--- cancel value (`false`, or `nil` for a `choices` list), so callers treat an unanswered
+--- question as "no" without a second code path. When the float cannot be opened at all it
+--- falls back to `vim.ui.select` (Yes/No, or the choices).
 ---
---- Several waiting questions are shown in the order they were asked, whichever
---- of their polls happens to tick first.
+--- Takes the options of `open` (`question`, `choices`, `title`, `theme`, ...). Several waiting
+--- questions are shown in the order they were asked, whichever of them is woken first.
 ---
 --- `on_answer` fires at most once, and never when `abandoned()` is true by
 --- the time the question's turn comes.
----@param opts { question: string, on_answer: fun(yes: boolean), abandoned?: (fun(): boolean), theme?: any, title?: string, max_wait_ms?: integer }
+---@param opts { question: string, on_answer: fun(answer: boolean|string|nil), abandoned?: (fun(): boolean), choices?: string[], theme?: any, title?: string, max_wait_ms?: integer }
 ---@return nil
 function M.ask(opts)
-  opts = opts or {}
-  local waited = 0
-  local max_wait = opts.max_wait_ms or M.ASK_MAX_WAIT_MS
-  local answered = false
-  local ticket = {}
-  waiting[#waiting + 1] = ticket
-  local function answer(yes)
-    if answered then
-      return
-    end
-    answered = true
-    if opts.on_answer then
-      opts.on_answer(yes == true)
-    end
-  end
+	opts = opts or {}
+	local modal = require("ui.kit.modal")
+	local max_wait = opts.max_wait_ms or M.ASK_MAX_WAIT_MS
+	local custom = type(opts.choices) == "table" and #opts.choices > 0
+	local answered = false
+	local ticket = {}
+	waiting[#waiting + 1] = ticket
+	local timer ---@type uv.uv_timer_t|nil
+	local cancel_wait ---@type (fun())|nil
 
-  local attempt
-  local function step()
-    if opts.abandoned and opts.abandoned() then
-      leave_queue(ticket)
-      return
-    end
-    if waiting[1] ~= ticket or M.is_open() then
-      if waited >= max_wait then
-        leave_queue(ticket)
-        answer(false)
-        return
-      end
-      waited = waited + M.ASK_POLL_MS
-      vim.defer_fn(attempt, M.ASK_POLL_MS)
-      return
-    end
-    leave_queue(ticket)
-    -- `open` answers "no" synchronously and returns nil when the float cannot be
-    -- created: a failure to show the question, not an answer, so it is not
-    -- forwarded. A dialog that did open and answers at once (a stub, another
-    -- implementation) is a real answer and counts.
-    local opening = true
-    local sync_answer
-    local shown = M.open({
-      question = opts.question,
-      theme = opts.theme,
-      title = opts.title,
-      on_answer = function(yes)
-        if opening then
-          sync_answer = yes
-        else
-          answer(yes)
-        end
-      end,
-    })
-    opening = false
-    if shown then
-      if sync_answer ~= nil then
-        answer(sync_answer)
-      end
-    else
-      vim.ui.select({ "Yes", "No" }, { prompt = tostring(opts.question or "") }, function(choice)
-        answer(choice == "Yes")
-      end)
-    end
-  end
+	local function stop_timer()
+		if timer then
+			pcall(timer.stop, timer)
+			pcall(timer.close, timer)
+			timer = nil
+		end
+	end
 
-  -- A step that raises (a throwing `abandoned`, a failing `open`) must not leave its
-  -- place in the queue, or every question behind it would wait for ever.
-  attempt = function()
-    local ok, err = pcall(step)
-    if not ok then
-      leave_queue(ticket)
-      error(err, 0)
-    end
-  end
-  attempt()
+	local function answer(value)
+		if answered then
+			return
+		end
+		answered = true
+		stop_timer()
+		if opts.on_answer then
+			if custom then
+				opts.on_answer(value)
+			else
+				opts.on_answer(value == true)
+			end
+		end
+	end
+
+	--- Leave the queue for good: no more waiting, no timer.
+	local function drop()
+		leave_queue(ticket)
+		stop_timer()
+		if cancel_wait then
+			cancel_wait()
+			cancel_wait = nil
+		end
+	end
+
+	local attempt
+	local function step()
+		cancel_wait = nil
+		if answered then
+			return
+		end
+		if opts.abandoned and opts.abandoned() then
+			drop()
+			return
+		end
+		if waiting[1] ~= ticket or modal.busy() then
+			cancel_wait = modal.on_free(attempt)
+			return
+		end
+		drop()
+		-- `open` answers "no" synchronously and returns nil when the float cannot be
+		-- created: a failure to show the question, not an answer, so it is not
+		-- forwarded. A dialog that did open and answers at once (a stub, another
+		-- implementation) is a real answer and counts.
+		local open_opts = vim.tbl_extend("force", {}, opts)
+		open_opts.abandoned, open_opts.max_wait_ms = nil, nil
+		local opening = true
+		local sync_answer, has_sync = nil, false
+		open_opts.on_answer = function(value)
+			if opening then
+				sync_answer, has_sync = value, true
+			else
+				answer(value)
+			end
+		end
+		local shown = M.open(open_opts)
+		opening = false
+		if shown then
+			if has_sync then
+				answer(sync_answer)
+			end
+		elseif custom then
+			vim.ui.select(opts.choices, { prompt = tostring(opts.question or "") }, function(choice)
+				answer(choice)
+			end)
+		else
+			vim.ui.select({ "Yes", "No" }, { prompt = tostring(opts.question or "") }, function(choice)
+				answer(choice == "Yes")
+			end)
+		end
+	end
+
+	-- A step that raises (a throwing `abandoned`, a failing `open`) must not leave its
+	-- place in the queue, or every question behind it would wait for ever.
+	attempt = function()
+		local ok, err = pcall(step)
+		if not ok then
+			drop()
+			error(err, 0)
+		end
+	end
+
+	-- One timer for the whole wait: a dialog that stays open for ever must not hold the question.
+	timer = vim.defer_fn(function()
+		timer = nil
+		if answered then
+			return
+		end
+		drop()
+		answer(nil)
+	end, max_wait)
+
+	attempt()
 end
 
 --- Open a button-confirm dialog.
 ---@param opts table  # { question, choices?, theme?, on_answer }
 ---@return Ui.Kit.Surface|nil
 function M.open(opts)
-  opts = opts or {}
-  -- A dialog this one replaces is answered as cancelled, but only once this one is in place: its
-  -- answer is user code and may open a dialog itself, which must not land in the middle of this
-  -- call and be overwritten by it.
-  local old_cb, old_custom, old_labels, old_focus = retire()
-  local function settle_old()
-    deliver(old_cb, old_custom, old_labels, old_focus, false)
-  end
+	opts = opts or {}
+	-- A dialog this one replaces is answered as cancelled, but only once this one is in place: its
+	-- answer is user code and may open a dialog itself, which must not land in the middle of this
+	-- call and be overwritten by it.
+	local old_cb, old_custom, old_labels, old_focus = retire()
+	local function settle_old()
+		deliver(old_cb, old_custom, old_labels, old_focus, false)
+	end
 
-  local custom = type(opts.choices) == "table" and #opts.choices > 0
-  local labels = custom and opts.choices or { "Yes", "No" }
+	local custom = type(opts.choices) == "table" and #opts.choices > 0
+	local labels = custom and opts.choices or { "Yes", "No" }
 
-  -- The float is never wider than the window `make_scratch` would clamp it to: sizing and
-  -- centering against a wider width pushed the buttons out of the visible window. The question is
-  -- wrapped to what fits, the buttons are packed into as many rows as it takes.
-  local max_w = max_float_width()
-  local wrap_w = math.max(10, max_w - 4)
-  local qlines = {}
-  for _, ql in ipairs(vim.split(tostring(opts.question or ""), "\n", { plain = true })) do
-    -- A NUL byte in the question (a case title, say) would raise E976 out of the
-    -- `strdisplaywidth()` that sizes and centers it: it is shown as the SOH that measures alike.
-    vim.list_extend(qlines, wrap_line(nul_safe(ql), wrap_w))
-  end
+	-- The float is never wider than the window `make_scratch` would clamp it to: sizing and
+	-- centering against a wider width pushed the buttons out of the visible window. The question is
+	-- wrapped to what fits, the buttons are packed into as many rows as it takes.
+	local max_w = max_float_width()
+	local wrap_w = math.max(10, max_w - 4)
+	local qlines = {}
+	for _, ql in ipairs(vim.split(tostring(opts.question or ""), "\n", { plain = true })) do
+		-- A NUL byte in the question (a case title, say) would raise E976 out of the
+		-- `strdisplaywidth()` that sizes and centers it: it is shown as the SOH that measures alike.
+		vim.list_extend(qlines, wrap_line(nul_safe(ql), wrap_w))
+	end
 
-  -- Width: fit the wider of the question and the button row, plus margin.
-  local btn_w = buttons.row_width(labels)
-  local q_w = 0
-  for _, ql in ipairs(qlines) do
-    q_w = math.max(q_w, vim.fn.strdisplaywidth(ql))
-  end
-  local width = math.min(math.max(btn_w, q_w) + 4, max_w)
+	-- Width: fit the wider of the question and the button row, plus margin.
+	local btn_w = buttons.row_width(labels)
+	local q_w = 0
+	for _, ql in ipairs(qlines) do
+		q_w = math.max(q_w, vim.fn.strdisplaywidth(ql))
+	end
+	local width = math.min(math.max(btn_w, q_w) + 4, max_w)
 
-  -- The buttons first: how many rows they take decides how much room the question has.
-  local button_lines, ranges = buttons.layout_rows(labels, width, 0)
-  local max_h = math.max(1, vim.o.lines - 4)
-  local room = math.max(1, max_h - #button_lines - 1)
-  if #qlines > room then
-    qlines = vim.list_slice(qlines, 1, room)
-    qlines[room] = wrap_line(qlines[room], wrap_w - 1)[1] .. "…"
-  end
+	-- The buttons first: how many rows they take decides how much room the question has.
+	local button_lines, ranges = buttons.layout_rows(labels, width, 0)
+	local max_h = math.max(1, vim.o.lines - 4)
+	local room = math.max(1, max_h - #button_lines - 1)
+	if #qlines > room then
+		qlines = vim.list_slice(qlines, 1, room)
+		qlines[room] = wrap_line(qlines[room], wrap_w - 1)[1] .. "…"
+	end
 
-  -- Compose lines: question (centered), blank, buttons.
-  local lines = {}
-  for _, ql in ipairs(qlines) do
-    lines[#lines + 1] = center(ql, width)
-  end
-  lines[#lines + 1] = ""
-  local button_row = #lines -- 0-based row of the first button row
-  for _, r in ipairs(ranges) do
-    r.row = r.row + button_row
-  end
-  vim.list_extend(lines, button_lines)
+	-- Compose lines: question (centered), blank, buttons.
+	local lines = {}
+	for _, ql in ipairs(qlines) do
+		lines[#lines + 1] = center(ql, width)
+	end
+	lines[#lines + 1] = ""
+	local button_row = #lines -- 0-based row of the first button row
+	for _, r in ipairs(ranges) do
+		r.row = r.row + button_row
+	end
+	vim.list_extend(lines, button_lines)
 
-  local surf = surface.open({
-    lines = lines,
-    theme = opts.theme,
-    title = opts.title,
-    width = width,
-    height = #lines,
-    relative = opts.relative or "editor",
-    enter = true,
-    filetype = "lib-kit-confirm",
-  })
-  if not surf then
-    settle_old()
-    -- `surface.open` failed to open the float -- a genuine break, not a
-    -- user-driven cancel. Without this, on_answer never fires (despite the
-    -- module's own "Answer contract" implying it always does) and a
-    -- kit.sync caller blocked on it stalls silently. Same "no answer" value
-    -- as M.cancel() uses.
-    if opts.on_answer then
-      if custom then
-        opts.on_answer(nil)
-      else
-        opts.on_answer(false)
-      end
-    end
-    return nil
-  end
+	local surf = surface.open({
+		modal = true,
+		lines = lines,
+		theme = opts.theme,
+		title = opts.title,
+		width = width,
+		height = #lines,
+		relative = opts.relative or "editor",
+		enter = true,
+		filetype = "lib-kit-confirm",
+	})
+	if not surf then
+		settle_old()
+		-- `surface.open` failed to open the float -- a genuine break, not a
+		-- user-driven cancel. Without this, on_answer never fires (despite the
+		-- module's own "Answer contract" implying it always does) and a
+		-- kit.sync caller blocked on it stalls silently. Same "no answer" value
+		-- as M.cancel() uses.
+		if opts.on_answer then
+			if custom then
+				opts.on_answer(nil)
+			else
+				opts.on_answer(false)
+			end
+		end
+		return nil
+	end
 
-  state.surf = surf
-  state.labels = labels
-  state.ranges = ranges
-  state.focus = 1
-  state.custom = custom
-  state.on_answer = opts.on_answer
-  render_focus()
+	state.surf = surf
+	state.labels = labels
+	state.ranges = ranges
+	state.focus = 1
+	state.custom = custom
+	state.on_answer = opts.on_answer
+	render_focus()
 
-  -- The float going away by any other route (`:q`, `<C-w>c`, `:only`) is a cancel: without
-  -- this the answer never came. Only for this dialog: a replaced one has already been taken
-  -- out of `state` by `open`'s own `retire()` and its late `WinClosed` finds nothing to do.
-  -- The state is taken here, at once, so a dialog opened next is never answered by mistake; the
-  -- answer itself is scheduled: the surface runs this hook under `pcall` inside `WinClosed`,
-  -- where an error in the caller's `on_answer` would vanish and window changes are restricted.
-  surf:on_close(function()
-    if state.surf ~= surf then
-      return
-    end
-    local cb, custom, labels, focus = retire()
-    vim.schedule(function()
-      deliver(cb, custom, labels, focus, false)
-    end)
-  end)
+	-- The float going away by any other route (`:q`, `<C-w>c`, `:only`) is a cancel: without
+	-- this the answer never came. Only for this dialog: a replaced one has already been taken
+	-- out of `state` by `open`'s own `retire()` and its late `WinClosed` finds nothing to do.
+	-- The state is taken here, at once, so a dialog opened next is never answered by mistake; the
+	-- answer itself is scheduled: the surface runs this hook under `pcall` inside `WinClosed`,
+	-- where an error in the caller's `on_answer` would vanish and window changes are restricted.
+	surf:on_close(function()
+		if state.surf ~= surf then
+			return
+		end
+		local cb, custom, labels, focus = retire()
+		vim.schedule(function()
+			deliver(cb, custom, labels, focus, false)
+		end)
+	end)
 
-  -- Throwaway buffer-local keys: not recorded (see ui.kit.chooser's `mo`).
-  local mo = { buffer = surf.bufnr, nowait = true, record = false }
-  for _, key in ipairs({ "l", "<Right>", "<Tab>" }) do
-    map("n", key, function()
-      M.move(1)
-    end, mo)
-  end
-  for _, key in ipairs({ "h", "<Left>", "<S-Tab>" }) do
-    map("n", key, function()
-      M.move(-1)
-    end, mo)
-  end
-  map("n", "<CR>", M.confirm, mo)
-  map("n", "<Esc>", M.cancel, mo)
-  map("n", "q", M.cancel, mo)
-  map("n", "<LeftMouse>", M.click, mo)
+	-- Throwaway buffer-local keys: not recorded (see ui.kit.chooser's `mo`).
+	local mo = { buffer = surf.bufnr, nowait = true, record = false }
+	for _, key in ipairs({ "l", "<Right>", "<Tab>" }) do
+		map("n", key, function()
+			M.move(1)
+		end, mo)
+	end
+	for _, key in ipairs({ "h", "<Left>", "<S-Tab>" }) do
+		map("n", key, function()
+			M.move(-1)
+		end, mo)
+	end
+	map("n", "<CR>", M.confirm, mo)
+	map("n", "<Esc>", M.cancel, mo)
+	map("n", "q", M.cancel, mo)
+	map("n", "<LeftMouse>", M.click, mo)
 
-  settle_old()
-  return surf
+	settle_old()
+	return surf
 end
 
 return M
