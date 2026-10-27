@@ -121,6 +121,21 @@ local function spec()
   eq(reopened, { true }, "it answers on its own")
   eq(confirm.is_open(), false, "and no float is left behind")
 
+  -- building the new dialog raises: the dialog it replaced is still answered
+  do
+    local old_calls = open({ question = "old" })
+    local buttons = require("ui.kit.buttons")
+    local real = buttons.layout_rows
+    buttons.layout_rows = function()
+      error("boom")
+    end
+    local raised = pcall(kit.confirm, { question = "new", on_answer = function() end })
+    buttons.layout_rows = real
+    eq(raised, false, "the error surfaces")
+    eq(old_calls, { false }, "the replaced dialog was answered although the new one raised")
+    eq(confirm.is_open(), false, "and nothing is left open")
+  end
+
   -- confirm.close() ends the dialog and answers as cancelled
   calls = open()
   confirm.close()

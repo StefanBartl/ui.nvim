@@ -129,6 +129,24 @@ local function spec()
   ok(buf_lines[#buf_lines]:find("%[ Yes %]"), "the buttons are the last line")
   restore()
 
+  -- the buttons alone fill a tiny editor: the question gives way, the buttons are what is shown
+  vim.o.columns, vim.o.lines = 30, 8
+  surf = open({
+    question = "Pick one of these",
+    choices = {
+      "Update all references",
+      "Inspect first",
+      "Leave as-is",
+      "Cancel the operation",
+      "Something else",
+    },
+  })
+  local tiny = api.nvim_buf_get_lines(surf.bufnr, 0, -1, false)
+  ok(not table.concat(tiny, "\n"):find("Pick one"), "the question made room for the buttons")
+  ok(tiny[1]:find("%["), "the first line is a button row")
+  restore()
+  vim.o.columns, vim.o.lines = 80, 30
+
   -- a short question is unchanged: one row, nothing cut
   surf = open({ question = "Delete?" })
   local _, short_lines, short_ranges = assert_inside(surf, "short question")
