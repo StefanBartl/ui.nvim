@@ -91,6 +91,17 @@ function M.legend(entries, opts)
   return " " .. table.concat(parts, "%#NonText#  │  ") .. "%#Normal#"
 end
 
+---`heading` with `title` put in for its `%s`. Plain substitution, not
+---`string.format`: a heading with any other `%` ("100% Tasten") would raise.
+---@param heading string
+---@param title string
+---@return string
+local function fill(heading, title)
+  return (heading:gsub("%%s", function()
+    return title
+  end))
+end
+
 ---The lines of the cheatsheet for `rows`; the help key (`?` by default) is
 ---added last unless `opts.help_lhs` is false.
 ---@param title string
@@ -104,7 +115,7 @@ function M.cheatsheet_lines(title, rows, opts)
   for _, r in ipairs(rows) do
     widest = math.max(widest, vim.fn.strdisplaywidth(r.lhs))
   end
-  local lines = { "", " " .. (opts.heading or "%s keys"):format(title), "" }
+  local lines = { "", " " .. fill(opts.heading or "%s keys", title), "" }
   -- padded by display width: `%-Ns` counts bytes, so an umlaut or `…` would drift
   local function row(lhs, desc)
     local pad = widest - vim.fn.strdisplaywidth(lhs)
@@ -137,7 +148,7 @@ function M.cheatsheet(title, rows, opts)
   end
   return require("ui.kit.viewer").open({
     lines = lines,
-    title = opts.heading and opts.heading:format(title) or (title .. " Keys"),
+    title = opts.heading and fill(opts.heading, title) or (title .. " Keys"),
     filetype = opts.filetype or "lib-kit-viewer-help",
     width = math.min(width + 2, math.floor(vim.o.columns * 0.9)),
     height = math.min(#lines, math.floor(vim.o.lines * 0.8)),

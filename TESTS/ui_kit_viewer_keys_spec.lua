@@ -108,6 +108,15 @@ describe("ui.kit.viewer keys", function()
       assert.are.equal("  <F1>   Diese Hilfe", lines[5])
     end)
 
+    it("takes a heading with a percent sign, and a title with one, as text", function()
+      local lines = require("ui.kit.viewer_keys").cheatsheet_lines(
+        "50% done",
+        { { lhs = "Y", desc = "Kopieren" } },
+        { heading = "100% %s: Tasten" }
+      )
+      assert.are.equal(" 100% 50% done: Tasten", lines[2])
+    end)
+
     it("has no help row with help_lhs = false", function()
       local lines = require("ui.kit.viewer_keys").cheatsheet_lines(
         "X",
