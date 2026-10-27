@@ -7,10 +7,14 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ### Added
 
+- `kit.async`: `run`, `await`, `confirm`, `ask`, `input`, `form`, `select`, `submit` -- coroutines over the callback components, so a flow of several questions reads as straight code and the editor keeps running while it waits. `kit.sync` is deprecated: it waits in `vim.wait()`, Neovim does not run typed keys during it, and the dialog returned after its timeout (ten minutes by default) without ever seeing them. It warns once per session.
 - Statusline segment `showcmd` (`ui.statusline.modules.showcmd`, opt-in): the pending key sequence, e.g. `2d`, drawn through Neovim's own `%S` item. While the key is in the active `order`, `'showcmdloc'` is `"statusline"`; a variant switch without it, the menu's "Remove" and `render.disable()` hand the earlier value back. Tagged `essential`, so `responsive` mode keeps it in a narrow window (it takes no columns while idle).
 
 ### Fixed
 
+- `kit.confirm` answers exactly once whichever way it ends: closed from outside, replaced by another dialog, `close()`; a waiting `kit.ask` no longer hangs on it. The answer of an externally closed float is delivered on the next loop turn, so an error in the handler is reported.
+- `kit.confirm`: a long question is wrapped, many or wide buttons are packed into several rows and a label wider than the window is cut, so the buttons stay in the visible window (a 200 character question left the first button at column 95 of a 76 column window).
+- `kit.ask` waits for every modal kit dialog (input, select, picker, sheet, compare), not only a confirm, and no longer polls; it takes the options of `kit.confirm` (`choices`).
 - `kit.picker` drops its per-instance `lib_kit_picker_<winid>` augroup when it closes, on every close path; before, one empty group stayed behind for each picker opened.
 
 ### Changed

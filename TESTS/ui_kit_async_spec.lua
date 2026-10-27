@@ -3,7 +3,7 @@
 
 -- `kit.async`: coroutines over the callback components. The semantics here; typed keys in a real
 -- UI are in ui_kit_async_keys_spec.lua.
-local function spec()
+local function body(stub)
   local kit = require("ui.kit")
   local async = kit.async
   local confirm = require("ui.kit.confirm")
@@ -96,31 +96,29 @@ local function spec()
 
   -- select: the item and its index, nil on dismiss
   local stub_select = package.loaded["ui.kit.select"]
-  local real_open = stub_select.open
-  stub_select.open = function(o)
+  stub(stub_select, "open", function(o)
     o.on_select(o.items[2], 2)
-  end
+  end)
   local picked
   async.run(function()
     picked = { async.select({ items = { "a", "b" } }) }
   end)
   eq(picked, { "b", 2 }, "select -> item, index")
-  stub_select.open = function(o)
+  stub(stub_select, "open", function(o)
     o.on_cancel()
-  end
+  end)
   async.run(function()
     picked = { async.select({ items = { "a", "b" } }) }
   end)
   eq(picked, {}, "select dismissed -> nil")
-  stub_select.open = real_open
 
   -- input / form: value, or nil and true when cancelled; the caller's own callbacks still run
   local input_mod = package.loaded["ui.kit.input"]
-  local real_input = input_mod.open
   local user_called
-  input_mod.open = function(o)
+  stub(input_mod, "open", function(o)
     o.on_submit("typed")
-  end
+    return {}
+  end)
   async.run(function()
     got = {
       async.input({
@@ -133,37 +131,104 @@ local function spec()
   end)
   eq(got, { "typed", false }, "input -> value, false")
   eq(user_called, "typed", "the caller's own on_submit ran too")
-  input_mod.open = function(o)
+  stub(input_mod, "open", function(o)
     o.on_cancel()
-  end
+    return {}
+  end)
   async.run(function()
     got = { async.input({ prompt = "p" }) }
   end)
   eq(got[1], nil, "input cancelled -> nil")
   eq(got[2], true, "and cancelled = true")
-  input_mod.open = real_input
+
+  -- a component that cannot open returns nothing and calls neither callback: counts as cancelled
+  stub(input_mod, "open", function()
+    return nil
+  end)
+  got = nil
+  async.run(function()
+    got = { async.input({ prompt = "p" }) }
+  end)
+  ok(got ~= nil, "an input that cannot open does not leave the coroutine waiting")
+  eq(got[1], nil, "-> nil")
+  eq(got[2], true, "and cancelled")
+
+  -- form goes through the same path
+  stub(package.loaded["ui.kit.form"], "open", function(o)
+    o.on_submit({ a = 1 })
+    return {}
+  end)
+  async.run(function()
+    got = { async.form({ fields = {} }) }
+  end)
+  eq(got, { { a = 1 }, false }, "form -> values, false")
+
+  -- the caller's own callback raising does not cost the coroutine its answer
+  stub(input_mod, "open", function(o)
+    vim.schedule(function()
+      pcall(o.on_submit, "kept")
+    end)
+    return {}
+  end)
+  got = nil
+  async.run(function()
+    got = {
+      async.input({
+        on_submit = function()
+          error("user callback failed")
+        end,
+      }),
+    }
+  end)
+  ok(
+    vim.wait(500, function()
+      return got ~= nil
+    end, 5),
+    "the coroutine still gets its answer"
+  )
+  eq(got, { "kept", false }, "although the caller's on_submit raised")
+
+  -- an error right after the answer, inside start, does not eat the answer either
+  stub(input_mod, "open", function(o)
+    o.on_submit("early")
+    error("raised after answering")
+  end)
+  local late_notice
+  stub(vim, "notify", function(msg)
+    late_notice = msg
+  end)
+  got = nil
+  async.run(function()
+    got = { async.input({}) }
+  end)
+  eq(got, { "early", false }, "the answer wins over a later error")
+  vim.wait(200, function()
+    return late_notice ~= nil
+  end, 5)
+  ok(
+    late_notice and late_notice:find("raised after answering", 1, true),
+    "and the error is reported"
+  )
 
   -- an error in the coroutine is reported with its traceback, not swallowed
   local notified
-  local real_notify = vim.notify
-  vim.notify = function(msg)
+  stub(vim, "notify", function(msg)
     notified = msg
-  end
+  end)
   async.run(function()
     error("boom in the coroutine")
   end)
   vim.wait(200, function()
     return notified ~= nil
   end, 5)
-  vim.notify = real_notify
   ok(notified and notified:find("boom in the coroutine", 1, true), "the error is reported")
   ok(notified:find("ui.kit.async", 1, true), "and says where it comes from")
 
   -- an error raised after a suspension is reported too, and does not reach the dialog's callback
   local notified2
-  vim.notify = function(msg)
+  stub(vim, "notify", function(msg)
     notified2 = msg
-  end
+  end)
   async.run(function()
     async.confirm({ question = "then fail" })
     error("after the dialog")
@@ -172,11 +237,89 @@ local function spec()
   vim.wait(200, function()
     return notified2 ~= nil
   end, 5)
-  vim.notify = real_notify
   eq(resumed_ok, true, "the answer's callback does not raise into the dialog")
   ok(notified2 and notified2:find("after the dialog", 1, true), "the late error is reported")
 
+  -- a coroutine that run did not start must not be suspended
+  local foreign_ok, foreign_err
+  local co = coroutine.create(function()
+    foreign_ok, foreign_err = pcall(async.confirm, { question = "x" })
+  end)
+  coroutine.resume(co)
+  eq(foreign_ok, false, "another scheduler's coroutine is refused")
+  ok(tostring(foreign_err):find("kit.async.run", 1, true), "and told where to go")
+  ok(not confirm.is_open(), "without a dialog having been opened")
+
+  -- ask: a question dropped because it is no longer wanted answers nil
+  got = nil
+  async.run(function()
+    got = {
+      async.ask({
+        question = "no longer wanted",
+        abandoned = function()
+          return true
+        end,
+      }),
+    }
+  end)
+  ok(got ~= nil, "an abandoned ask does not leave the coroutine waiting")
+  eq(got[1], nil, "-> nil")
+
+  -- ask: waits behind an open dialog, then shows and answers
+  confirm.open({ question = "blocker", on_answer = function() end })
+  got = nil
+  async.run(function()
+    got = { async.ask({ question = "behind the blocker" }) }
+  end)
+  eq(got, nil, "the question waits while a dialog is open")
   confirm.close()
+  ok(
+    vim.wait(500, function()
+      return confirm.is_open()
+    end, 5),
+    "and opens once it is gone"
+  )
+  confirm.confirm()
+  eq(got, { true }, "ask behind a dialog -> true")
+
+  -- kit.sync is deprecated: one warning per session names kit.async
+  local warned = 0
+  local warn_text
+  stub(vim, "notify", function(msg)
+    warned = warned + 1
+    warn_text = msg
+  end)
+  stub(vim, "notify_once", function(msg, level)
+    warned = warned + 1
+    warn_text = msg
+    return level
+  end)
+  local v = kit.sync(function(o)
+    o.on_submit("x")
+  end, {}, 50)
+  eq(v, "x", "kit.sync still works for the callers that are left")
+  ok(warned >= 1 and warn_text:find("kit.async", 1, true), "and warns, naming kit.async")
+
+  confirm.close()
+end
+
+--- Run the body with `stub(tbl, key, fn)` available; every stub is put back, also when the body
+--- fails (a later spec in the same process must not find a stubbed component).
+local function spec()
+  local restores = {}
+  local function stub(tbl, key, fn)
+    restores[#restores + 1] = { tbl, key, tbl[key] }
+    tbl[key] = fn
+  end
+  local ok, err = pcall(body, stub)
+  for i = #restores, 1, -1 do
+    local r = restores[i]
+    r[1][r[2]] = r[3]
+  end
+  require("ui.kit.confirm").close()
+  if not ok then
+    error(err, 0)
+  end
 end
 
 describe("ui.kit.async", function()
