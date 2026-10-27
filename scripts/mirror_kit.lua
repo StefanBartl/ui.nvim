@@ -128,7 +128,11 @@ local UI_ONLY = { ["viewer_keys.lua"] = true }
 --- Files that only GAINED lines here, for a feature the frozen copy does not get:
 --- not overwritten, only checked -- every line lib.nvim's copy has must still be
 --- here (a fix rewrites a line, so the old one vanishes and this reports it).
-local ADDITIVE = { ["viewer.lua"] = true }
+--- A copy of `TESTS/kit_drift_spec.lua`'s table too (it had fallen behind: theme.lua and
+--- @types/init.lua would have been written into lib.nvim, init.lua with `M.keys` would
+--- have required a module lib.nvim does not have).
+local ADDITIVE =
+  { ["viewer.lua"] = true, ["theme.lua"] = true, ["@types/init.lua"] = true, ["init.lua"] = true }
 
 ---@param text string
 ---@return table<string, true>

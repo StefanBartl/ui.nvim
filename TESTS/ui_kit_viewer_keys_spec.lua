@@ -64,6 +64,25 @@ describe("ui.kit.viewer keys", function()
     it("is just `? Keys` for a list with nothing to advertise", function()
       assert.is_truthy(viewer_keys.legend({}):find("%? %%#Comment#Keys"))
     end)
+
+    it("names a moved help key and its own text", function()
+      local bar = viewer_keys.legend(
+        { { lhs = "r", legend = "Refresh" } },
+        { help_lhs = "g?", help_label = "Tasten" }
+      )
+      assert.is_truthy(bar:find("g%? %%#Comment#Tasten%%#Normal#$"))
+      assert.is_nil(bar:find("Keys", 1, true))
+    end)
+
+    it("leaves the help key out with help_lhs = false", function()
+      local bar = viewer_keys.legend({ { lhs = "r", legend = "Refresh" } }, { help_lhs = false })
+      assert.is_nil(bar:find("?", 1, true))
+      assert.is_truthy(bar:find("r %%#Comment#Refresh%%#Normal#$"))
+    end)
+  end)
+
+  it("is reachable as require('ui.kit').keys", function()
+    assert.are.equal(require("ui.kit.viewer_keys"), kit.keys)
   end)
 
   describe("cheatsheet lines", function()
@@ -76,6 +95,35 @@ describe("ui.kit.viewer keys", function()
       assert.are.equal("  r      Refresh", lines[4])
       assert.are.equal("  <CR>   Open the row", lines[5])
       assert.are.equal("  ?      Show this help", lines[6])
+    end)
+
+    it("takes the help key, its text and the heading from the options", function()
+      local lines = require("ui.kit.viewer_keys").cheatsheet_lines(
+        "Anonymisieren",
+        { { lhs = "Y", desc = "Kopieren" } },
+        { help_lhs = "<F1>", help_desc = "Diese Hilfe", heading = "%s: Tasten" }
+      )
+      assert.are.equal(" Anonymisieren: Tasten", lines[2])
+      assert.are.equal("  Y      Kopieren", lines[4])
+      assert.are.equal("  <F1>   Diese Hilfe", lines[5])
+    end)
+
+    it("has no help row with help_lhs = false", function()
+      local lines = require("ui.kit.viewer_keys").cheatsheet_lines(
+        "X",
+        { { lhs = "Y", desc = "Kopieren" } },
+        { help_lhs = false }
+      )
+      assert.are.same({ "", " X keys", "", "  Y   Kopieren", "" }, lines)
+    end)
+
+    it("aligns by display width, so a key with `…` or an umlaut does not drift", function()
+      local lines = require("ui.kit.viewer_keys").cheatsheet_lines("X", {
+        { lhs = "[…]", desc = "Hervorgehoben" },
+        { lhs = "abc", desc = "Drei" },
+      }, { help_lhs = false })
+      assert.are.equal("  […]   Hervorgehoben", lines[4])
+      assert.are.equal("  abc   Drei", lines[5])
     end)
   end)
 
@@ -172,6 +220,20 @@ describe("ui.kit.viewer keys", function()
       assert.are.equal("myplugin: Refresh", map_of(surf.bufnr, "r").desc)
       map_of(surf.bufnr, "?").callback()
       assert.are.equal("my-help", vim.bo[vim.api.nvim_get_current_buf()].filetype)
+    end)
+
+    it("binds and advertises a moved help key", function()
+      local surf = open({
+        help_lhs = "g?",
+        help_label = "Tasten",
+        help_desc = "Diese Hilfe",
+        keys = { { lhs = "r", desc = "Refresh", legend = "Refresh", run = function() end } },
+      })
+      assert.is_nil(map_of(surf.bufnr, "?"))
+      assert.is_truthy(vim.wo[surf.winid].winbar:find("g%? %%#Comment#Tasten"))
+      map_of(surf.bufnr, "g?").callback()
+      local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+      assert.is_truthy(text:find("g%?%s+Diese Hilfe"), text)
     end)
   end)
 

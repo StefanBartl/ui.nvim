@@ -15,6 +15,12 @@
 --- (`keys`, `table_view`, `on_lines`) are the parts that were not specific to
 --- a report.
 ---
+--- `legend`, `cheatsheet_lines` and `cheatsheet` also serve windows that are
+--- not a `ui.kit.viewer` (two plain splits, say): they are `require("ui.kit").keys`,
+--- and `Ui.Kit.KeysHelpOpts` names the help key and the texts, so a view that
+--- binds its help elsewhere or speaks another language does not advertise a
+--- wrong `?`.
+---
 --- **Not in `lib.nvim`'s frozen copy of the kit** ("no new features" over
 --- there, see `TESTS/kit_drift_spec.lua`): this file exists only here, and
 --- `viewer.lua` only gained lines.
@@ -30,6 +36,18 @@ local M = {}
 ---@field help_filetype? string                           # filetype of the cheatsheet window (default "lib-kit-viewer-help")
 ---@field table_view? boolean                             # no wrap + cursorline, cursor on the first content row (an aligned, row-addressed table)
 ---@field on_lines? fun(bufnr: integer, lines: string[])  # runs after the first lines and after every `set_lines`, for a view that highlights its own rows
+---@field help_lhs? string                               # key of the cheatsheet (default "?")
+---@field help_label? string                             # its winbar legend text (default "Keys")
+---@field help_desc? string                              # its cheatsheet row (default "Show this help")
+---@field heading? string                                # cheatsheet heading, `%s` is the title (default "%s keys")
+
+---The help key and the texts of a legend and a cheatsheet. Every field is optional.
+---@class Ui.Kit.KeysHelpOpts
+---@field help_lhs? string|false   # key of the cheatsheet (default "?"); false: no help entry (the caller lists it, or has none)
+---@field help_label? string       # legend text of the help key (default "Keys")
+---@field help_desc? string        # cheatsheet row of the help key (default "Show this help")
+---@field heading? string          # cheatsheet heading and window title, `%s` is the title (default "%s keys" / "%s Keys")
+---@field filetype? string         # filetype of the cheatsheet window (`cheatsheet` only; default "lib-kit-viewer-help")
 
 ---@class Ui.Kit.ViewerKey
 ---@field lhs string
@@ -46,11 +64,13 @@ local M = {}
 
 ---The one-line key legend of a viewer's `winbar`.
 ---
----`? Keys` is always last: it is how everything not worth a legend entry
----stays reachable.
+---The help key (`? Keys` by default) is always last: it is how everything not
+---worth a legend entry stays reachable. `opts.help_lhs = false` leaves it out.
 ---@param entries { lhs: string, legend?: string }[]
+---@param opts? Ui.Kit.KeysHelpOpts
 ---@return string
-function M.legend(entries)
+function M.legend(entries, opts)
+  opts = opts or {}
   -- a `%` in a key or a text is a statusline item to the winbar (`%{...}` even evaluates an expression)
   local function plain(s)
     return (tostring(s):gsub("%%", "%%%%"))
@@ -61,46 +81,64 @@ function M.legend(entries)
       parts[#parts + 1] = ("%%#Special#%s %%#Comment#%s"):format(plain(e.lhs), plain(e.legend))
     end
   end
-  parts[#parts + 1] = "%#Special#? %#Comment#Keys"
+  local help = opts.help_lhs == nil and "?" or opts.help_lhs
+  if help then
+    parts[#parts + 1] = ("%%#Special#%s %%#Comment#%s"):format(
+      plain(help),
+      plain(opts.help_label or "Keys")
+    )
+  end
   return " " .. table.concat(parts, "%#NonText#  │  ") .. "%#Normal#"
 end
 
----The lines of the cheatsheet for `rows`; `?` and the closing keys are added.
+---The lines of the cheatsheet for `rows`; the help key (`?` by default) is
+---added last unless `opts.help_lhs` is false.
 ---@param title string
 ---@param rows { lhs: string, desc: string }[]
+---@param opts? Ui.Kit.KeysHelpOpts
 ---@return string[]
-function M.cheatsheet_lines(title, rows)
-  local widest = #"?"
+function M.cheatsheet_lines(title, rows, opts)
+  opts = opts or {}
+  local help = opts.help_lhs == nil and "?" or opts.help_lhs
+  local widest = help and vim.fn.strdisplaywidth(help) or 1
   for _, r in ipairs(rows) do
-    widest = math.max(widest, #r.lhs)
+    widest = math.max(widest, vim.fn.strdisplaywidth(r.lhs))
   end
-  local lines = { "", (" %s keys"):format(title), "" }
+  local lines = { "", " " .. (opts.heading or "%s keys"):format(title), "" }
+  -- padded by display width: `%-Ns` counts bytes, so an umlaut or `…` would drift
   local function row(lhs, desc)
-    lines[#lines + 1] = ("  %-" .. widest .. "s   %s"):format(lhs, desc)
+    local pad = widest - vim.fn.strdisplaywidth(lhs)
+    lines[#lines + 1] = ("  %s%s   %s"):format(lhs, string.rep(" ", pad), desc)
   end
   for _, r in ipairs(rows) do
     row(r.lhs, r.desc)
   end
-  row("?", "Show this help")
+  if help then
+    row(help, opts.help_desc or "Show this help")
+  end
   lines[#lines + 1] = ""
   return lines
 end
 
----Open the cheatsheet of a viewer.
+---Open the cheatsheet of a viewer, or of any window with keys of its own.
 ---@param title string
 ---@param rows { lhs: string, desc: string }[]
----@param filetype? string
+---@param opts? string|Ui.Kit.KeysHelpOpts  a string is the filetype (the older call)
 ---@return Ui.Kit.Surface|nil
-function M.cheatsheet(title, rows, filetype)
-  local lines = M.cheatsheet_lines(title, rows)
+function M.cheatsheet(title, rows, opts)
+  if type(opts) == "string" then
+    opts = { filetype = opts }
+  end
+  opts = opts or {}
+  local lines = M.cheatsheet_lines(title, rows, opts)
   local width = 40
   for _, l in ipairs(lines) do
     width = math.max(width, vim.fn.strdisplaywidth(l))
   end
   return require("ui.kit.viewer").open({
     lines = lines,
-    title = title .. " Keys",
-    filetype = filetype or "lib-kit-viewer-help",
+    title = opts.heading and opts.heading:format(title) or (title .. " Keys"),
+    filetype = opts.filetype or "lib-kit-viewer-help",
     width = math.min(width + 2, math.floor(vim.o.columns * 0.9)),
     height = math.min(#lines, math.floor(vim.o.lines * 0.8)),
   })
@@ -117,8 +155,17 @@ function M.attach(surf, opts)
   local prefix = opts.desc_prefix or "ui.kit.viewer"
   local lines = api.nvim_buf_get_lines(surf.bufnr, 0, -1, false)
 
+  ---@type Ui.Kit.KeysHelpOpts
+  local help = {
+    help_lhs = opts.help_lhs or "?",
+    help_label = opts.help_label,
+    help_desc = opts.help_desc,
+    heading = opts.heading,
+    filetype = opts.help_filetype,
+  }
+
   if keys and api.nvim_win_is_valid(surf.winid) then
-    api.nvim_set_option_value("winbar", M.legend(keys), { win = surf.winid })
+    api.nvim_set_option_value("winbar", M.legend(keys, help), { win = surf.winid })
     -- The winbar takes a row out of a height that was sized to the content;
     -- give it back (a height the caller chose is theirs).
     if opts.height == nil then
@@ -179,8 +226,8 @@ function M.attach(surf, opts)
   rows[#rows + 1] = { lhs = "q, <Esc>", desc = "Close" }
 
   local help_title = opts.help_title or vim.trim(opts.title or "Viewer")
-  keymap("n", "?", function()
-    M.cheatsheet(help_title, rows, opts.help_filetype)
+  keymap("n", help.help_lhs, function()
+    M.cheatsheet(help_title, rows, help)
   end, km, prefix .. ": show keymap cheatsheet")
 end
 

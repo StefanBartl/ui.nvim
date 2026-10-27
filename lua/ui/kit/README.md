@@ -153,11 +153,27 @@ kit.viewer({
 
 The winbar legend (`r Refresh  │  ? Keys`), the `?` cheatsheet and the keymaps are all
 derived from the one `keys` list, so a float never advertises a key it did not wire.
-`?` is always last and always there; the winbar's row is added to an auto-sized height
+The help key is always last and always there; the winbar's row is added to an auto-sized height
 (a `height` you pass is yours). `run` gets `view = { bufnr, winid, set_lines, set_title,
-close }`. `help_title` / `help_filetype` name the cheatsheet. This is ui.nvim only (see
+close }`. `help_title` / `help_filetype` name the cheatsheet; `help_lhs` moves the help
+key (default `?`), `help_label` / `help_desc` / `heading` (`"%s keys"`) are its texts in the
+legend, in the cheatsheet and as its heading. This is ui.nvim only (see
 [the drift note](../../../docs/modules.md#the-kit-exists-twice-on-purpose)); the code is
 `viewer_keys.lua`.
+
+A view of plain windows that binds its own keys (two splits, no `kit.viewer`) uses the
+same pieces through `kit.keys`:
+
+```lua
+local keys = require("ui.kit").keys
+local help = { help_lhs = "?", help_label = "Tasten", help_desc = "Diese Hilfe", heading = "%s: Tasten" }
+
+vim.wo[win].winbar = keys.legend({ { lhs = "Y", legend = "kopieren" } }, help)
+keys.cheatsheet("Anonymisieren", { { lhs = "Y", desc = "Ergebnis kopieren" } }, help)
+-- help_lhs = false: no help entry at all (the view lists its help key itself, or has none)
+```
+
+`cheatsheet(title, rows, opts)` still takes a filetype string as its third argument.
 
 ## Chip (persistent corner status)
 
