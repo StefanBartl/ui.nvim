@@ -167,6 +167,9 @@ describe("order_by_base_characters", function()
   it("orders real files as getcompletion() does", function()
     local dir = fn.tempname()
     assert.equals(1, fn.mkdir(dir, "p"))
+    -- getcompletion() globs: under an 8.3 short temp path (`C:/Users/STEFAN~1/...`)
+    -- the `~1` reads as a user and it lists nothing. `globbable` spells it long.
+    dir = require("lib.nvim.fs.globbable")(dir)
     local names = {}
     local bases = { "a", "e", "ee", "u", "o" }
     for i = 1, 120 do

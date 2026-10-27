@@ -6,6 +6,15 @@
 local config = require("ui.slots.config")
 local store = require("ui.slots.store")
 
+--- The `*.dropped-*` copies the store keeps beside its data file. Through
+--- `lib.nvim.fs.globbable`: the data dir is a temp dir, and under an 8.3 short
+--- name (`C:/Users/STEFAN~1/...`) glob reads `~1` as a user and finds nothing.
+---@param data_dir string
+---@return string[]
+local function dropped_copies(data_dir)
+  return vim.fn.glob(require("lib.nvim.fs.globbable")(data_dir) .. "/*.dropped-*", false, true)
+end
+
 describe("ui.slots.store", function()
   local dir
   local messages
@@ -512,7 +521,7 @@ describe("ui.slots.store", function()
       store.add({ kind = "yank", text = "later" })
       store.flush()
       local dirpath = vim.fs.dirname(store.path())
-      local copies = vim.fn.glob(dirpath .. "/*.dropped-*", false, true)
+      local copies = dropped_copies(dirpath)
       assert.equals(1, #copies)
       assert.is_truthy(copies[1]:find("-" .. vim.fn.getpid() .. "-", 1, true))
       local kept = table.concat(vim.fn.readfile(copies[1]), "\n")
@@ -522,7 +531,7 @@ describe("ui.slots.store", function()
       -- and only once: the next save does not copy again
       store.add({ kind = "yank", text = "again" })
       store.flush()
-      assert.equals(1, #vim.fn.glob(dirpath .. "/*.dropped-*", false, true))
+      assert.equals(1, #dropped_copies(dirpath))
     end)
 
     it("keeps a copy too when a fixed slot takes the number of a saved one", function()
@@ -542,7 +551,7 @@ describe("ui.slots.store", function()
       drain()
       store.update(2, { label = "x" })
       store.flush()
-      local copies = vim.fn.glob(vim.fs.dirname(path) .. "/*.dropped-*", false, true)
+      local copies = dropped_copies(vim.fs.dirname(path))
       assert.equals(1, #copies)
       assert.is_truthy(
         table.concat(vim.fn.readfile(copies[1]), "\n"):find("saved-keep-me", 1, true)
@@ -569,7 +578,7 @@ describe("ui.slots.store", function()
       assert.is_truthy(table.concat(vim.fn.readfile(path), "\n"):find("keep.html", 1, true))
       -- the copy works again: the next save goes through, with the copy first
       assert.is_true(store.flush())
-      assert.equals(1, #vim.fn.glob(vim.fs.dirname(path) .. "/*.dropped-*", false, true))
+      assert.equals(1, #dropped_copies(vim.fs.dirname(path)))
     end)
 
     it("does not print a hostile reason in full", function()

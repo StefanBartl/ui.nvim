@@ -76,8 +76,12 @@ describe("docs list every :UI subcommand", function()
   -- doc/tags is gitignored (plugin managers write it), so the spec runs `:helptags`
   -- on a copy: a malformed or duplicate tag fails here, not in a user's install.
   it(":helptags builds each tag", function()
+    -- `:helptags` globs the directory: under an 8.3 short temp path
+    -- (`C:/Users/STEFAN~1/...`) the `~1` reads as a user and the glob finds
+    -- nothing (E151). `globbable` spells it the long way (XP-01).
     local dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
+    dir = require("lib.nvim.fs.globbable")(dir)
     local fd = assert(io.open(vim.fs.joinpath(dir, "ui.txt"), "wb"))
     fd:write(read("doc/ui.txt"))
     fd:close()

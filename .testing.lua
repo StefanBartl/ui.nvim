@@ -18,8 +18,11 @@ return {
   -- "warn" = a case without assertions passes with a recorded warning; "error" = it fails.
   -- Switch to "error" once the empty cases are fixed.
   assertions = "warn",
-  -- Limits per case in milliseconds (the old runner had none).
-  timeouts = { case_ms = 30000 },
+  -- Limits per case in milliseconds (the old runner had none). `file_ms`: two spec files
+  -- build big directories case after case (ui_kit_path_completion: 31 cases, ~37 s alone on
+  -- Windows, where creating files is slow; slots_preview); under the load of the full suite
+  -- they passed the default 60 s and came back as timeouts (2026-10-27). Still a hard stop.
+  timeouts = { case_ms = 30000, file_ms = 150000 },
   -- Guards (docs/GUARDS.md of testing.nvim). The suite passes fs, scheduled_error, prompt and
   -- deprecation without a single finding, so they are hard errors; a regression fails the run.
   guards = {
