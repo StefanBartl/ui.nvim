@@ -555,6 +555,25 @@ are shown in the order they were asked.
 kit.ask({ question = "File the answer?", on_answer = function(yes) end })
 ```
 
+**`kit.async` — linear code over the callbacks, without blocking.** Start a coroutine with
+`kit.async.run(function() ... end)`; inside it `kit.async.confirm / ask / input / form / select`
+open the dialog, suspend the coroutine and return the answer when the user gives it, while the editor
+keeps running. A dismissed dialog gives what its callback form gives (`false` / `nil`; input and form
+return `nil, true`). `kit.async.await(start)` is the building block for anything else. The functions
+raise outside a coroutine that `run` started; an error inside it is reported with its traceback.
+`kit.sync` is deprecated: it waits in `vim.wait`, and Neovim does not run typed keys during
+`vim.wait`, so the dialog never sees them and the call returns when its timeout runs out.
+
+```lua
+kit.async.run(function()
+  local name = kit.async.input({ prompt = "Name" })        -- nil when cancelled
+  if not name then return end
+  if kit.async.confirm({ question = ("Create %s?"):format(name) }) then
+    create(name)
+  end
+end)
+```
+
 **Mouse:** a left click on a button focuses *and* confirms it in one action
 (needs `:set mouse=a`, as any mouse interaction does). Clicking blank space
 inside the dialog is a no-op — it does not cancel, matching the rest of the

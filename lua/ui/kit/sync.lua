@@ -34,6 +34,15 @@ function M.open(open_fn, opts, timeout_ms)
     error("ui.kit.sync: cannot be called from a fast event context (vim.in_fast_event())", 2)
   end
 
+  -- Neovim does not run typed keys while `vim.wait` waits: the dialog gets none of them and this
+  -- returns when the timeout runs out. `kit.async` has no such limit.
+  pcall(
+    vim.notify_once,
+    "ui.kit.sync blocks Neovim: typed keys do not reach the dialog until the timeout "
+      .. "(ten minutes by default). Use kit.async instead.",
+    vim.log.levels.WARN
+  )
+
   opts = vim.tbl_extend("force", {}, opts or {})
   timeout_ms = timeout_ms or DEFAULT_TIMEOUT_MS
 
