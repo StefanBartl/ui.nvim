@@ -97,6 +97,51 @@ contextmenu.bind_buffer(bufnr, items_mod.items, {
 })
 ```
 
+### Convention for a list/dashboard view's own menu
+
+A view with one row per item and its own per-row keys (a dashboard, a
+browser, a review queue) gets the most out of `bind_buffer` by following a
+few conventions, lifted from two live "owns its buffer" consumers —
+`gitsuite.nvim`'s `:Git dashboard` (`lua/gitsuite/features/dashboard/view.lua`,
+the `<RightMouse>` section right before `_attach_row_keymaps`) and
+`docmap.nvim`'s graph browser (`lua/docmap/editor/browse/init.lua`,
+`docmap.integrations.menu`):
+
+- **Build items from the existing keys, never a second time.** Look each
+  handler up by its lhs (or just close over the same function the key's
+  `vim.keymap.set` callback calls) and wire `cmd = function() handler(ctx) end`
+  — a key and its menu entry can then never drift apart, because they are
+  the same function.
+- **The heading names the target** — the item under the mouse by name, or a
+  count ("3 marked") when the view has multi-select and something is
+  selected. Without this, a menu that can act on more than one row gives no
+  visual confirmation of what "more than one" means right now.
+- **Multi-select, if the view has one, is the single source of truth.** A
+  Visual selection open at click time converts into that same selection
+  model first (gitsuite's `m` key already does this for a drag; the menu
+  does it too, so a selection and the view's own "marked" set are one input,
+  not two that could disagree), then the bulk items act on it. A view with
+  no multi-select model at all (`rules.nvim`'s review queue, on purpose —
+  "there is no key for all of them") just skips this and stays single-row.
+- **A row the view itself knows is busy or locked names why, instead of
+  showing its usual key hint** (`rtxt`), and is dimmed with a neutral `hl`
+  like `"Comment"`. The entry still runs its handler when clicked — that
+  handler is the one place that actually decides and refuses (acquiring a
+  lock, say), so the label is read-only information, not a second gate.
+- **Act on the row under the *mouse pointer*, not wherever the cursor was
+  left.** `get_items` runs before the menu opens, so it is the right place to
+  move the cursor there first (`vim.fn.getmousepos()`) — every item it then
+  returns, borrowed straight from the view's own per-row keys, acts on "the
+  row under the cursor" exactly as it would from the keyboard.
+- **A config flag disables the binding only**, never the keys underneath it
+  (gitsuite's `dashboard.context_menu`, default `true`) — `set_enabled`/
+  `is_enabled` above is the *renderer*-wide switch; a per-view flag is this
+  view's own opt-out on top of that.
+
+None of this needs a new primitive here: `entry`'s existing `rtxt`/`opts.hl`
+and `bind_buffer`'s `get_items` closure already cover it, which is exactly
+why it is a convention and not a code change.
+
 **"Contributes only"** — the plugin's actions apply to ordinary
 filetype-scoped or condition-scoped buffers it doesn't own. It ships only
 `integrations/menu.lua` (`items`/`submenu`), with **no trigger code and no
