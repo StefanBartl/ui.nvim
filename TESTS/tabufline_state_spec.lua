@@ -167,6 +167,32 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       b = nil
     end)
 
+    it(
+      "asks through the dialog for a modified buffer: Cancel keeps it, Discard closes it",
+      function()
+        local dialog = require("lib.nvim.ui.dialog")
+        local original = dialog.choose
+        local asked = {}
+        dialog.choose = function(question, choices, default, cb)
+          asked[#asked + 1] = { question = question, choices = choices, default = default }
+          cb(#asked == 1 and 3 or 2) -- Cancel, then Discard
+        end
+        vim.bo[a].modified = true
+        vim.api.nvim_set_current_buf(c)
+
+        state.close_buffer(a)
+        assert.is_true(vim.tbl_contains(vim.t.bufs, a))
+        state.close_buffer(a)
+        dialog.choose = original
+
+        assert.equals(2, #asked)
+        assert.same({ "Save", "Discard", "Cancel" }, asked[1].choices)
+        assert.equals(3, asked[1].default)
+        assert.is_false(vim.tbl_contains(vim.t.bufs, a))
+        a = nil
+      end
+    )
+
     it("closes an explicit bufnr rather than only the current one", function()
       vim.api.nvim_set_current_buf(c)
       state.close_buffer(a)

@@ -349,6 +349,39 @@ M.__needs_close_confirm = needs_close_confirm
 function M.close_buffer(bufnr, skip_confirm)
   bufnr = bufnr or api.nvim_get_current_buf()
 
+  -- A modified buffer is asked about through the shared dialog (Save / Discard / Cancel)
+  -- instead of `confirm bd`'s prompt in the message area. The answer may come later, so the
+  -- close itself re-enters below with the question settled.
+  if not skip_confirm and needs_close_confirm(bufnr) then
+    local name = vim.fn.fnamemodify(api.nvim_buf_get_name(bufnr), ":t")
+    if name == "" then
+      name = "[No Name]"
+    end
+    require("lib.nvim.ui.dialog").choose(
+      string.format('Save changes to "%s"?', name),
+      { "Save", "Discard", "Cancel" },
+      3,
+      function(choice)
+        if not api.nvim_buf_is_valid(bufnr) then
+          return
+        end
+        if choice == 1 then
+          local wrote, err = pcall(api.nvim_buf_call, bufnr, function()
+            vim.cmd("write")
+          end)
+          if not wrote then
+            vim.notify("[ui.tabufline] could not save: " .. tostring(err), vim.log.levels.WARN)
+            return
+          end
+          M.close_buffer(bufnr, true)
+        elseif choice == 2 then
+          M.close_buffer(bufnr, true)
+        end
+      end
+    )
+    return
+  end
+
   -- Whether `bufnr` is what the current window shows. Only then does closing
   -- it have to pick a new buffer for that window; closing a background
   -- buffer (a tabline "x" or context-menu "Close" on a chip that is not the
