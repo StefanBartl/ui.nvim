@@ -5,6 +5,14 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ## [Unreleased]
 
+### Fixed
+
+- `kit.confirm`: a question of tens of thousands of characters on one line froze the editor (the hard wrap was quadratic); a question is cut at 4000 characters and wrapped in one pass. A replaced dialog is answered on the next loop turn, so an answer that opens a dialog (a `kit.async` coroutine asking again) no longer closes the replacement before it is shown.
+- `kit.ask`: a question behind a dialog that closed without the close event is no longer left waiting (slow re-check); a question withdrawn by `abandoned()` is not answered when its wait runs out; a dialog that cannot be built answers the question as cancelled; letter and digit hotkeys are ignored for half a second after it opens.
+- `kit.async.input` / `form` / `submit`: leaving through the caller's own `on_back` resumes the coroutine.
+- `kit.prompt`: `choices` as a `vim.fn.confirm` string shows the button dialog.
+- `kit.confirm`: a button labelled with a single digit owns that digit key (a `1`..`5` scale after `Skip`/`Stop`: `5` picked the fifth button, not the one labelled `5`). `kit.ask` with `choices` passes the button's position as the second argument, as `kit.confirm` does.
+
 ### Added
 
 - `kit.confirm` / `kit.ask` options: `default` (focused button), `choices` as a `vim.fn.confirm` string with `&` hotkeys (plus `y`/`n` for Yes/No and the digits 1-9), `<C-c>` cancels, focus moving elsewhere cancels (`keep_on_focus_lost`; `kit.ask` keeps by default), `kind = danger|warn|info`, `legend = true`.

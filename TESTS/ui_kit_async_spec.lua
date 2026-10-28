@@ -163,6 +163,32 @@ local function body(stub)
   end)
   eq(got, { { a = 1 }, false }, "form -> values, false")
 
+  -- leaving through the caller's own "back" resumes the coroutine too (and the caller's callback runs)
+  local back_called = false
+  stub(package.loaded["ui.kit.form"], "open", function(o)
+    vim.schedule(function()
+      o.on_back()
+    end)
+    return {}
+  end)
+  got = nil
+  async.run(function()
+    got = {
+      async.form({
+        fields = {},
+        on_back = function()
+          back_called = true
+        end,
+      }),
+    }
+  end)
+  vim.wait(200, function()
+    return got ~= nil
+  end, 5)
+  ok(got ~= nil, "a form left through on_back does not leave the coroutine waiting")
+  eq(got, { nil, true }, "-> nil, cancelled")
+  ok(back_called, "and the caller's on_back ran")
+
   -- the caller's own callback raising does not cost the coroutine its answer
   stub(input_mod, "open", function(o)
     vim.schedule(function()
