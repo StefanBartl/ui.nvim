@@ -146,7 +146,7 @@ end
 --- would break -- all `n` calls would fire against the same still-current
 --- buffer before any of them actually closed it.
 ---@param n integer
----@return boolean
+---@return boolean|nil # nil when the discard question is still open
 function M.close_n_buffers(n)
   if type(n) ~= "number" or n < 1 then
     return false
@@ -176,27 +176,40 @@ function M.close_n_buffers(n)
     end
   end
 
-  if any_modified then
-    local choice = vim.fn.confirm("Discard changes in modified buffer(s)?", "&Yes\n&No", 2)
-    if choice ~= 1 then
-      return false
+  local function run()
+    local success = true
+
+    for _ = 1, n do
+      local ok, err = pcall(state.close_buffer, nil, true)
+      if not ok then
+        notify.warn("[ui.tabufline] close_buffer failed: " .. tostring(err))
+        success = false
+        break
+      end
+
+      -- Same here: redraw so vim.t.bufs (and any tabline reading it) refreshes.
+      vim.cmd("redraw")
     end
+    return success
   end
 
-  local success = true
-
-  for _ = 1, n do
-    local ok, err = pcall(state.close_buffer, nil, true)
-    if not ok then
-      notify.warn("[ui.tabufline] close_buffer failed: " .. tostring(err))
-      success = false
-      break
-    end
-
-    -- Same here: redraw so vim.t.bufs (and any tabline reading it) refreshes.
-    vim.cmd("redraw")
+  if not any_modified then
+    return run()
   end
-  return success
+
+  -- The shared dialog answers asynchronously: the batch runs from its callback and this
+  -- returns nil (nothing closed yet); declining closes nothing.
+  require("lib.nvim.ui.dialog").yesno(
+    "Discard changes in modified buffer(s)?",
+    "discard",
+    function(yes)
+      if yes then
+        run()
+      end
+    end,
+    { kind = "danger" }
+  )
+  return nil
 end
 
 return M

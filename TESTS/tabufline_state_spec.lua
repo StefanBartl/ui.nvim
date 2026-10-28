@@ -321,13 +321,17 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       vim.bo[b].modified = true
 
       local asked = 0
-      local original = vim.fn.confirm
-      vim.fn.confirm = function()
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.yesno
+      dialog.yesno = function(_, _, cb)
         asked = asked + 1
-        return 1
+        cb(true)
       end
-      local ok = state.close_bufs({ a, b })
-      vim.fn.confirm = original
+      local ok
+      state.close_bufs({ a, b }, function(closed)
+        ok = closed
+      end)
+      dialog.yesno = original
 
       assert.is_true(ok)
       assert.equals(1, asked)
@@ -338,16 +342,45 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
     it("closes nothing when the discard prompt is declined", function()
       vim.bo[a].modified = true
 
-      local original = vim.fn.confirm
-      vim.fn.confirm = function()
-        return 2
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.yesno
+      dialog.yesno = function(_, _, cb)
+        cb(false)
       end
-      local ok = state.close_bufs({ a, b })
-      vim.fn.confirm = original
+      local ok
+      state.close_bufs({ a, b }, function(closed)
+        ok = closed
+      end)
+      dialog.yesno = original
 
       assert.is_false(ok)
       assert.same({ a, b, c }, vim.t.bufs)
       vim.bo[a].modified = false
+    end)
+  end)
+
+  describe("close_bufs with a late answer", function()
+    it("closes nothing until the dialog answers, then closes once", function()
+      vim.bo[a].modified = true
+
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.yesno
+      local answer
+      dialog.yesno = function(_, _, cb)
+        answer = cb
+      end
+      local results = {}
+      local ret = state.close_bufs({ a, b }, function(closed)
+        results[#results + 1] = closed
+      end)
+      dialog.yesno = original
+
+      assert.is_nil(ret)
+      assert.same({ a, b, c }, vim.t.bufs)
+      answer(true)
+      assert.same({ true }, results)
+      assert.same({ c }, vim.t.bufs)
+      a, b = nil, nil
     end)
   end)
 

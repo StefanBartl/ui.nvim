@@ -464,9 +464,15 @@ end
 --- tabline context menu's "close others"/"close to the right" build) through
 --- `close_buffer()`, asking ONCE up front when any of them has unsaved
 --- changes. `close_all_bufs` above is this over the whole list.
+---
+--- The question is the shared dialog, so the answer may come after this
+--- returns: `done(closed)` is called exactly once when the batch finished
+--- (`true`) or was declined (`false`), and the return value is that same
+--- answer when nothing was asked -- `nil` when the answer is still pending.
 ---@param bufnrs integer[]
----@return boolean closed # false when the user declined the discard prompt
-function M.close_bufs(bufnrs)
+---@param done? fun(closed: boolean)
+---@return boolean|nil closed # false when the user declined the discard prompt; nil while the question is open
+function M.close_bufs(bufnrs, done)
   -- UI-01: confirm once for the whole batch, not once per modified buffer
   -- below -- without this, "close all" with N unsaved buffers popped N
   -- sequential `confirm bd` dialogs for a single `<leader>bq`.
@@ -477,26 +483,38 @@ function M.close_bufs(bufnrs)
     end
   end
 
-  if modified > 0 then
-    local choice = vim.fn.confirm(
-      string.format("Discard changes in %d modified buffer(s)?", modified),
-      "&Yes\n&No",
-      2
-    )
-    if choice ~= 1 then
-      return false
-    end
-  end
-
   -- pcall'd per buffer, no notify here -- this module stays low-level (see
   -- its own doc comment); the deferred caller (ui.tabline.utils) already
   -- notifies on the whole batch failing. Without this, one already-invalid
   -- or otherwise failing bufnr would abort the rest of a "close all" batch,
   -- leaving everything after it in vim.t.bufs open.
-  for _, bufnr in ipairs(bufnrs) do
-    pcall(M.close_buffer, bufnr, true)
+  local function run()
+    for _, bufnr in ipairs(bufnrs) do
+      pcall(M.close_buffer, bufnr, true)
+    end
+    if done then
+      done(true)
+    end
+    return true
   end
-  return true
+
+  if modified == 0 then
+    return run()
+  end
+
+  require("lib.nvim.ui.dialog").yesno(
+    string.format("Discard changes in %d modified buffer(s)?", modified),
+    "discard",
+    function(yes)
+      if yes then
+        run()
+      elseif done then
+        done(false)
+      end
+    end,
+    { kind = "danger" }
+  )
+  return nil
 end
 
 --- Drop `bufnr` from one tab's `vim.t.bufs`, leaving every other tab alone.

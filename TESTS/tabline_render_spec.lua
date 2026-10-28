@@ -838,4 +838,32 @@ describe("ui.bindings.keymaps.tabufline.close_n_buffers", function()
     assert.is_false(vim.api.nvim_buf_is_loaded(b))
     vim.t.bufs = saved
   end)
+
+  it(
+    "n > 1 asks through the dialog when a buffer is modified, and closes after the answer",
+    function()
+      local a = vim.api.nvim_create_buf(true, false)
+      local b = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_set_current_buf(a)
+      local saved = vim.t.bufs
+      vim.t.bufs = { a, b }
+      vim.bo[a].modified = true
+
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.yesno
+      local answer
+      dialog.yesno = function(_, _, cb)
+        answer = cb
+      end
+      local ret = tabufline.close_n_buffers(2)
+      dialog.yesno = original
+
+      assert.is_nil(ret)
+      assert.is_true(vim.api.nvim_buf_is_loaded(a))
+      answer(true)
+      assert.is_false(vim.api.nvim_buf_is_loaded(a))
+      assert.is_false(vim.api.nvim_buf_is_loaded(b))
+      vim.t.bufs = saved
+    end
+  )
 end)
