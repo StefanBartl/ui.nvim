@@ -37,6 +37,7 @@
 ---@field sticky? boolean|Ui.Context.Opts # the same switch as `context` under the name `:UI sticky` uses; wins when both are given. `false` leaves it off
 ---@field slots? boolean|Ui.Slots.Opts # explicit-only (not under `all`): numbered action slots (`ui.slots`); `true` switches them on with the defaults, a table is their options and switches them on when it has `enabled = true`
 ---@field tasks? Ui.Tasks.Opts # explicit-only (not under `all`): options of the opt-in `tasks_counter` statusline segment (vault, area, source, ttl, ...); see `ui.statusline.modules.tasks_counter.config`
+---@field vim_ui? boolean|Ui.VimUi.Opts # explicit-only (not under `all`): `vim.ui.select` / `vim.ui.input` through the kit (buttons for a short list, the chooser for a medium one, `fallback_select` or the previous `vim.ui.select` for a long one); `true` for the defaults, a table to tune them, `false` puts the previous functions back -- see `ui.vim_ui`
 ---@field menu? boolean|Ui.Menu.Opts # `false` disables `ui.contextmenu`'s renderer/trigger (opt-OUT); omitted or `true` leaves it at its already-working default; a TABLE configures and binds `ui.menu`, the right-click menu with the sister plugins' entries (explicit-only)
 
 --- Options of the `tasks_counter` statusline segment. Every field is optional;

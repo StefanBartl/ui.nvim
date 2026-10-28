@@ -36,6 +36,8 @@ require("ui").setup({
   context = true,  -- the sticky code-context overlay; or a table of ui.context tunables
                    -- (`sticky` is the same switch under the `:UI sticky` name, `false` leaves it off)
   notify = true,   -- vim.notify as toasts with a history; or a table of ui.notify tunables
+  vim_ui = true,   -- vim.ui.select / vim.ui.input through the kit (lua/ui/vim_ui/README.md);
+                   -- or a table: buttons_max, chooser_max, fallback_select, passthrough_kinds
   slots = true,    -- numbered action slots (bar, panel, previews); or a table of options
                    -- (lua/ui/slots/README.md). Explicit-only; a table needs enabled = true
   tasks = {        -- options of the opt-in tasks_counter statusline segment (explicit-only;
@@ -270,6 +272,11 @@ that to `all = true`. `true` installs `ui.notify` with the shipped tunables;
 a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 { [vim.log.levels.ERROR] = 8000 }, titles = { ... } }`) overrides them.
 `:UI notify off` puts the previous handler back.
+
+`vim_ui` is explicit-only too: it takes `vim.ui.select` and `vim.ui.input` over for every plugin that
+calls them. A short list becomes buttons, a medium one the chooser, a long one goes to the picker you name
+as `fallback_select`; see [`lua/ui/vim_ui/README.md`](../lua/ui/vim_ui/README.md). `vim_ui = false` puts the
+previous functions back.
 
 `slots` is explicit-only as well: `all = true` does not switch it on. `true`
 switches it on with what `require("ui.slots").setup()` was given before. A

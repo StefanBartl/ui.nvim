@@ -42,6 +42,11 @@ local M = {}
 --- replacing whatever handler the host had -- not something `all = true`
 --- should do behind a host that routes notifications elsewhere.
 ---
+--- `opts.vim_ui` is explicit-only too: `true` (or a `Ui.VimUi.Opts` table) makes `vim.ui.select` and
+--- `vim.ui.input` use the kit (buttons for a short list, the chooser for a medium one, a fallback picker for a
+--- long one), `false` puts the previous functions back -- see `ui.vim_ui`. Switch the other plugin that owns
+--- `vim.ui.select` (snacks' `picker.ui_select`) off first, or the call order of the two `setup()`s decides.
+---
 --- `opts.context` is explicit-only: neither `opts.all` nor its absence turns
 --- the sticky code-context overlay (`ui.context`) on, because it draws over
 --- the buffer's first rows and a host asking for "the keymaps and the
@@ -117,6 +122,20 @@ function M.setup(opts)
     end)
     if not ok then
       notify.error("toast setup failed: " .. tostring(err))
+    end
+  end
+
+  if opts.vim_ui ~= nil then
+    local ok, err = pcall(function()
+      local vim_ui = require("ui.vim_ui")
+      if opts.vim_ui == false then
+        vim_ui.disable()
+      else
+        vim_ui.enable(type(opts.vim_ui) == "table" and opts.vim_ui or nil)
+      end
+    end)
+    if not ok then
+      notify.error("vim_ui setup failed: " .. tostring(err))
     end
   end
 

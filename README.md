@@ -145,6 +145,7 @@ Start at [docs/README.md](docs/README.md), which says what is where.
 
 **The Rest**
 
+- [vim.ui through the kit](lua/ui/vim_ui/README.md) — `vim.ui.select` / `vim.ui.input` as buttons, chooser or your picker; opt-in.
 - [Slots](lua/ui/slots/README.md) — numbered slots that open files and addresses, copy text, run commands; chips or panel, with previews.
 - [Health check](docs/health.md) — what `:checkhealth ui` reports, line by line.
 - [Credits & the NvChad migration record](docs/nvchad-migration.md) — where this started, and the step-by-step decision record of how the NvChad/base46 coupling was replaced.
