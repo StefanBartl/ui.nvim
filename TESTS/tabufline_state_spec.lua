@@ -199,6 +199,72 @@ describe("ui.bindings.keymaps.tabufline.state buffer tracking", function()
       end
     )
 
+    it("Save writes a modified buffer and closes it once the write succeeded", function()
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.choose
+      local path = vim.fn.tempname() .. ".txt"
+      local d = open_named_buffer(path)
+      vim.api.nvim_buf_set_lines(d, 0, -1, false, { "changed" })
+      vim.api.nvim_set_current_buf(c)
+      dialog.choose = function(_, _, _, cb)
+        cb(1) -- Save
+      end
+      state.close_buffer(d)
+      dialog.choose = original
+
+      assert.same({ "changed" }, vim.fn.readfile(path))
+      assert.is_false(vim.tbl_contains(vim.t.bufs, d))
+      vim.fn.delete(path)
+    end)
+
+    it("Save keeps the buffer open when the write did not clear 'modified'", function()
+      local dialog = require("lib.nvim.ui.dialog")
+      local original, original_notify = dialog.choose, vim.notify
+      local notes = {}
+      local d = open_named_buffer(vim.fn.tempname() .. "-acwrite.txt")
+      vim.bo[d].buftype = "acwrite"
+      -- a handler that gives up quietly: `:write` raises nothing and the buffer stays modified
+      vim.api.nvim_create_autocmd("BufWriteCmd", { buffer = d, callback = function() end })
+      vim.bo[d].modified = true
+      vim.api.nvim_set_current_buf(c)
+      dialog.choose = function(_, _, _, cb)
+        cb(1) -- Save
+      end
+      vim.notify = function(msg)
+        notes[#notes + 1] = msg
+      end
+      state.close_buffer(d)
+      dialog.choose, vim.notify = original, original_notify
+
+      assert.is_true(vim.tbl_contains(vim.t.bufs, d), "the changes must not be thrown away")
+      assert.matches("could not save", notes[1])
+      vim.bo[d].modified = false
+      wipe(d)
+    end)
+
+    it("an unnamed modified buffer offers no Save (there is no file to write)", function()
+      local dialog = require("lib.nvim.ui.dialog")
+      local original = dialog.choose
+      local asked = {}
+      local d = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_set_current_buf(d)
+      vim.api.nvim_buf_set_lines(d, 0, -1, false, { "scratch" })
+      vim.api.nvim_set_current_buf(c)
+      dialog.choose = function(question, choices, default, cb)
+        asked[#asked + 1] = { question = question, choices = choices, default = default }
+        cb(#asked == 1 and 2 or 1) -- Cancel, then Discard
+      end
+      state.close_buffer(d)
+      assert.is_true(vim.tbl_contains(vim.t.bufs, d))
+      state.close_buffer(d)
+      dialog.choose = original
+
+      assert.same({ "Discard", "Cancel" }, asked[1].choices)
+      assert.equals(2, asked[1].default)
+      assert.matches("%[No Name%]", asked[1].question)
+      assert.is_false(vim.tbl_contains(vim.t.bufs, d))
+    end)
+
     it("closes an explicit bufnr rather than only the current one", function()
       vim.api.nvim_set_current_buf(c)
       state.close_buffer(a)

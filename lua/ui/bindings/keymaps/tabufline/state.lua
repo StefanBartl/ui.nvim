@@ -318,7 +318,7 @@ local function hop_off_fixedbuf()
   end
 end
 
---- Whether closing `bufnr` would hit the `confirm bd` prompt below --
+--- Whether closing `bufnr` would ask about unsaved changes below --
 --- i.e. it reaches that branch at all (not a terminal, not a floating
 --- window's buffer) and actually has unsaved changes. Used by
 --- `close_all_bufs`/`close_n_buffers` to ask ONCE for the whole batch
@@ -342,8 +342,8 @@ M.__needs_close_confirm = needs_close_confirm
 --- to. Ported from `nvchad.tabufline.close_buffer`.
 ---
 ---@param bufnr? integer
----@param skip_confirm? boolean Force-close without `confirm bd`'s
----  save-changes prompt -- for a caller that already asked once for the
+---@param skip_confirm? boolean Force-close without the save-changes
+---  question -- for a caller that already asked once for the
 ---  whole batch it is part of (`close_all_bufs`/`close_n_buffers`).
 ---@return nil
 function M.close_buffer(bufnr, skip_confirm)
@@ -354,27 +354,37 @@ function M.close_buffer(bufnr, skip_confirm)
   -- close itself re-enters below with the question settled.
   if not skip_confirm and needs_close_confirm(bufnr) then
     local name = vim.fn.fnamemodify(api.nvim_buf_get_name(bufnr), ":t")
-    if name == "" then
+    -- an unnamed buffer has no file to write to (`:write` would only raise E32): no "Save" for it
+    local unnamed = name == ""
+    if unnamed then
       name = "[No Name]"
     end
+    local choices = unnamed and { "Discard", "Cancel" } or { "Save", "Discard", "Cancel" }
+    local discard = unnamed and 1 or 2
     require("lib.nvim.ui.dialog").choose(
       string.format('Save changes to "%s"?', name),
-      { "Save", "Discard", "Cancel" },
-      3,
+      choices,
+      #choices,
       function(choice)
         if not api.nvim_buf_is_valid(bufnr) then
           return
         end
-        if choice == 1 then
+        if choice == discard then
+          M.close_buffer(bufnr, true)
+        elseif choice == 1 and not unnamed then
           local wrote, err = pcall(api.nvim_buf_call, bufnr, function()
             vim.cmd("write")
           end)
-          if not wrote then
-            vim.notify("[ui.tabufline] could not save: " .. tostring(err), vim.log.levels.WARN)
+          -- a write that did not raise can still have failed softly (a BufWriteCmd that
+          -- gave up): closing then would throw the changes away
+          if not wrote or vim.bo[bufnr].modified then
+            vim.notify(
+              "[ui.tabufline] could not save: "
+                .. tostring(wrote and "the buffer is still modified" or err),
+              vim.log.levels.WARN
+            )
             return
           end
-          M.close_buffer(bufnr, true)
-        elseif choice == 2 then
           M.close_buffer(bufnr, true)
         end
       end,
@@ -502,15 +512,16 @@ end
 ---
 --- The question is the shared dialog, so the answer may come after this
 --- returns: `done(closed)` is called exactly once when the batch finished
---- (`true`) or was declined (`false`), and the return value is that same
---- answer when nothing was asked -- `nil` when the answer is still pending.
+--- (`true`) or was declined (`false`) -- before this returns when nothing was
+--- asked --, and the return value is that same answer when nothing was
+--- asked -- `nil` when the answer is still pending.
 ---@param bufnrs integer[]
 ---@param done? fun(closed: boolean)
 ---@return boolean|nil closed # false when the user declined the discard prompt; nil while the question is open
 function M.close_bufs(bufnrs, done)
   -- UI-01: confirm once for the whole batch, not once per modified buffer
   -- below -- without this, "close all" with N unsaved buffers popped N
-  -- sequential `confirm bd` dialogs for a single `<leader>bq`.
+  -- sequential save-changes dialogs for a single `<leader>bq`.
   local modified = 0
   for _, bufnr in ipairs(bufnrs) do
     if needs_close_confirm(bufnr) then

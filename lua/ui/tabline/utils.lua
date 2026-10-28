@@ -579,8 +579,8 @@ function M.style_buf(bufnr, index, width, is_pinned)
   -- with no click handler (found live: rendered as two blank spaces, no
   -- glyph at all) left a modified buffer's chip with no way to close it by
   -- mouse whatsoever -- indistinguishable from a rendering bug. `KillBuf`
-  -- already routes through `confirm bd<bufnr>` (see
-  -- `ui.bindings.keymaps.tabufline.state.close_buffer`), which prompts to
+  -- already routes through
+  -- `ui.bindings.keymaps.tabufline.state.close_buffer`, which asks
   -- save/discard/cancel for a modified buffer, so wiring the same handler
   -- here is safe -- only the icon/highlight differs from the plain close
   -- button, as a reminder that closing will prompt.

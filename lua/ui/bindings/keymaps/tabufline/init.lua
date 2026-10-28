@@ -162,7 +162,7 @@ function M.close_n_buffers(n)
   end
 
   -- UI-01: ask once for the whole batch instead of letting the loop below
-  -- pop `confirm bd`'s save-changes prompt once per modified buffer it
+  -- pop the save-changes question once per modified buffer it
   -- happens to touch. `vim.t.bufs` is an upper-bound approximation of what
   -- `n` iterations of close-then-land-on-neighbour will visit -- accepting
   -- an occasional over-ask (confirming when the actually-touched buffers
