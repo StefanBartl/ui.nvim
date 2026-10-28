@@ -517,77 +517,18 @@ The pattern that beats both, where it applies: `plugin_progress` reads
 `lib.nvim.progress`'s shared registry and names no plugin at all, so a new
 one needs no change here.
 
-## The kit exists twice, on purpose
+## The kit lives in lib.nvim
 
-`ui.kit` is also present in lib.nvim, as `lib.nvim.ui.kit`. That is not a
-leftover: `PLAN-ui-kit-migration.md` step 6 decided it deliberately. Eleven
-of lib.nvim's own call sites use the kit — `viewer` for five debug and
-report views, `select`, `menu`, `surface` under `progress`'s kit style —
-and lib.nvim cannot require `ui.nvim` without inverting the dependency
-direction the whole fleet rests on. So both copies stay. lib.nvim's copy was
-meant to be frozen (no new features); in practice it is a mirror: the strict
-drift spec below fails on any difference, so every kit change, features
-included, lands in both copies (`scripts/mirror_kit.lua` copies them across).
+Since 2026-10-28 the kit is **one** code base: `lib.nvim/lua/lib/nvim/ui/kit/`. Every module of `lua/ui/kit/` here is a
+one-line re-export (`return require("lib.nvim.ui.kit.<name>")`), so `require("ui.kit.confirm")` and
+`require("lib.nvim.ui.kit.confirm")` are the same table, and there is one theme state. What the earlier layout cost
+(every kit change committed twice, a mirror script, a drift spec, two theme states, a fallback chain in the dialog
+helper) is gone. A kit fix or feature is made in lib.nvim, with its spec there.
 
-Two opt-in features went across first, on 2026-10-07: `kit.form`'s `back`
-navigation (and the `ui.kit.buttons` helper it shares with `kit.confirm`),
-and the new `kit.sheet` (one float with every field of a form, inline
-validation; it shares three small helpers of `kit.input`, the secret mask, the
-guard of a secret buffer -- marked for a keystroke HUD, closed to buffer-word completion -- and
-the completion popup). The drift spec compares code, not intent, so a kit
-feature left on one side is a red CI run; the features are off unless asked
-for, so lib.nvim's own call sites behave as before. A kit feature is mirrored like a
-fix — see below — unless the difference is named as deliberate (next paragraph).
+What stays in ui.nvim is the user's surface: the setup (`require("ui").setup`), presets and theme switching, the
+`vim.ui` provider, and the kit specs, which now run through `ui.kit` and so also prove the re-exports. A spec that
+stubs or reloads a kit module through `package.loaded` has to use the `lib.nvim.ui.kit.<name>` name: that is where
+the module lives.
 
-**A deliberate difference** is named in the spec, not left to the file set to
-decide. `TESTS/kit_drift_spec.lua` has two small tables (and
-`scripts/mirror_kit.lua` a copy of them): `UI_ONLY` files exist only here and
-must stay out of lib.nvim, and `ADDITIVE` files may only have gained lines
-here, with every line lib.nvim's copy still has required to be present
-(a fix rewrites a line, so it is still caught). The first user is
-`ui.kit.viewer`'s `keys` (`lua/ui/kit/viewer_keys.lua`, ui.nvim only):
-extra bindings of a read-only viewer, from which the winbar legend, the `?`
-cheatsheet and the keymaps are all derived, plus `table_view` and an
-`on_lines` decoration hook that survives `set_lines`. It exists for
-runtime-analysis.nvim's result float and hover.nvim's status board, both of
-which depend on ui.nvim; lib.nvim's own call sites do not need it, so its
-copy of `viewer.lua` stays as it is.
-
-The newest one is `kit.message_log` (`lua/ui/kit/message_log.lua`): a
-scrollable, time-ordered, paginated list of entries that fold open and
-closed, for a log or history view (`lua/ui/kit/README.md`, "Message log").
-It lives in both copies as well.
-
-**"Frozen" does not mean "keeps known bugs", and for a while it did.** By
-2026-09-17 three fixes and a security note lived only here, while the copy
-lib.nvim actually runs still leaked an augroup per popup, left a picker
-debounce timer running past its picker, and mis-anchored a submenu near the
-bottom of the screen. Nothing compared the two, so nobody noticed for
-weeks.
-
-[`TESTS/kit_drift_spec.lua`](../TESTS/kit_drift_spec.lua) compares them
-now, on every CI run — this repository already checks lib.nvim out at
-`ci-verified` for its other specs — and fails naming the file that differs.
-
-**So: a fix made in `lua/ui/kit/` has to be mirrored into lib.nvim's copy**,
-with the rename applied (`ui.kit` → `lib.nvim.ui.kit`, `Ui.Kit` →
-`Lib.UI.Kit`). The spec ignores whitespace, because undoing the rename
-lengthens lines — `ui.kit.sync` becomes `lib.nvim.ui.kit.sync` — and pushes
-one `error()` past the shared 100-column budget, so stylua wraps it on one
-side only. Byte-identity is not achievable; identical code is.
-
-[`scripts/mirror_kit.lua`](../scripts/mirror_kit.lua) does the mirroring, with
-the spec's own rename table: from this repo's root,
-`LIB_NVIM_DIR=<lib.nvim> nvim --headless -n -u NONE -l scripts/mirror_kit.lua`
-writes the files that differ and formats them with lib.nvim's stylua config
-(`--check` only reports; `--only buttons.lua form.lua` restricts it to the files
-named, relative to the kit directory). Name the files you changed whenever the
-two copies differ in one you did not: without `--only` the script overwrites
-lib.nvim's version of it with this repo's, which loses work if lib.nvim is the
-one that is ahead there (as `picker.lua` was on 2026-10-07: its item mode had
-landed in lib.nvim only, and was carried over to this repo the same day, the
-other way round -- `lib.nvim`'s file through the inverse of the drift spec's
-rename table). Push lib.nvim **first**: this repo's CI reads
-lib.nvim's `ci-verified` branch, which advances only after lib.nvim's own CI is
-green on all three systems, so the other order leaves the drift check red until
-it catches up.
+`ui.contextmenu` is still duplicated (lib.nvim keeps a frozen copy for its own call sites);
+[`TESTS/contextmenu_drift_spec.lua`](../TESTS/contextmenu_drift_spec.lua) is what remains of the old drift guard.

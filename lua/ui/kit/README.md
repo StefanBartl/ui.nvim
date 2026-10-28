@@ -1,5 +1,9 @@
 # `ui.kit`
 
+> **The code lives in lib.nvim** (`lib.nvim/lua/lib/nvim/ui/kit/`) since 2026-10-28: every module here is a re-export, so
+> `require("ui.kit.x")` and `require("lib.nvim.ui.kit.x")` are the same table. This guide still describes the kit;
+> fixes and features are made in lib.nvim.
+
 > Ported from `lib.nvim.ui.kit` (PLAN-ui-kit-migration.md step 3: mechanical
 > prefix rename, source and tests, into this plugin). The extended user guide
 > and the per-component `docs/EXAMPLES/kit-*.lua` files that used to sit

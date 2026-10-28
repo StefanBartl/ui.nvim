@@ -217,16 +217,16 @@ describe("kit.sheet", function()
     end)
 
     it("calls on_cancel instead of stalling when the float could not be opened", function()
-      local saved_surface = package.loaded["ui.kit.surface"]
-      package.loaded["ui.kit.sheet"] = nil
-      package.loaded["ui.kit.surface"] = {
+      -- the sheet is the lib.nvim module (ui.kit.sheet re-exports it): stub and reload under that name
+      local saved_surface = package.loaded["lib.nvim.ui.kit.surface"]
+      package.loaded["lib.nvim.ui.kit.sheet"] = nil
+      package.loaded["lib.nvim.ui.kit.surface"] = {
         open = function()
           return nil
         end,
       }
-      local sheet = require("ui.kit.sheet")
       local cancelled, submitted = false, false
-      local returned = sheet.open({
+      local returned = require("lib.nvim.ui.kit.sheet").open({
         fields = THREE,
         on_submit = function()
           submitted = true
@@ -235,9 +235,9 @@ describe("kit.sheet", function()
           cancelled = true
         end,
       })
-      package.loaded["ui.kit.surface"] = saved_surface
-      package.loaded["ui.kit.sheet"] = nil
-      require("ui.kit.sheet")
+      package.loaded["lib.nvim.ui.kit.surface"] = saved_surface
+      package.loaded["lib.nvim.ui.kit.sheet"] = nil
+      require("lib.nvim.ui.kit.sheet")
       assert.is_nil(returned)
       assert.is_true(cancelled)
       assert.is_false(submitted)

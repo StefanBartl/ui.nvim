@@ -5,6 +5,10 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ## [Unreleased]
 
+### Changed
+
+- The kit lives only in lib.nvim: every `ui.kit.*` module is a re-export of `lib.nvim.ui.kit.*` (same table, one theme state). `scripts/mirror_kit.lua` and the kit drift spec are gone; `kit.keys` (viewer keys), the status tokens and the viewer hook moved to lib.nvim. Specs that stub a kit module through `package.loaded` use the lib.nvim name.
+
 ### Fixed
 
 - `kit.confirm`: a question of tens of thousands of characters on one line froze the editor (the hard wrap was quadratic); a question is cut at 4000 characters and wrapped in one pass. A replaced dialog is answered on the next loop turn, so an answer that opens a dialog (a `kit.async` coroutine asking again) no longer closes the replacement before it is shown.

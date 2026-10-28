@@ -7,6 +7,10 @@ local function body(stub)
   local kit = require("ui.kit")
   local async = kit.async
   local confirm = require("ui.kit.confirm")
+  -- stubbed below through package.loaded: load them under their ui.kit names first
+  for _, name in ipairs({ "form", "input", "select" }) do
+    require("ui.kit." .. name)
+  end
 
   local function eq(actual, expected, msg)
     assert(

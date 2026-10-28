@@ -281,7 +281,7 @@ describe("a buffer a secret is typed into", function()
       local secret = kit.input({ secret = true, relative = "editor" })
       local found = {}
       for _, a in ipairs(api.nvim_get_autocmds({ buffer = secret.bufnr })) do
-        if a.desc == "ui.kit.input: re-mask secret input" then
+        if a.desc and a.desc:find("re-mask secret input", 1, true) then
           found[#found + 1] = a.event
           assert.is_nil(a.group_name, a.event .. " is in no group")
         end

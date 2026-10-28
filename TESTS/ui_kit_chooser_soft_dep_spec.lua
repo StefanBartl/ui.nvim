@@ -27,6 +27,9 @@ describe("ui.kit.chooser without lib.nvim.window.printable_title", function()
       "lib.nvim.window.printable_title",
       "ui.kit.chooser",
       "ui.kit",
+      -- the names ui.kit re-exports: the real module lives in lib.nvim
+      "lib.nvim.ui.kit.chooser",
+      "lib.nvim.ui.kit",
     }) do
       saved[name] = package.loaded[name]
       package.loaded[name] = nil
@@ -44,6 +47,9 @@ describe("ui.kit.chooser without lib.nvim.window.printable_title", function()
       "lib.nvim.window.printable_title",
       "ui.kit.chooser",
       "ui.kit",
+      -- the names ui.kit re-exports: the real module lives in lib.nvim
+      "lib.nvim.ui.kit.chooser",
+      "lib.nvim.ui.kit",
     }) do
       package.loaded[name] = saved[name]
     end
