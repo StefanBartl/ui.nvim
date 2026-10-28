@@ -207,7 +207,7 @@ function M.close_n_buffers(n)
         run()
       end
     end,
-    { kind = "danger" }
+    { kind = "danger", title = "Unsaved changes" }
   )
   return nil
 end

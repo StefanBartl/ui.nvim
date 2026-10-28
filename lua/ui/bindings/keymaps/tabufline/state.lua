@@ -377,7 +377,9 @@ function M.close_buffer(bufnr, skip_confirm)
         elseif choice == 2 then
           M.close_buffer(bufnr, true)
         end
-      end
+      end,
+      nil,
+      { title = "Unsaved changes", kind = "warn" }
     )
     return
   end
@@ -545,7 +547,7 @@ function M.close_bufs(bufnrs, done)
         done(false)
       end
     end,
-    { kind = "danger" }
+    { kind = "danger", title = "Unsaved changes" }
   )
   return nil
 end
