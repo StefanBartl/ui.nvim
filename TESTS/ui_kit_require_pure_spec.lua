@@ -61,7 +61,7 @@ end)
 --- commands down with it. `pcall(require("x").f)` would not guard that -- the
 --- `require` is evaluated before `pcall` runs.
 describe("ui.bindings.usrcmds.setup() with a ui.kit.preview that fails to load", function()
-  local saved
+  local saved, saved_lib
 
   local function drop_commands()
     for _, name in ipairs({ "UI", "Theme", "KitPreview" }) do
@@ -70,8 +70,11 @@ describe("ui.bindings.usrcmds.setup() with a ui.kit.preview that fails to load",
   end
 
   before_each(function()
+    -- `ui.kit.preview` re-exports lib.nvim's module, whose `ensure_command` installs once per load
     saved = package.loaded["ui.kit.preview"]
+    saved_lib = package.loaded["lib.nvim.ui.kit.preview"]
     package.loaded["ui.kit.preview"] = nil
+    package.loaded["lib.nvim.ui.kit.preview"] = nil
     package.preload["ui.kit.preview"] = function()
       error("boom")
     end
@@ -81,6 +84,7 @@ describe("ui.bindings.usrcmds.setup() with a ui.kit.preview that fails to load",
   after_each(function()
     package.preload["ui.kit.preview"] = nil
     package.loaded["ui.kit.preview"] = saved
+    package.loaded["lib.nvim.ui.kit.preview"] = saved_lib
     drop_commands()
   end)
 

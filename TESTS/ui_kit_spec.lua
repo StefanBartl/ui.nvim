@@ -1985,20 +1985,20 @@ describe("bug: ui.kit.picker's TextChanged debounce broke when a second picker o
 end)
 
 describe("bug: kit.form stalled with no on_cancel when a field's surface failed to open", function()
-  -- `ui.kit.input` is captured as a module-level upvalue in `ui.kit.form`
-  -- (`local input = require("ui.kit.input")`), so simulating a genuine
+  -- `lib.nvim.ui.kit.input` is captured as a module-level upvalue in `lib.nvim.ui.kit.form`
+  -- (`local input = require("lib.nvim.ui.kit.input")`), so simulating a genuine
   -- `surface.open` failure (e.g. `nvim_open_win` erroring) means swapping
   -- what `ui.kit.form` sees BEFORE it is required, then reloading both.
   it("calls on_cancel instead of silently stalling when input.open() returns nil", function()
-    package.loaded["ui.kit.form"] = nil
-    local saved_input = package.loaded["ui.kit.input"]
-    package.loaded["ui.kit.input"] = {
+    package.loaded["lib.nvim.ui.kit.form"] = nil
+    local saved_input = package.loaded["lib.nvim.ui.kit.input"]
+    package.loaded["lib.nvim.ui.kit.input"] = {
       open = function()
         return nil
       end,
     }
 
-    local form = require("ui.kit.form")
+    local form = require("lib.nvim.ui.kit.form")
     local submitted, cancelled = false, false
     local returned = form.open({
       fields = { { name = "a", label = "A" } },
@@ -2010,9 +2010,9 @@ describe("bug: kit.form stalled with no on_cancel when a field's surface failed 
       end,
     })
 
-    package.loaded["ui.kit.input"] = saved_input
-    package.loaded["ui.kit.form"] = nil
-    require("ui.kit.form") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.input"] = saved_input
+    package.loaded["lib.nvim.ui.kit.form"] = nil
+    require("lib.nvim.ui.kit.form") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(cancelled, "on_cancel must fire when the field's surface never opened")
@@ -2027,15 +2027,15 @@ describe(
     -- upvalue in `ui.kit.prompt`, so the fake must be in place before
     -- `ui.kit.prompt` is (re)required.
     it("calls on_answer(nil) instead of silently stalling when input.open() returns nil", function()
-      package.loaded["ui.kit.prompt"] = nil
-      local saved_input = package.loaded["ui.kit.input"]
-      package.loaded["ui.kit.input"] = {
+      package.loaded["lib.nvim.ui.kit.prompt"] = nil
+      local saved_input = package.loaded["lib.nvim.ui.kit.input"]
+      package.loaded["lib.nvim.ui.kit.input"] = {
         open = function()
           return nil
         end,
       }
 
-      local prompt = require("ui.kit.prompt")
+      local prompt = require("lib.nvim.ui.kit.prompt")
       local answered, answer = false, "unset"
       local returned = prompt.open({
         question = "Q?",
@@ -2046,9 +2046,9 @@ describe(
         end,
       })
 
-      package.loaded["ui.kit.input"] = saved_input
-      package.loaded["ui.kit.prompt"] = nil
-      require("ui.kit.prompt") -- restore the real module for any later spec
+      package.loaded["lib.nvim.ui.kit.input"] = saved_input
+      package.loaded["lib.nvim.ui.kit.prompt"] = nil
+      require("lib.nvim.ui.kit.prompt") -- restore the real module for any later spec
 
       assert.is_nil(returned)
       assert.is_true(answered, "on_answer must fire when the surface never opened")
@@ -2061,15 +2061,15 @@ describe("bug: kit.live_input stalled with no on_cancel when its surface failed 
   -- `ui.kit.surface` is a module-level upvalue in `ui.kit.live_input`, so
   -- the fake must be in place before `ui.kit.live_input` is (re)required.
   it("calls on_cancel instead of silently stalling when surface.open() returns nil", function()
-    package.loaded["ui.kit.live_input"] = nil
-    local saved_surface = package.loaded["ui.kit.surface"]
-    package.loaded["ui.kit.surface"] = {
+    package.loaded["lib.nvim.ui.kit.live_input"] = nil
+    local saved_surface = package.loaded["lib.nvim.ui.kit.surface"]
+    package.loaded["lib.nvim.ui.kit.surface"] = {
       open = function()
         return nil
       end,
     }
 
-    local live_input = require("ui.kit.live_input")
+    local live_input = require("lib.nvim.ui.kit.live_input")
     local cancelled = false
     local returned = live_input.open({
       on_change = function() end,
@@ -2078,9 +2078,9 @@ describe("bug: kit.live_input stalled with no on_cancel when its surface failed 
       end,
     })
 
-    package.loaded["ui.kit.surface"] = saved_surface
-    package.loaded["ui.kit.live_input"] = nil
-    require("ui.kit.live_input") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.surface"] = saved_surface
+    package.loaded["lib.nvim.ui.kit.live_input"] = nil
+    require("lib.nvim.ui.kit.live_input") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(cancelled, "on_cancel must fire when the surface never opened")
@@ -2091,15 +2091,15 @@ describe("bug: kit.confirm stalled with no on_answer when its surface failed to 
   -- `ui.kit.surface` is a module-level upvalue in `ui.kit.confirm`, so the
   -- fake must be in place before `ui.kit.confirm` is (re)required.
   it("calls on_answer(false) for the default Yes/No case", function()
-    package.loaded["ui.kit.confirm"] = nil
-    local saved_surface = package.loaded["ui.kit.surface"]
-    package.loaded["ui.kit.surface"] = {
+    package.loaded["lib.nvim.ui.kit.confirm"] = nil
+    local saved_surface = package.loaded["lib.nvim.ui.kit.surface"]
+    package.loaded["lib.nvim.ui.kit.surface"] = {
       open = function()
         return nil
       end,
     }
 
-    local confirm = require("ui.kit.confirm")
+    local confirm = require("lib.nvim.ui.kit.confirm")
     local answered, answer = false, "unset"
     local returned = confirm.open({
       question = "Q?",
@@ -2109,9 +2109,9 @@ describe("bug: kit.confirm stalled with no on_answer when its surface failed to 
       end,
     })
 
-    package.loaded["ui.kit.surface"] = saved_surface
-    package.loaded["ui.kit.confirm"] = nil
-    require("ui.kit.confirm") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.surface"] = saved_surface
+    package.loaded["lib.nvim.ui.kit.confirm"] = nil
+    require("lib.nvim.ui.kit.confirm") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(answered, "on_answer must fire when the surface never opened")
@@ -2119,15 +2119,15 @@ describe("bug: kit.confirm stalled with no on_answer when its surface failed to 
   end)
 
   it("calls on_answer(nil) for a custom choice list", function()
-    package.loaded["ui.kit.confirm"] = nil
-    local saved_surface = package.loaded["ui.kit.surface"]
-    package.loaded["ui.kit.surface"] = {
+    package.loaded["lib.nvim.ui.kit.confirm"] = nil
+    local saved_surface = package.loaded["lib.nvim.ui.kit.surface"]
+    package.loaded["lib.nvim.ui.kit.surface"] = {
       open = function()
         return nil
       end,
     }
 
-    local confirm = require("ui.kit.confirm")
+    local confirm = require("lib.nvim.ui.kit.confirm")
     local answered, answer = false, "unset"
     local returned = confirm.open({
       question = "Q?",
@@ -2138,9 +2138,9 @@ describe("bug: kit.confirm stalled with no on_answer when its surface failed to 
       end,
     })
 
-    package.loaded["ui.kit.surface"] = saved_surface
-    package.loaded["ui.kit.confirm"] = nil
-    require("ui.kit.confirm") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.surface"] = saved_surface
+    package.loaded["lib.nvim.ui.kit.confirm"] = nil
+    require("lib.nvim.ui.kit.confirm") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(answered, "on_answer must fire when the surface never opened")
@@ -2156,9 +2156,9 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
   -- (select.lua's own on_cancel firing on Esc/q, an empty list, and a failed
   -- surface open is already covered by that module's own tests).
   it("fires on_answer(false) for the default Yes/No case", function()
-    package.loaded["ui.kit.prompt"] = nil
-    local saved_select = package.loaded["ui.kit.select"]
-    package.loaded["ui.kit.select"] = {
+    package.loaded["lib.nvim.ui.kit.prompt"] = nil
+    local saved_select = package.loaded["lib.nvim.ui.kit.select"]
+    package.loaded["lib.nvim.ui.kit.select"] = {
       open = function(opts)
         if opts.on_cancel then
           opts.on_cancel()
@@ -2167,7 +2167,7 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
       end,
     }
 
-    local prompt = require("ui.kit.prompt")
+    local prompt = require("lib.nvim.ui.kit.prompt")
     local answered, answer = false, "unset"
     local returned = prompt.open({
       question = "Q?",
@@ -2178,9 +2178,9 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
       end,
     })
 
-    package.loaded["ui.kit.select"] = saved_select
-    package.loaded["ui.kit.prompt"] = nil
-    require("ui.kit.prompt") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.select"] = saved_select
+    package.loaded["lib.nvim.ui.kit.prompt"] = nil
+    require("lib.nvim.ui.kit.prompt") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(answered, "on_answer must fire when select.open cancels")
@@ -2191,9 +2191,9 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
   end)
 
   it("fires on_answer(nil) for a custom choice list", function()
-    package.loaded["ui.kit.prompt"] = nil
-    local saved_select = package.loaded["ui.kit.select"]
-    package.loaded["ui.kit.select"] = {
+    package.loaded["lib.nvim.ui.kit.prompt"] = nil
+    local saved_select = package.loaded["lib.nvim.ui.kit.select"]
+    package.loaded["lib.nvim.ui.kit.select"] = {
       open = function(opts)
         if opts.on_cancel then
           opts.on_cancel()
@@ -2202,7 +2202,7 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
       end,
     }
 
-    local prompt = require("ui.kit.prompt")
+    local prompt = require("lib.nvim.ui.kit.prompt")
     local answered, answer = false, "unset"
     local returned = prompt.open({
       question = "Q?",
@@ -2214,9 +2214,9 @@ describe("bug: kit.prompt's list-based confirm branch never called on_answer on 
       end,
     })
 
-    package.loaded["ui.kit.select"] = saved_select
-    package.loaded["ui.kit.prompt"] = nil
-    require("ui.kit.prompt") -- restore the real module for any later spec
+    package.loaded["lib.nvim.ui.kit.select"] = saved_select
+    package.loaded["lib.nvim.ui.kit.prompt"] = nil
+    require("lib.nvim.ui.kit.prompt") -- restore the real module for any later spec
 
     assert.is_nil(returned)
     assert.is_true(answered, "on_answer must fire when select.open cancels")
