@@ -3,8 +3,8 @@
 
 --- `kit.async` with real typed keys, in a child Neovim with a UI attached.
 ---
---- `kit.sync` waits in `vim.wait()`, and Neovim does not run typed keys while it waits, so a dialog
---- opened that way never sees them (it returns when its timeout runs out). A spec in this
+--- A blocking `vim.wait()` bridge could not work: Neovim does not run typed keys while it waits, so a
+--- dialog opened that way would never see them. A spec in this
 --- process cannot show the difference: it has no UI and feeds keys with `feedkeys`. So this file
 --- starts a child Neovim the way `ui_kit_input_ui_spec.lua` does, types into it over RPC and reads
 --- what the coroutine got back -- and that the editor kept running meanwhile.

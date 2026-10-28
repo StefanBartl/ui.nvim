@@ -877,20 +877,5 @@ describe("kit.sheet", function()
       assert.is_true(r.surf:validate())
       assert.same({}, r.surf:state().errors)
     end)
-
-    it("works through kit.sync, like the other on_submit/on_cancel components", function()
-      vim.defer_fn(function()
-        for _, w in ipairs(api.nvim_list_wins()) do
-          if api.nvim_win_get_config(w).relative ~= "" then
-            api.nvim_set_current_win(w)
-            api.nvim_buf_set_lines(api.nvim_win_get_buf(w), 1, 2, false, { "synced" })
-            keys("<CR><CR><CR>")
-          end
-        end
-      end, 20)
-      local values, cancelled = kit.sync(kit.sheet, { fields = THREE }, 2000)
-      assert.is_false(cancelled)
-      assert.equals("synced", values.b)
-    end)
   end)
 end)

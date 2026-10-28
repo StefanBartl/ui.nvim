@@ -7,7 +7,7 @@
 --- the WINDOW -- `<C-o>`/`<C-^>` from the jumplist every new float inherits, `:bnext`,
 --- `:e` -- put the user's file into the float and wiped the component's buffer
 --- from under it: the window stayed open with no callback left to fire, and a
---- `kit.sync` caller waited out its ten minutes. The Normal-mode rows (a select
+--- caller waiting on it never heard back. The Normal-mode rows (a select
 --- field, a button row) make those keys easy to hit. `surface.open` sets
 --- `winfixbuf`, which turns the swap into E1513.
 
