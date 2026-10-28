@@ -99,7 +99,7 @@ local function body(stub)
   eq(second, { "first" }, "a second delivery is ignored")
 
   -- select: the item and its index, nil on dismiss
-  local stub_select = package.loaded["ui.kit.select"]
+  local stub_select = require("ui.kit.select")
   stub(stub_select, "open", function(o)
     o.on_select(o.items[2], 2)
   end)
@@ -117,7 +117,7 @@ local function body(stub)
   eq(picked, {}, "select dismissed -> nil")
 
   -- input / form: value, or nil and true when cancelled; the caller's own callbacks still run
-  local input_mod = package.loaded["ui.kit.input"]
+  local input_mod = require("ui.kit.input")
   local user_called
   stub(input_mod, "open", function(o)
     o.on_submit("typed")
@@ -158,7 +158,7 @@ local function body(stub)
   eq(got[2], true, "and cancelled")
 
   -- form goes through the same path
-  stub(package.loaded["ui.kit.form"], "open", function(o)
+  stub(require("ui.kit.form"), "open", function(o)
     o.on_submit({ a = 1 })
     return {}
   end)
@@ -169,7 +169,7 @@ local function body(stub)
 
   -- leaving through the caller's own "back" resumes the coroutine too (and the caller's callback runs)
   local back_called = false
-  stub(package.loaded["ui.kit.form"], "open", function(o)
+  stub(require("ui.kit.form"), "open", function(o)
     vim.schedule(function()
       o.on_back()
     end)

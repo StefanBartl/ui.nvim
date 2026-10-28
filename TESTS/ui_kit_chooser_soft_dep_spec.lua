@@ -1,9 +1,8 @@
 -- See TESTS/config_spec.lua for what these suppressions cover and why.
 ---@diagnostic disable: need-check-nil, undefined-field, discard-returns
 
---- `ui.kit.chooser` takes `lib.nvim.window.printable_title` softly: `ui.kit` requires the
---- chooser eagerly, so a lib.nvim older than 863952e (no such module) must not make
---- `require("ui.kit")` fail outright; the title is then drawn as given.
+--- `ui.kit.chooser` takes `lib.nvim.window.printable_title` softly: a lib.nvim older than 863952e (no
+--- such module) must not make `require("ui.kit.chooser")` fail outright; the title is then drawn as given.
 
 local api = vim.api
 
@@ -21,8 +20,10 @@ describe("ui.kit.chooser without lib.nvim.window.printable_title", function()
   local saved = {}
 
   before_each(function()
-    -- Everything else is loaded (and cached) first: only the chooser may meet the missing module.
+    -- Everything else is loaded (and cached) first: only the chooser may meet the missing module. The kit
+    -- loads its components on first use, so the chooser (and with it what it needs) is loaded here.
     require("ui.kit")
+    require("ui.kit.chooser")
     for _, name in ipairs({
       "lib.nvim.window.printable_title",
       "ui.kit.chooser",
