@@ -41,7 +41,7 @@ alphabetically, since the file names already say what each one covers:
 
 | Area | Files |
 | --- | --- |
-| Config / variants / setup | `config_spec.lua`, `variants_spec.lua`, `keymaps_spec.lua` |
+| Config / variants / setup | `config_spec.lua`, `variants_spec.lua`, `keymaps_spec.lua`, `keymaps_feedkeys_spec.lua` (every default key typed, its effect asserted) |
 | Theme / transparency | `theme_spec.lua`, `theme_picker_spec.lua` |
 | Health | `health_spec.lua` |
 | Statusline render pipeline | `statusline_render_spec.lua`, `statusline_responsive_spec.lua`, `statusline_highlights_spec.lua`, `statusline_catalog_spec.lua`, `statusline_clickable_spec.lua`, `statusline_hover_menu_spec.lua` (column hit-testing, the `<MouseMove>` tooltip, the right/double-click "manage this module" menu), `primitives_separators_spec.lua`, `cursor_ctl_renderer_spec.lua`, `cursor_ctl_spec.lua` (`get_mode`/`set_mode`/`toggle_mode`, and that a direct assignment to `mode` can no longer bypass the whitelist -- the PRIN-10 fix) |
