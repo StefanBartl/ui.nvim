@@ -234,6 +234,13 @@ describe("ui.bindings.keymaps theme keys, typed", function()
     local joined = table.concat(lines, "\n")
     assert.truthy(joined:find("blue", 1, true), "lists the colorschemes")
     assert.truthy(joined:find("default", 1, true), "lists the colorschemes")
+    -- "on the current theme": the colorscheme in force ("default", set above) is where the cursor
+    -- starts, not the first row ("blue" sorts before it).
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    assert.truthy(
+      (lines[row] or ""):find("default", 1, true),
+      "the cursor starts on the current theme, got row " .. row .. ": " .. tostring(lines[row])
+    )
   end)
 end)
 
