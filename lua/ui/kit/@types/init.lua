@@ -394,6 +394,7 @@
 ---@field chooser Ui.Kit.ChooserModule  # low-level escape hatch behind kit.select -- see its own doc comment
 ---@field chip Ui.Kit.ChipModule  # persistent editor-corner status chip (mount/refresh/pulse/unmount)
 ---@field history Ui.Kit.HistoryModule  # back/forward trail of positions with a CLEAR sentinel (pure data, no UI)
+---@field sidebar Ui.Kit.SidebarModule  # themed split panel (left/right/bottom), exclusive slots, one cleanup
 
 --- `ui.kit.buttons`: the row layout, focus highlight and mouse hit-test that
 --- `kit.confirm` and the button row of `kit.input`/`kit.form` share. Stateless.
@@ -505,6 +506,55 @@
 ---@field CREATE string    # button labels, also what a dialog hook answers with
 ---@field FILETREE string
 ---@field CANCEL string
+
+--- Options for `kit.sidebar.open` / `kit.sidebar.toggle`.
+---@class Ui.Kit.SidebarOpts
+---@field name? string        # identity: a second open with the same name shows that sidebar again (default: a fresh "sidebar_N")
+---@field position? "left"|"right"|"bottom"  # default "left"
+---@field size? number        # width (left/right) or height (bottom); 0 < size < 1 is a share of the editor (default 30 / 10)
+---@field lines? string[]     # initial content (on a reused sidebar: replaces it)
+---@field title? string       # shown in the window bar, themed with the `title` token
+---@field theme? Ui.Kit.ThemeArg
+---@field enter? boolean      # move the cursor into it (default true)
+---@field exclusive? boolean  # hide a sidebar visible at the same position and restore it on close/hide (default true)
+---@field filetype? string
+---@field modifiable? boolean # default false
+---@field on_close? fun()     # called once when the sidebar is closed for good (not on hide)
+---@field wo? table<string, any>  # window options, applied over the sidebar's own
+---@field bo? table<string, any>
+
+--- Handle returned by `kit.sidebar.open`: the surface methods (inherited at runtime from
+--- `kit.surface.Handle`) plus show/hide. `set_title` writes the window bar.
+---@class Ui.Kit.Sidebar
+---@field winid integer|nil   # the current window; a new one after each show, nil before the first
+---@field bufnr integer
+---@field set_lines fun(self: Ui.Kit.Sidebar, lines: string[])
+---@field set_last_line fun(self: Ui.Kit.Sidebar, text: string)
+---@field append_lines fun(self: Ui.Kit.Sidebar, lines: string[])
+---@field set_title fun(self: Ui.Kit.Sidebar, title: string|nil)
+---@field focus fun(self: Ui.Kit.Sidebar)  # shows a hidden sidebar first
+---@field on_close fun(self: Ui.Kit.Sidebar, cb: fun())
+---@field is_valid fun(self: Ui.Kit.Sidebar): boolean  # same as is_visible
+---@field close fun(self: Ui.Kit.Sidebar)  # for good: window, buffer, callbacks; restores what it displaced
+---@field name string
+---@field position "left"|"right"|"bottom"
+---@field size integer        # last width/height (kept across hide/show)
+---@field title string|nil
+---@field exclusive boolean
+---@field show fun(self: Ui.Kit.Sidebar, enter?: boolean): boolean  # show a hidden sidebar (displacing the slot's occupant)
+---@field hide fun(self: Ui.Kit.Sidebar): boolean  # off screen, kept; restores what it displaced; false for the tabpage's last window
+---@field is_visible fun(self: Ui.Kit.Sidebar): boolean
+---@field is_closed fun(self: Ui.Kit.Sidebar): boolean
+
+--- `kit.sidebar` (`ui.kit.sidebar`, a re-export of `lib.nvim.ui.kit.sidebar`): the module.
+---@class Ui.Kit.SidebarModule
+---@field BUF_VAR string      # buffer variable naming the sidebar a buffer belongs to ("ui_kit_sidebar")
+---@field open fun(opts?: Ui.Kit.SidebarOpts): Ui.Kit.Sidebar|nil
+---@field toggle fun(opts: Ui.Kit.SidebarOpts): Ui.Kit.Sidebar|nil  # hide when visible, else show/open
+---@field get fun(name: string): Ui.Kit.Sidebar|nil
+---@field find fun(name: string): integer|nil  # its window, by buffer variable; nil when hidden or closed
+---@field list fun(): Ui.Kit.Sidebar[]
+---@field close_all fun()     # the one cleanup: every sidebar, visible or hidden, closed; nothing restored
 
 return {}
 
