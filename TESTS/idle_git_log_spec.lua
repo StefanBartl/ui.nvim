@@ -101,6 +101,8 @@ describe("ui.statusline.modules.idle_git_log", function()
     assert.equals(3, calls[1].opts.max_count)
     assert.is_number(calls[1].opts.timeout_ms)
     assert.is_number(calls[1].opts.max_output_bytes)
+    -- A blobless/partial clone must never fetch over the network for this.
+    assert.is_true(calls[1].opts.no_lazy_fetch)
 
     calls[1].on_done({ commit("a1b2c3d", "Fix the parser"), commit("9f8e7d6", "Add tests") })
 
@@ -202,6 +204,28 @@ describe("ui.statusline.modules.idle_git_log", function()
 
     assert.is_true(ok, err)
     assert.equals(1, redraws)
+  end)
+
+  it("does not repaint for an idle phase that ended before the read answered", function()
+    enter_buffer_in(true)
+    local mod = fresh_module()
+    fire("CursorHold")
+    mod()
+    fire("CursorMoved")
+
+    local redraws = 0
+    local orig_cmd = vim.cmd
+    vim.cmd = function(c)
+      if c == "redrawstatus!" then
+        redraws = redraws + 1
+      end
+      return orig_cmd(c)
+    end
+    local ok, err = pcall(calls[1].on_done, { commit("a1b2c3d", "One") })
+    vim.cmd = orig_cmd
+
+    assert.is_true(ok, err)
+    assert.equals(0, redraws)
   end)
 
   it("honours opts.max_count (clamped to 1..3) and opts.subject_width", function()
