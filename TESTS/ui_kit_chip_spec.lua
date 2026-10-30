@@ -367,6 +367,39 @@ describe("ui.kit.chip", function()
     )
   end)
 
+  it("a function colour sees a group a later ColorScheme handler re-defines", function()
+    -- Regression: the re-tint ran only inside the chip's own ColorScheme
+    -- handler. Handlers fire in creation order, so a colour reading a group
+    -- that a LATER-created handler re-applies (the session chip reading the
+    -- statusline's St_<Mode>Mode) still saw the old value and kept it.
+    vim.api.nvim_set_hl(0, "SpecChipLateGroup", { fg = "#111111", bg = "#000000" })
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      color = function()
+        local hl = vim.api.nvim_get_hl(0, { name = "SpecChipLateGroup", link = false })
+        return { fg = hl.fg, bg = hl.bg }
+      end,
+    })
+    assert.equals(0x111111, normal_hl(chip_window()).fg, "function colour applied")
+
+    -- Created after mount(), so it runs after the chip's own handler.
+    local late = vim.api.nvim_create_augroup("SpecChipLateHandler", { clear = true })
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      group = late,
+      callback = function()
+        vim.api.nvim_set_hl(0, "SpecChipLateGroup", { fg = "#333333", bg = "#000000" })
+      end,
+    })
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    local settled = vim.wait(200, function()
+      return normal_hl(chip_window()).fg == 0x333333
+    end)
+    vim.api.nvim_del_augroup_by_id(late)
+
+    assert.is_true(settled, "the chip picked up the group the later handler re-defined")
+  end)
+
   it("a highlight-group colour resolves that group's fg, not a literal", function()
     vim.api.nvim_set_hl(0, "SpecChipTestGroup", { fg = "#123456" })
     chip.mount({ id = "spec_a", text = "x", color = "SpecChipTestGroup" })
