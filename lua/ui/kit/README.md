@@ -338,6 +338,28 @@ truncation — `lib.nvim.fs.path_shorten(path, width)` (style `"fit"`, the
 default) is built for exactly this: it keeps the drive/root and the filename
 visible and collapses the middle.
 
+#### Number keys (harpoon-style)
+
+`number_keys = true` (off by default) binds `1`..`9` in the list to the first
+nine entries: a digit submits its entry the way `<CR>` does
+(`on_submit(item, idx)`, popup closed first). Each of those lines starts with
+its digit (`1 …`); entries past the ninth get two blanks so the text lines up,
+and `format_item` is handed the width minus those two cells, so it never shows
+the digit twice. To draw the digit yourself, pass `number_keys = { label = false }`:
+the keys stay, the label goes, and `format_item(item, width, idx)` gets the index
+as its third argument. The list footer adds `1-N open`. In the preview, digits
+stay counts (`5j`).
+
+```lua
+kit.shortlist({
+  items = marks,
+  number_keys = true,                     -- "1 ~/notes/todo.md", "2 …"
+  format_item = function(item, width) return path_shorten(item.path, width) end,
+  render = render_file,
+  on_submit = function(item, idx) open(item.path) end,
+})
+```
+
 If `render` raises (a file it cannot read into lines, say), the pane shows one
 line, `preview failed: <the error's first line>`, instead of keeping the previous
 item's text under the new selection. `surface:set_lines` restores the buffer's
