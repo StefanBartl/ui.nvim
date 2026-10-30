@@ -140,6 +140,7 @@ kit.popup({ type = "prompt", question = "Delete?", answer_type = "confirm", on_a
 | `progress`| passthrough to `lib.nvim.progress` (`:update`/`:finish`/`:cancel`) |
 | `compare` | pick two items out of one picker, then view them side by side — see [Compare](#compare-pick-two-view-side-by-side) below |
 | `shortlist` | promptless list+preview for a handful of items — see [Shortlist](#shortlist-promptless-list--preview) below |
+| `create_on_missing` | a path that does not exist: Create (with its parent directories) / Open in filetree / Cancel — see [Create on missing](#create-on-missing-a-path-that-does-not-exist) below (`kit.create_on_missing(opts)`, not a `popup` type) |
 
 ### Viewer keys (`keys`, `table_view`, `on_lines`)
 
@@ -1013,4 +1014,43 @@ kit.input({
   on_submit = function(path) end,
 })
 ```
+
+### Create on missing (a path that does not exist)
+
+`kit.create_on_missing({ path = p, on_done = fn })` is the question a plugin asks when the user
+wants to open a file that is not there (gopath.nvim's `gf`, a path pasted into images.nvim). A
+`kit.confirm` with three buttons:
+
+| Button | Does |
+| ------ | ---- |
+| `Create` | `lib.nvim.fs.create_entry` makes the file — or, for a path ending in `/` or `\`, the directory — with every missing parent directory, then opens the file (`:edit`) |
+| `Open in filetree` | filetree.nvim reveals the deepest directory of the path that does exist (`adapter().open_reveal`); nothing is created |
+| `Cancel` | nothing (also `<Esc>`/`q`, or the dialog closed any other way) |
+
+```lua
+local kit = require("ui.kit")
+kit.create_on_missing({
+  path = "docs/notes/today.md",      -- relative to the cwd, or absolute
+  on_done = function(res)            -- exactly once, however the dialog ends
+    -- res.action: "created" | "exists" | "filetree" | "cancelled" | "error"
+    -- res.path, res.kind ("file"/"directory"), res.err
+  end,
+})
+```
+
+- **filetree.nvim is optional.** The button is offered only when filetree.nvim is loaded *and*
+  set up and its adapter can reveal a path; the kit reads `package.loaded["filetree"]` and never
+  `require`s it, so asking does not pull a lazy-loaded tree in. `filetree = false` hides the
+  button, `filetree = function(dir) ... return true end` offers it with a reveal of your own
+  (return `false` for a failure). `require("ui.kit.create_on_missing").filetree_available()`
+  says whether the default would show it.
+- `open = false` creates without opening; `open = function(path, kind) end` replaces `:edit`
+  (a directory is opened only by such a function).
+- A path that **exists** asks nothing: it is opened and reported as `"exists"`.
+- A refused name (`create_entry` rejects `\/:*?"<>|` in a segment) or a failed reveal is reported
+  with `notify` and as `"error"`; a refused name creates nothing (it is checked before any
+  directory is made).
+- The question names the missing parent directories, so the user sees that `Create` makes more
+  than one entry. The button labels are `M.CREATE`, `M.FILETREE`, `M.CANCEL` on the module — a
+  dialog hook (`kit.set_dialog_hook`) answers with one of them (or the index).
 
