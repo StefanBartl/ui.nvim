@@ -221,8 +221,13 @@ being driven off events rather than a timer.
 Each chip gets its own highlight group rather than sharing `ui.kit.theme`'s
 global `Kit*` groups, so several chips (or a chip and a modal kit popup) can
 be on screen at once with independently coloured chips. A colour given as a
-highlight-group name re-tints itself on `ColorScheme`; an explicit `{ fg, bg
-}` pair stays fixed. A floating window belongs to the tabpage it was opened
+highlight-group name re-tints itself on `ColorScheme`. An explicit table stays
+fixed only when it is complete (`{ fg, bg }`) on an opaque shape: a missing
+`fg` (taken from `Special`), a missing `bg` (the window background) or a
+transparent shape (`classic`, old name `text`, which always uses the window
+background) reads part of its colour from the scheme, so such a chip re-tints
+on `ColorScheme` just like a group colour. A fixed chip keeps its pixels across
+a scheme change (they are re-applied after `:hi clear`). A floating window belongs to the tabpage it was opened
 on, so a chip re-opens itself on `TabEnter` to follow the user across tabs.
 
 ## Layout engine (Phase 3, partial)

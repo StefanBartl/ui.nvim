@@ -312,23 +312,44 @@ describe("ui.kit.chip", function()
   it("a colour-source change with unchanged pixels still keeps the themed flag fresh", function()
     -- Regression: M.refresh()'s "already applied?" check compared only
     -- fg/bg, so switching entry.color from a custom table to a highlight
-    -- group (or back) while the *rendered* colour happened not to change --
-    -- easy to hit on a "text" shape chip, where bg is always window_bg()
-    -- regardless of the colour source -- left entry.applied_colors.themed
-    -- stale. The ColorScheme handler gates its re-tint on exactly that
-    -- field, so a chip that had just become theme-linked this way would
-    -- silently stop re-tinting on the next colorscheme change.
+    -- group (or back) while the *rendered* colour happened not to change
+    -- left entry.applied_colors.themed stale. The ColorScheme handler gates
+    -- its re-tint on exactly that field, so a chip that had just become
+    -- theme-linked this way would silently stop re-tinting on the next
+    -- colorscheme change.
+    --
+    -- The start has to be a really fixed chip (themed = false): only a
+    -- complete { fg, bg } table on an opaque shape is one -- a missing
+    -- fg/bg or a transparent shape takes its colour from the scheme and is
+    -- itself theme-linked. So probe the pixels the group resolves to (fg
+    -- plus its tinted bg) first and pin exactly those as the fixed pair.
     vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#ff0000" })
-    chip.mount({ id = "spec_a", text = "x", shape = "text", color = { fg = "#ff0000" } })
-    assert.equals(0xff0000, normal_hl(chip_window()).fg, "custom colour applied")
+    chip.mount({ id = "spec_b", text = "probe", color = "SpecChipThemeGroup" })
+    local probe = normal_hl(chip_window())
+    chip.unmount("spec_b")
+    assert.equals(0xff0000, probe.fg, "probe picked up the group's fg")
+    assert.is_number(probe.bg, "probe has an opaque, tinted bg")
 
-    -- Same rendered fg (bg is window_bg() either way on a "text" chip) as
-    -- before, but now sourced from a highlight group instead of a literal.
+    chip.mount({ id = "spec_a", text = "x", color = { fg = probe.fg, bg = probe.bg } })
+    assert.same(
+      { fg = probe.fg, bg = probe.bg },
+      { fg = normal_hl(chip_window()).fg, bg = normal_hl(chip_window()).bg },
+      "fixed pair applied"
+    )
+
+    -- Prove the start really is fixed: a scheme change leaves it alone.
+    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#00ff00" })
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    assert.equals(0xff0000, normal_hl(chip_window()).fg, "fixed chip ignores ColorScheme")
+    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#ff0000" })
+
+    -- Same rendered fg and bg as before, but now sourced from a highlight
+    -- group instead of a literal.
     chip.mount({ id = "spec_a", color = "SpecChipThemeGroup" })
-    assert.equals(
-      0xff0000,
-      normal_hl(chip_window()).fg,
-      "still the same colour, nothing to repaint"
+    assert.same(
+      { fg = probe.fg, bg = probe.bg },
+      { fg = normal_hl(chip_window()).fg, bg = normal_hl(chip_window()).bg },
+      "still the same pixels, nothing to repaint"
     )
 
     vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#00ff00" })
