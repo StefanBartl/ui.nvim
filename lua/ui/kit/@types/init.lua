@@ -457,7 +457,7 @@
 ---@field max? integer      # keep at most this many entries; the oldest goes first (default: unbounded)
 ---@field dedupe? boolean   # a move that changes none of `keys` makes no stop (default true)
 
---- `kit.history` (`lib.nvim.ui.kit.history`): the module.
+--- `kit.history` (`ui.kit.history`, a re-export of `lib.nvim.ui.kit.history`): the module.
 ---@class Ui.Kit.HistoryModule
 ---@field CLEAR table  # sentinel: in a patch, removes the field instead of keeping it
 ---@field apply fun(target: table, patch: table): table  # patch in place, honouring CLEAR
@@ -467,7 +467,7 @@
 ---@class Ui.Kit.History
 ---@field go fun(self: Ui.Kit.History, state: table, changes: table): boolean  # record, apply, push; false = no stop made
 ---@field push fun(self: Ui.Kit.History, state: table): boolean  # new stop after the current one, forward history dropped
----@field step fun(self: Ui.Kit.History, state: table, delta: integer): boolean  # restore the entry `delta` away; false = out of range
+---@field step fun(self: Ui.Kit.History, state: table, delta: integer): boolean  # restore the entry `delta` away; false = out of range, error = not an integer
 ---@field back fun(self: Ui.Kit.History, state: table, count?: integer): boolean
 ---@field forward fun(self: Ui.Kit.History, state: table, count?: integer): boolean
 ---@field record fun(self: Ui.Kit.History, state: table)  # overwrite the current entry from `state`
