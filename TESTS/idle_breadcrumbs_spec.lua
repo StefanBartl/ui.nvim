@@ -90,6 +90,12 @@ describe("ui.statusline.modules.idle_breadcrumbs", function()
     )
     assert.is_truthy(idle_out:find(CHAIN, 1, true), idle_out)
     assert.is_truthy(idle_out:find("juliett_kilo_lima.lua", 1, true), idle_out)
+    -- 72 columns of path, more than the fixed `path_max_chars` (45): only
+    -- visible when the module hands its overrides to the formatter (the
+    -- whole screen as budget, so the budget is not what cuts it).
+    local long_tail = "bravo/charlie/delta/echo/foxtrot/golf/hotel/india/juliett_kilo_lima.lua"
+    local wide = visible(mod({ idle_width_frac = 1 }))
+    assert.is_truthy(wide:find(long_tail, 1, true), wide)
   end)
 
   it("shrinks back on the next keystroke", function()
