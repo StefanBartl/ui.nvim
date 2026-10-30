@@ -92,7 +92,9 @@ modules = {
 | `terminal_count` | terminal.nvim's terminals: the current one with the project's count, e.g. `"build (3)"`, or just the count, e.g. `"2 terminals"` | terminal.nvim | `ui.statusline.modules.terminal_count` |
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
+| `idle_git_log` | The last one to three commits of the buffer's repo, e.g. `"a1b2c3d Fix the parser · 9f8e7d6 Add tests"`, read once per idle phase and shown only while idle; empty outside a repo | git | `ui.statusline.modules.idle_git_log` |
 | `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
+| `idle_breadcrumbs` | `breadcrumbs`, with a wider budget and no fixed path cap while the editor is idle (less shortening of path and symbol chain); identical to `breadcrumbs` otherwise | my.nvim (soft) | `ui.statusline.modules.idle_breadcrumbs` |
 | `matchup_offscreen` | vim-matchup's offscreen-match source line (syntax-highlighted, gutter stripped), as one segment | vim-matchup, with `matchup_matchparen_offscreen = { method = "status_manual" }` | `ui.statusline.modules.matchup_offscreen` |
 
 A soft dependency ("Needs" above) degrades to an empty segment when the
@@ -219,10 +221,39 @@ primitive (`is_idle()` / `wrap(segment_fn)`) for any segment that should
 only appear once the editor has sat still for `updatetime` ms
 (`CursorHold`/`CursorHoldI`) and disappear again on the very next
 keystroke or cursor move — IDEEN-statusline.md's "Idle-Erweiterung nach N
-Sekunden Inaktivität" names a mini git log or extra breadcrumb room as
-other possible payloads; `idle_clock` is only the first (its own
-suggested "Uhrzeit"), and a future one can reuse `ui.statusline.utils.idle`
-without its own `CursorHold` wiring.
+Sekunden Inaktivität" names three payloads, and all three are built on it
+without their own `CursorHold` wiring:
+
+- `idle_clock` — the time (its own suggested "Uhrzeit").
+- `idle_git_log` — the last commits of the repo the buffer is in (the file's
+  directory, or the window's cwd for a non-file buffer). No steady load: the
+  read is `lib.nvim.git.log_async` (an argv list, no shell), runs at most
+  once per repo per idle phase (`idle.phase()`), is cached for the rest of
+  that phase and repaints the statusline once when it answers; the first
+  idle redraw therefore renders empty. A buffer outside any repo (no `.git`
+  upwards) renders empty without starting git. Options:
+  `opts.max_count` (1..3, default 3) and `opts.subject_width` (columns per
+  subject, default 32; longer subjects end in `…`). Commit subjects are
+  cleaned of control and invisible characters before they are shown.
+- `idle_breadcrumbs` — a drop-in replacement for `breadcrumbs` that renders
+  the same thing while active and, while idle, gets a wider budget
+  (`opts.idle_width_frac` of `columns`, default 0.80, never narrower than the
+  active budget) and no fixed path cap (`path_max_chars`), so a long path
+  and a deep symbol chain are cut less. The widening is a per-call override:
+  the shared `ui.statusline.modules.lsp.config` and every other segment's
+  width logic are untouched. The chain's content stays `my.nvim`'s (see
+  [below](#who-owns-the-breadcrumbs-symbol-context)).
+
+Both new ones are opt-in, like every idle payload:
+
+```lua
+modules = {
+  idle_git_log = function()
+    return require("ui.statusline.modules.idle_git_log")({ max_count = 2 })
+  end,
+  breadcrumbs = require("ui.statusline.modules.idle_breadcrumbs"),
+},
+```
 
 `session_status`, `sandbox_ambient` and `gitsuite_conflict` are thin
 requires, not reimplementations: sessions.nvim, sandbox.nvim and
@@ -440,7 +471,7 @@ build one from, not a module itself:
 | `ui.statusline.utils.primitives` | Raw building blocks the "default" theme wraps with highlights: `git()`, `lsp()`, `diagnostics()`, `file()`, `lsp_msg()`, `is_activewin()`, `modes` (the mode-name/highlight-suffix table) |
 | `ui.statusline.utils.get_separators` | Resolves a `separator_style` name (or `{left, right}` table) to the actual glyph pair |
 | `ui.statusline.utils.clickable` | `wrap(segment_fn, handlers)` — makes any segment respond to left/right/middle clicks. See [Clickable modules](#clickable-modules) above |
-| `ui.statusline.utils.idle` | `is_idle()` / `wrap(segment_fn)` — makes any segment render nothing until `CursorHold`/`CursorHoldI` (`updatetime` ms with no input), hidden again on the next keystroke or cursor move. `idle_clock` above is the first module built on it |
+| `ui.statusline.utils.idle` | `is_idle()` / `wrap(segment_fn)` — makes any segment render nothing until `CursorHold`/`CursorHoldI` (`updatetime` ms with no input), hidden again on the next keystroke or cursor move; `phase()` numbers the idle phases, for a payload that does real work once per phase. `idle_clock`, `idle_git_log` and `idle_breadcrumbs` above are built on it |
 | `ui.statusline.cursor_ctl` | Row/column scroll-progress rendering — what several presets' own `cursor` override uses. `cursor_ctl.renderer.pct_bar(pct)` (an 8-level density glyph from a 0..100 value) is reusable on its own — `diagnostics_sparkline` above is the first module to do that |
 | `ui.statusline.modules.highlighting` | `mode_band_group()` (the current mode's highlight group, for colouring anything by mode), `hl_open()`/`hl_wrap()`/`stl_strip_hl()` |
 

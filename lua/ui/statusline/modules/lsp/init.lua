@@ -158,8 +158,14 @@ function M.render_breadcrumbs_lspfirst()
   return icon .. " " .. line .. "%*"
 end
 
+--- `total_maxw`/`overrides` are handed to
+--- `formatters.compact_breadcrumb_line` unchanged: nil for the configured
+--- width logic (every shipped preset), a wider budget and a lifted path cap
+--- for `idle_breadcrumbs` while the editor is idle.
 ---@param band_group string
-function M.render_breadcrumbs_inherit_lspfirst(band_group)
+---@param total_maxw? integer
+---@param overrides? { path_max_chars?: integer|false, path_max_frac?: number, path_min_room?: integer }
+function M.render_breadcrumbs_inherit_lspfirst(band_group, total_maxw, overrides)
   ensure_deps()
   local utils = require("ui.statusline.utils.primitives")
   local bufnr = utils.stbufnr()
@@ -167,7 +173,7 @@ function M.render_breadcrumbs_inherit_lspfirst(band_group)
   local ctx = M.symbol_context_smart()
   local icon = devicons.file_icon_segment_inherit(band_group)
 
-  local line = formatters.compact_breadcrumb_line(rel, ctx, breadcrumb_sep(), nil)
+  local line = formatters.compact_breadcrumb_line(rel, ctx, breadcrumb_sep(), total_maxw, overrides)
   line = formatters.stl_escape(line)
   return icon .. " " .. line
 end

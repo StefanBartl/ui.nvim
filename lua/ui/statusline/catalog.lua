@@ -247,10 +247,24 @@ return {
     used_by = {},
   },
   {
+    key = "idle_git_log",
+    summary = "The last one to three commits of the buffer's repo (short hash + subject), read once per idle phase and shown only while idle; empty outside a repo.",
+    builtin = false,
+    source = "ui.statusline.modules.idle_git_log",
+    used_by = {},
+  },
+  {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
     source = "ui.statusline.modules.lsp",
+    used_by = {},
+  },
+  {
+    key = "idle_breadcrumbs",
+    summary = "breadcrumbs, with a wider budget and no fixed path cap while the editor is idle; identical to breadcrumbs otherwise.",
+    builtin = false,
+    source = "ui.statusline.modules.idle_breadcrumbs",
     used_by = {},
   },
   {

@@ -17,6 +17,10 @@ local M = {}
 
 local is_idle_state = false
 local registered = false
+-- Counts active->idle transitions: one number per idle phase, so a payload
+-- that does real work (`idle_git_log`'s `git log`) can cache "already done
+-- for this phase" without its own CursorHold wiring.
+local phase_counter = 0
 
 ---@return nil
 local function ensure_autocmds()
@@ -30,6 +34,7 @@ local function ensure_autocmds()
   Autocmd.create({ "CursorHold", "CursorHoldI" }, function()
     if not is_idle_state then
       is_idle_state = true
+      phase_counter = phase_counter + 1
       vim.cmd("redrawstatus")
     end
   end, {
@@ -61,16 +66,28 @@ function M.is_idle()
   return is_idle_state
 end
 
+---Identity of the current (or, while active, the most recent) idle phase:
+---0 before the editor has ever gone idle, then incremented on every
+---active->idle transition. A payload compares it with the phase it last did
+---its work in to do that work once per idle phase instead of on every
+---redraw.
+---@return integer
+function M.phase()
+  ensure_autocmds()
+  return phase_counter
+end
+
 ---Wrap a segment so it renders "" until the editor has been idle, and hides
----again on the very next movement/keystroke.
----@param segment_fn fun(): string
----@return fun(): string
+---again on the very next movement/keystroke. Arguments the wrapper is
+---called with (a host's own `opts`, say) are passed through to `segment_fn`.
+---@param segment_fn fun(...): string
+---@return fun(...): string
 function M.wrap(segment_fn)
-  return function()
+  return function(...)
     if not M.is_idle() then
       return ""
     end
-    return segment_fn()
+    return segment_fn(...)
   end
 end
 

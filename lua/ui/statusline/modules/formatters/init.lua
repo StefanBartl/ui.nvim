@@ -251,11 +251,28 @@ end
 ---@param rel string
 ---@param ctx string|nil
 ---@param sep string
+---
+--- `overrides` replaces individual `ui.statusline.modules.lsp.config` fields
+--- for this one call only (the config itself is not touched, so every other
+--- caller keeps its own width logic) -- `idle_breadcrumbs` uses it to lift
+--- the path cap while the editor is idle. `path_max_chars = false` means "no
+--- fixed cap": the `path_max_frac` share of the budget applies instead, as
+--- it does when the config field is nil.
 ---@param total_maxw integer|nil
+---@param overrides? { path_max_chars?: integer|false, path_max_frac?: number, path_min_room?: integer }
 ---@return string
-function M.compact_breadcrumb_line(rel, ctx, sep, total_maxw)
+function M.compact_breadcrumb_line(rel, ctx, sep, total_maxw, overrides)
   local cfg = get_config()
   local options = cfg.get_cfg()
+  if type(overrides) == "table" then
+    for key, value in pairs(overrides) do
+      if value == false then
+        options[key] = nil
+      else
+        options[key] = value
+      end
+    end
+  end
 
   local target = total_maxw
   if not target or target <= 0 then
