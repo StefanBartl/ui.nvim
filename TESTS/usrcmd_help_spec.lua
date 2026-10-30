@@ -2,7 +2,8 @@
 
 --- `:UI` and `:Theme` are lib.nvim composer verbs: every subcommand is a route with a text for the help float,
 --- `<Tab>` completes what the hand-built `complete()` used to complete, and the handlers still get the words
---- as typed. Skipped on a lib.nvim older than `help.undocumented` (the argument texts).
+--- as typed. A lib.nvim older than `help.undocumented` (the argument texts) fails the suite by name
+--- instead of skipping it (NEW-43).
 
 local composer = require("lib.nvim.bindings.usercmd.composer")
 
@@ -24,7 +25,7 @@ end
 describe(":UI and :Theme as composer verbs", function()
   if not supported then
     it("needs a lib.nvim with argument texts", function()
-      pending("lib.nvim has no help.undocumented")
+      error("lib.nvim lacks composer.help.undocumented: update lib.nvim")
     end)
     return
   end
