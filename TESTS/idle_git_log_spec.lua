@@ -97,7 +97,8 @@ describe("ui.statusline.modules.idle_git_log", function()
     assert.equals("", mod(), "nothing to show before the read answers")
     assert.equals(1, #calls)
     assert.is_nil(calls[1].range) -- HEAD
-    assert.equals(dir, vim.fs.normalize(calls[1].opts.dir))
+    -- The module resolves the repo root through realpath (macOS: /var -> /private/var), so compare resolved paths.
+    assert.equals(vim.uv.fs_realpath(dir), vim.uv.fs_realpath(calls[1].opts.dir))
     assert.equals(3, calls[1].opts.max_count)
     assert.is_number(calls[1].opts.timeout_ms)
     assert.is_number(calls[1].opts.max_output_bytes)
