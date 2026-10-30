@@ -330,18 +330,28 @@ describe("ui.kit.chip", function()
     assert.equals(0xff0000, probe.fg, "probe picked up the group's fg")
     assert.is_number(probe.bg, "probe has an opaque, tinted bg")
 
-    chip.mount({ id = "spec_a", text = "x", color = { fg = probe.fg, bg = probe.bg } })
+    local fixed = { fg = probe.fg, bg = probe.bg }
+    chip.mount({ id = "spec_a", text = "x", color = fixed })
     assert.same(
       { fg = probe.fg, bg = probe.bg },
       { fg = normal_hl(chip_window()).fg, bg = normal_hl(chip_window()).bg },
       "fixed pair applied"
     )
 
-    -- Prove the start really is fixed: a scheme change leaves it alone.
-    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#00ff00" })
+    -- Prove the start really is fixed (themed = false). Its pixels alone
+    -- cannot show that: a complete table re-resolves to itself either way.
+    -- But mount() keeps `color` by reference and the ColorScheme handler
+    -- re-resolves only a theme-linked chip from it -- a fixed one keeps
+    -- its applied colours. So mutate the table behind the chip's back: a
+    -- fixed chip must not pick that up.
+    fixed.fg = 0x00ff00
     vim.api.nvim_exec_autocmds("ColorScheme", {})
-    assert.equals(0xff0000, normal_hl(chip_window()).fg, "fixed chip ignores ColorScheme")
-    vim.api.nvim_set_hl(0, "SpecChipThemeGroup", { fg = "#ff0000" })
+    assert.equals(
+      0xff0000,
+      normal_hl(chip_window()).fg,
+      "fixed chip is not re-resolved on ColorScheme"
+    )
+    fixed.fg = probe.fg
 
     -- Same rendered fg and bg as before, but now sourced from a highlight
     -- group instead of a literal.
