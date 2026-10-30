@@ -27,12 +27,13 @@ local M = {}
 ---@class Ui.KitPlayground.Entry
 ---@field id string               # the word for `:UI kit-playground <id>`
 ---@field label string            # the row in the playground list
----@field covers string[]         # the kit modules (file names under lib.nvim's ui/kit/) it shows
+---@field covers string[]         # the kit modules (file names under ui/kit/) it shows
 ---@field desc string[]           # preview pane text: what it shows, which keys to try
 ---@field open fun(ctx: Ui.KitPlayground.Ctx)
 
 ---The kit modules no demo shows, with the reason; `TESTS/kit_playground_spec.lua` checks that
----every other module of the kit is covered by an entry.
+---every other `ui.kit` module of ui.nvim (the re-exports under `lua/ui/kit/`) is covered by an
+---entry. Names may be modules of lib.nvim only (`hook` has no ui.nvim re-export).
 ---@type table<string, string>
 M.NOT_DEMOED = {
   hook = "test hook that answers dialogs without a window; nothing to look at",

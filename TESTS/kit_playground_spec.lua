@@ -2,9 +2,15 @@
 ---@diagnostic disable: need-check-nil, undefined-field, discard-returns
 
 --- `ui.kit_playground` (`:UI kit-playground`): every demo opens a window and its closer
---- takes every window it opened away again, without an error; every module of the kit is
---- shown by some demo (or named in `NOT_DEMOED` with a reason), so a new kit primitive
---- without a demo turns this spec red; the playground list and the `:UI` route start demos.
+--- takes every window it opened away again, without an error; every `ui.kit` module of
+--- ui.nvim (the re-exports under `lua/ui/kit/`) is shown by some demo (or named in
+--- `NOT_DEMOED` with a reason), so re-exporting a new kit primitive without a demo turns this
+--- spec red; the playground list and the `:UI` route start demos.
+---
+--- The coverage check reads ui.nvim's own re-exports, not lib.nvim's `lua/lib/nvim/ui/kit/`:
+--- CI pins lib.nvim at `ci-verified`, and a new module landing there must not turn ui.nvim red
+--- before ui.nvim re-exports it (the re-export commit brings the demo along). Covers and
+--- excuses may name a module of either repo (`hook` exists only in lib.nvim).
 
 local playground = require("ui.kit_playground")
 local api = vim.api
@@ -30,6 +36,18 @@ end
 ---@param key string
 local function press(key)
   api.nvim_feedkeys(vim.keycode(key), "mx", false)
+end
+
+---Module names (file stems) matching a runtime glob.
+---@param glob string
+---@return table<string, true> names, integer count
+local function module_names(glob)
+  local names, count = {}, 0
+  for _, file in ipairs(api.nvim_get_runtime_file(glob, true)) do
+    names[vim.fn.fnamemodify(file, ":t:r")] = true
+    count = count + 1
+  end
+  return names, count
 end
 
 describe("ui.kit_playground", function()
@@ -97,11 +115,10 @@ describe("ui.kit_playground", function()
         covered[name] = true
       end
     end
-    local files = api.nvim_get_runtime_file("lua/lib/nvim/ui/kit/*.lua", true)
-    assert.is_true(#files > 20, "kit modules found: " .. #files)
+    local names, count = module_names("lua/ui/kit/*.lua")
+    assert.is_true(count > 20, "kit modules found: " .. count)
     local missing = {}
-    for _, file in ipairs(files) do
-      local name = vim.fn.fnamemodify(file, ":t:r")
+    for name in pairs(names) do
       if not covered[name] and not playground.NOT_DEMOED[name] then
         missing[#missing + 1] = name
       end
@@ -111,9 +128,9 @@ describe("ui.kit_playground", function()
   end)
 
   it("names only real kit modules (no stale cover or excuse)", function()
-    local exists = {}
-    for _, file in ipairs(api.nvim_get_runtime_file("lua/lib/nvim/ui/kit/*.lua", true)) do
-      exists[vim.fn.fnamemodify(file, ":t:r")] = true
+    local exists = module_names("lua/ui/kit/*.lua")
+    for name in pairs(module_names("lua/lib/nvim/ui/kit/*.lua")) do
+      exists[name] = true
     end
     local stale = {}
     for _, entry in ipairs(playground.entries()) do
