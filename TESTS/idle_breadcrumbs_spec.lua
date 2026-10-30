@@ -31,16 +31,17 @@ end
 ---@param s string
 ---@return string
 local function visible(s)
-  return (s:gsub("%%#[^#]*#", ""):gsub("%%%*", ""):gsub("%%%%", "%%"))
+  return (s:gsub("%%#[^#]*#", ""):gsub("%%%*", ""):gsub("%%<", ""):gsub("%%%%", "%%"))
 end
 
 describe("ui.statusline.modules.idle_breadcrumbs", function()
-  local saved_columns
+  local saved_columns, saved_laststatus
   local cfg = require("ui.statusline.modules.lsp.config")
   local saved_cfg
 
   before_each(function()
     saved_columns = vim.o.columns
+    saved_laststatus = vim.o.laststatus
     saved_cfg = cfg.get_cfg()
     vim.o.columns = 160
     -- No debounce: every render recomputes, so nothing cached by an earlier
@@ -62,6 +63,7 @@ describe("ui.statusline.modules.idle_breadcrumbs", function()
 
   after_each(function()
     vim.o.columns = saved_columns
+    vim.o.laststatus = saved_laststatus
     cfg.update(saved_cfg)
     package.loaded[PROVIDER] = nil
     vim.g.statusline_winid = nil
@@ -125,6 +127,62 @@ describe("ui.statusline.modules.idle_breadcrumbs", function()
     assert.are_not.equals(rel .. " > fn()", capped)
     assert.equals(rel .. " > fn()", lifted)
     assert.equals(45, cfg.get("path_max_chars"), "the override is per call only")
+  end)
+
+  it("keeps the other segments of the lsp preset on screen while idle", function()
+    -- A full statusline of the shipped "lsp" preset with `breadcrumbs`
+    -- swapped for `idle_breadcrumbs`: the wider idle budget must never push
+    -- the mode chip off the left edge -- Neovim cuts an overlong line at its
+    -- `%<` item (or at the very start without one).
+    vim.o.laststatus = 3
+    local ui_cfg = require("ui.config")
+    local render = require("ui.statusline.render")
+    local saved_variant = ui_cfg.STATUSLINE_VARIANT
+    ui_cfg.STATUSLINE_VARIANT = "lsp"
+    local ok_setup, assembled = pcall(ui_cfg.setup)
+    ui_cfg.STATUSLINE_VARIANT = saved_variant
+    assert.is_true(ok_setup, tostring(assembled))
+    local stl = assembled.ui.statusline
+    local mod = fresh_module()
+    ---@type table|nil
+    local opts = nil
+    stl.modules.breadcrumbs = function()
+      return mod(opts)
+    end
+
+    local function shown()
+      local s = render.generate(stl)
+      return vim.api.nvim_eval_statusline(s, { maxwidth = 160 }).str
+    end
+    local active = shown()
+    assert.is_truthy(active:find("NORMAL", 1, true), active)
+
+    fire("CursorHold")
+    -- The default share, and the widest one a host may configure: even a
+    -- breadcrumb as wide as the whole screen leaves the mode chip alone.
+    for _, o in ipairs({ false, { idle_width_frac = 1 } }) do
+      opts = o or nil
+      local idle_line = shown()
+      assert.is_truthy(idle_line:find("NORMAL", 1, true), idle_line)
+      -- Still the idle payload: the full symbol chain is on screen.
+      assert.is_truthy(idle_line:find("handle_request()", 1, true), idle_line)
+    end
+  end)
+
+  it("measures the idle share against the window's width without a global statusline", function()
+    vim.o.laststatus = 2
+    vim.cmd("vsplit")
+    local win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_width(win, 80)
+    vim.g.statusline_winid = win
+    local mod = fresh_module()
+    fire("CursorHold")
+    local ok, out = pcall(mod, { idle_width_frac = 1 })
+    vim.cmd("close")
+    assert.is_true(ok, tostring(out))
+    -- 80 = the window's width, and also the active budget (half of the 160
+    -- `columns`): `columns` would have allowed all 160.
+    assert.is_true(vim.fn.strdisplaywidth(visible(out)) <= 80, visible(out))
   end)
 
   it("never gets narrower than the active budget, whatever idle_width_frac says", function()

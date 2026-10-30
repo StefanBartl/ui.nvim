@@ -237,9 +237,12 @@ without their own `CursorHold` wiring:
   cleaned of control and invisible characters before they are shown.
 - `idle_breadcrumbs` — a drop-in replacement for `breadcrumbs` that renders
   the same thing while active and, while idle, gets a wider budget
-  (`opts.idle_width_frac` of `columns`, default 0.80, never narrower than the
-  active budget) and no fixed path cap (`path_max_chars`), so a long path
-  and a deep symbol chain are cut less. The widening is a per-call override:
+  (`opts.idle_width_frac` of the statusline's width -- `columns` with
+  `laststatus=3`, the window's width otherwise --, default 0.65, never
+  narrower than the active budget) and no fixed path cap (`path_max_chars`),
+  so a long path and a deep symbol chain are cut less. While idle it starts
+  with `%<`: a line that gets too long is cut at the start of the breadcrumb,
+  so the mode chip and the other segments before it stay visible. The widening is a per-call override:
   the shared `ui.statusline.modules.lsp.config` and every other segment's
   width logic are untouched. The chain's content stays `my.nvim`'s (see
   [below](#who-owns-the-breadcrumbs-symbol-context)).
