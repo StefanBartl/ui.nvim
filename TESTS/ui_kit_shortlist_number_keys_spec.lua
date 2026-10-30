@@ -71,7 +71,14 @@ describe("ui.kit.shortlist: number_keys", function()
           surface:set_lines({ item })
         end,
         on_submit = function(item, idx)
-          submitted[#submitted + 1] = { item = item, idx = idx }
+          -- The state at call time: the popup must be gone before the handler
+          -- runs, so a handler that `:edit`s a file does not land it in a float.
+          submitted[#submitted + 1] = {
+            item = item,
+            idx = idx,
+            list_open = h.results:is_valid(),
+            win = vim.api.nvim_get_current_win(),
+          }
         end,
       }, extra or {})),
       "shortlist opens"
@@ -101,10 +108,13 @@ describe("ui.kit.shortlist: number_keys", function()
   it("`3` submits the third entry like <CR> does, and closes the popup", function()
     open({ number_keys = true })
     local results, preview = h.results, h.preview
+    local list_win = results.winid
     press("3")
     assert.equals(1, #submitted, "on_submit ran once")
     assert.equals("item3", submitted[1].item)
     assert.equals(3, submitted[1].idx)
+    assert.is_false(submitted[1].list_open, "the popup closed before on_submit")
+    assert.are_not.equal(list_win, submitted[1].win, "on_submit does not run in the list")
     assert.is_false(results:is_valid(), "the list closed")
     assert.is_false(preview:is_valid(), "the preview closed with it")
   end)
@@ -142,17 +152,33 @@ describe("ui.kit.shortlist: number_keys", function()
     assert.is_nil(footer_text(h.results.winid):find("1-", 1, true), "no digit hint")
   end)
 
+  it("only `true` or a table turns it on; a string or a number does not", function()
+    for _, given in ipairs({ "yes", 1 }) do
+      open({ number_keys = given })
+      assert.is_false(
+        has_map(h.results.bufnr, "1"),
+        ("no `1` map for %s"):format(vim.inspect(given))
+      )
+      assert.same({ "item1", "item2", "item3", "item4" }, list_lines())
+      h.close()
+    end
+  end)
+
   it("{ label = false } binds the keys, format_item (given idx) draws the digit", function()
     local seen = {}
+    local budget = {}
     open({
       number_keys = { label = false },
-      format_item = function(item, _width, idx)
+      format_item = function(item, width, idx)
         seen[#seen + 1] = idx
+        budget[#budget + 1] = width
         return ("[%d] %s"):format(idx, item)
       end,
     })
     assert.same({ "[1] item1", "[2] item2", "[3] item3", "[4] item4" }, list_lines())
     assert.same({ 1, 2, 3, 4 }, seen)
+    local slot = vim.api.nvim_win_get_width(h.results.winid)
+    assert.equals(slot, budget[1], "no label drawn, so format_item gets the whole slot")
     press("2")
     assert.equals("item2", submitted[1].item)
     assert.equals(2, submitted[1].idx)
@@ -161,6 +187,13 @@ describe("ui.kit.shortlist: number_keys", function()
   it("the list footer names the digit keys", function()
     open({ number_keys = true })
     assert.is_truthy(footer_text(h.results.winid):find("1-4 open", 1, true))
+  end)
+
+  it("a single entry's footer names just `1`, not a range", function()
+    open({ number_keys = true }, 1)
+    local footer = footer_text(h.results.winid)
+    assert.is_truthy(footer:find("1 open", 1, true), footer)
+    assert.is_nil(footer:find("1-", 1, true), footer)
   end)
 
   it("a resize re-formats with the label kept", function()
