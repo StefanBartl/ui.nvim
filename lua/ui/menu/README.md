@@ -181,8 +181,9 @@ runs the menu has closed and Visual mode is over, so asking then always answered
 
 `require("ui.menu")`: `setup(opts)`, `items(buf?)` (the item list),
 `open({ buf?, mouse? })`, `on_right_click()` (the handler, for your own binding),
-`register_contributor(spec)`, `add(entry)`, `warm()`, `config()`.
+`register_contributor(spec)`, `add(entry)`, `warm()`, `config()`,
+`issues()` (what the last `setup()` ignored).
 
-Files: `config.lua` (defaults), `contributors.lua` (sister plugins + your rows),
+Files: `config.lua` (defaults and the config store), `contributors.lua` (sister plugins + your rows),
 `sections.lua` (the general sections), `selection.lua`, `icons.lua`.
 Tested in [`TESTS/menu_spec.lua`](../../../TESTS/menu_spec.lua).
