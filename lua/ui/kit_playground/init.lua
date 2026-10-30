@@ -38,6 +38,7 @@ local M = {}
 M.NOT_DEMOED = {
   hook = "test hook that answers dialogs without a window; nothing to look at",
   config = "the static default preset name, read by theme",
+  sidebar_state = "kit.sidebar's internal slot and registry state; shown through the sidebar demo",
 }
 
 ---@return table
@@ -890,6 +891,73 @@ local ENTRIES = {
         },
       })
       ctx.track(closer_of(surf))
+    end,
+  },
+  {
+    id = "create-on-missing",
+    label = "Create on missing (path dialog)",
+    covers = { "create_on_missing", "confirm" },
+    desc = {
+      "kit.create_on_missing: the dialog for a path that does not exist.",
+      "Create makes the file under a fresh temp directory (with its missing",
+      "parents) without opening it; Open in filetree only reports the directory.",
+    },
+    open = function(ctx)
+      local path = vim.fn.tempname() .. "/kit-playground/notes/new_file.md"
+      local surf = kit().create_on_missing({
+        path = path,
+        open = false,
+        filetree = function(dir)
+          report("kit.create_on_missing reveal", dir)
+          return true
+        end,
+        on_done = function(result)
+          report("kit.create_on_missing", result)
+        end,
+      })
+      ctx.track(closer_of(surf))
+    end,
+  },
+  {
+    id = "sidebar",
+    label = "Sidebar (themed split panel)",
+    covers = { "sidebar" },
+    desc = {
+      "kit.sidebar: a split instead of a float, in a new tab here: a left panel",
+      "and a bottom panel, themed through winhighlight, a winbar title each.",
+      "A second left sidebar would hide the first and bring it back on close.",
+    },
+    open = function(ctx)
+      vim.cmd.tabnew()
+      local tab = api.nvim_get_current_tabpage()
+      local sidebar = kit().sidebar
+      local left = sidebar.open({
+        name = "ui_kit_playground_left",
+        position = "left",
+        size = 28,
+        title = "Tests",
+        lines = { " ok   a_spec.lua", " FAIL b_spec.lua", " ok   c_spec.lua" },
+        enter = false,
+      })
+      local bottom = sidebar.open({
+        name = "ui_kit_playground_bottom",
+        position = "bottom",
+        size = 6,
+        title = "Output",
+        lines = { "b_spec.lua:12: expected 1, got 2" },
+        enter = false,
+      })
+      ctx.track(function()
+        -- is_valid() is is_visible() for a sidebar: close a hidden one for good too
+        for _, h in ipairs({ bottom, left }) do
+          if h and not h:is_closed() then
+            pcall(h.close, h)
+          end
+        end
+        if api.nvim_tabpage_is_valid(tab) and #api.nvim_list_tabpages() > 1 then
+          pcall(vim.cmd.tabclose, api.nvim_tabpage_get_number(tab))
+        end
+      end)
     end,
   },
   {
