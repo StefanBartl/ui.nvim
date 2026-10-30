@@ -226,6 +226,34 @@ describe("ui.health", function()
     assert.equals("minimal", cfg.get_variant())
   end)
 
+  -- "Module options" asks only the modules this session already loaded: a
+  -- module that was never required has had no setup() to report on, and
+  -- requiring it from a health check would change the session it describes.
+  it("asks only loaded modules for their options and loads none itself", function()
+    local modules = require("ui.util.config").MODULES
+    for _, name in ipairs(modules) do
+      assert.is_nil(
+        package.loaded[name],
+        name .. " is loaded before the check: the case proves nothing"
+      )
+    end
+
+    local calls = capture()
+
+    for _, name in ipairs(modules) do
+      assert.is_nil(package.loaded[name], name .. " was loaded by :checkhealth ui")
+    end
+    local section, said = false, false
+    for _, c in ipairs(calls) do
+      if c.level == "start" then
+        section = c.msg == "Module options"
+      elseif section and c.level == "info" and c.msg:find("is loaded", 1, true) then
+        said = true
+      end
+    end
+    assert.is_true(said, "no 'none of ... is loaded' line under Module options")
+  end)
+
   describe("the Context section", function()
     local context = require("ui.context")
 
