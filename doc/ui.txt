@@ -210,6 +210,15 @@ the long form of each row.
 :UI kit-presets
     List the registered kit presets, marking the active one.
 
+                                                        *:UI-kit-playground*
+:UI kit-playground [{demo}]
+    Open the kit playground: a list of demos, one per `ui.kit` primitive
+    (popups, dialogs, lists, chips, toasts, history, progress and the
+    `:KitPreview` editor). The preview pane says what the highlighted demo
+    shows and which keys to try; <CR> or 1-9 start one, and a dialog's
+    answer is shown in a toast. With {demo} (completes over the ids),
+    start that demo directly. Demo code only: no global setting changes.
+
                                                                *:UI-modules*
 :UI modules
     List every catalogued statusline segment (built into the "default"

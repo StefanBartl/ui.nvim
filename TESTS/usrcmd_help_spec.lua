@@ -52,7 +52,7 @@ describe(":UI and :Theme as composer verbs", function()
     assert.are.equal("", table.concat(missing, ", "))
   end)
 
-  it("gives every subcommand a route (the old registry's 24 names)", function()
+  it("gives every subcommand a route (the old registry's 24 names, plus kit-playground)", function()
     local names = {}
     for _, route in ipairs(composer.registry().UI:spec().routes) do
       names[#names + 1] = route.path[1]
@@ -63,6 +63,7 @@ describe(":UI and :Theme as composer verbs", function()
       "context",
       "help",
       "keys",
+      "kit-playground",
       "kit-preset",
       "kit-presets",
       "modules",

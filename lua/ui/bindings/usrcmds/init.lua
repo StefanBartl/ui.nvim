@@ -763,6 +763,23 @@ local function ui_kit_presets(_args)
   notify.info(table.concat(lines, "\n"))
 end
 
+---Handle kit-playground command: without an id, open the playground list
+---(`ui.kit_playground`), a demo of every `ui.kit` primitive; with one, start
+---that demo directly.
+---@param args string[]
+local function ui_kit_playground(args)
+  local playground = require("ui.kit_playground")
+  local id = args[2]
+  if not id or id == "" then
+    playground.open()
+    return
+  end
+  local _, err = playground.run(id)
+  if err then
+    notify.error(err)
+  end
+end
+
 ---Open the visual theme picker
 ---@param _args string[] # Unused: this subcommand takes no argument
 local function ui_picker(_args)
@@ -994,6 +1011,9 @@ local function register_types()
   list_type("UI_KIT_PRESET", "Name of a popup/toast preset", function()
     return require("ui.kit.theme").presets()
   end)
+  list_type("UI_KIT_DEMO", "Id of a kit playground demo", function()
+    return require("ui.kit_playground").ids()
+  end)
 
   -- `:UI slots` takes a subcommand or a slot number, then slot numbers.
   composer.register_type("UI_SLOT_WORD", {
@@ -1180,6 +1200,9 @@ ROUTES = {
     args = { { name = "name", type = "UI_KIT_PRESET", optional = true } },
   }),
   route("kit-presets", ui_kit_presets, "List all popup/toast presets"),
+  route("kit-playground", ui_kit_playground, "Try every ui.kit popup, one demo each", {
+    args = { { name = "demo", type = "UI_KIT_DEMO", optional = true } },
+  }),
   route("picker", ui_picker, "Open the visual theme picker with live preview"),
   route("modules", ui_modules, "List the available statusline segments"),
   route("progress", ui_progress, "Show what is running now"),

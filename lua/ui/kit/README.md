@@ -8,7 +8,8 @@
 > prefix rename, source and tests, into this plugin). The extended user guide
 > and the per-component `docs/EXAMPLES/kit-*.lua` files that used to sit
 > alongside this in `lib.nvim` were not ported yet — for now, `:KitPreview`
-> (a live theme playground) and this README are what ships here.
+> (a live theme playground), `:UI kit-playground` (one interactive demo per
+> primitive, `lua/ui/kit_playground/init.lua`) and this README are what ships here.
 
 A themed, composable UI toolkit. Pick a preset once and every popup is visually
 coordinated, or override colors/borders per call. Built in layers on top of
