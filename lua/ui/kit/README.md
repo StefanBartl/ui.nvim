@@ -227,8 +227,9 @@ fixed only when it is complete (`{ fg, bg }`) on an opaque shape: a missing
 transparent shape (`classic`, old name `text`, which always uses the window
 background) reads part of its colour from the scheme, so such a chip re-tints
 on `ColorScheme` just like a group colour. A fixed chip keeps its pixels across
-a scheme change (they are re-applied after `:hi clear`). A floating window belongs to the tabpage it was opened
-on, so a chip re-opens itself on `TabEnter` to follow the user across tabs.
+a scheme change (they are re-applied after `:hi clear`). A floating window
+belongs to the tabpage it was opened on, so a chip re-opens itself on
+`TabEnter` to follow the user across tabs.
 
 ## Layout engine (Phase 3, partial)
 
