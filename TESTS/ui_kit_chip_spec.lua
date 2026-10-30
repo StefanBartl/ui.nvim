@@ -341,6 +341,32 @@ describe("ui.kit.chip", function()
     )
   end)
 
+  it("a function colour is re-evaluated on ColorScheme without any other event", function()
+    -- Regression: the ColorScheme handler only re-tinted chips whose last
+    -- resolved colour was `themed`, and a function returning an explicit
+    -- {fg,bg} table resolves to themed = false -- so such a chip (e.g. a
+    -- session chip following the statusline's mode colour) kept the old
+    -- scheme's colours until the next mode change or refresh().
+    local current = "#111111"
+    chip.mount({
+      id = "spec_a",
+      text = "x",
+      color = function()
+        return { fg = current, bg = "#000000" }
+      end,
+    })
+    assert.equals(0x111111, normal_hl(chip_window()).fg, "function colour applied")
+
+    current = "#222222"
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+
+    assert.equals(
+      0x222222,
+      normal_hl(chip_window()).fg,
+      "the function was called again on ColorScheme"
+    )
+  end)
+
   it("a highlight-group colour resolves that group's fg, not a literal", function()
     vim.api.nvim_set_hl(0, "SpecChipTestGroup", { fg = "#123456" })
     chip.mount({ id = "spec_a", text = "x", color = "SpecChipTestGroup" })
