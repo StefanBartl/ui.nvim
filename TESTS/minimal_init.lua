@@ -2,8 +2,8 @@
 --
 --   nvim -n -i NONE --headless -u TESTS/minimal_init.lua ...
 --
--- Besides the runtimepath it sets up the suite's shared state (no swap/shada, an in-memory
--- clipboard). It runs no spec itself. A dependency that cannot be found is FATAL (NEW-40): the message names
+-- Besides the runtimepath it sets up the suite's shared state (no swap/shada; the in-memory
+-- clipboard comes from testing.nvim). It runs no spec itself. A dependency that cannot be found is FATAL (NEW-40): the message names
 -- all four places that were searched and the process exits with code 1, so that a run which could
 -- not load its dependency never looks green. Each dependency <name> is looked up in, in this order:
 --   1. $<NAME>_DIR                  (lib.nvim -> $LIB_NVIM_DIR)
@@ -88,43 +88,8 @@ end
 vim.o.swapfile = false
 vim.o.shadafile = "NONE"
 
---- A fake, in-memory `+`/`*` clipboard provider for the whole suite.
----
---- Without one, Neovim's own documented behaviour (`:h clipboard-provider`)
---- is that the clipboard registers "cannot be read or written, and their
---- contents will always be empty" -- `setreg("+", ...)` is a silent no-op
---- and `getreg("+")` always returns "". GitHub Actions' ubuntu-latest
---- runners have no clipboard tool at all (no xclip/xsel/wl-clipboard, no X
---- or Wayland session), so any spec asserting on `getreg("+")` after a
---- `setreg`/`:y+` (ui.menu's "Copy Marked", "Copy All") failed there and
---- only there -- windows-latest/macos-latest have `clip.exe`/`pbcopy`
---- built in, which is why the same specs passed on those two runners.
----
---- This isn't only a CI fix: without it, running these specs on a real dev
---- machine reads/writes that machine's actual system clipboard, which is
---- both undesirable test isolation and liable to behave differently
---- depending on whatever happens to be on it at the time. `vim.g.clipboard`
---- as a table of Funcrefs is exactly the extension point `:h g:clipboard`
---- documents for this.
-local fake_clipboard = { ["+"] = {}, ["*"] = {} }
-vim.g.clipboard = {
-  name = "fake-test-clipboard",
-  copy = {
-    ["+"] = function(lines)
-      fake_clipboard["+"] = lines
-    end,
-    ["*"] = function(lines)
-      fake_clipboard["*"] = lines
-    end,
-  },
-  paste = {
-    ["+"] = function()
-      return fake_clipboard["+"]
-    end,
-    ["*"] = function()
-      return fake_clipboard["*"]
-    end,
-  },
-}
+-- No clipboard provider here: testing.nvim installs an in-memory `+`/`*` (`testing.child.clipboard`)
+-- before this file runs, so ui.menu's "Copy Marked"/"Copy All" specs read `getreg("+")` back on a bare
+-- ubuntu runner too (no clipboard tool there) and never touch the developer's clipboard.
 
 return { root = root, deps = found }

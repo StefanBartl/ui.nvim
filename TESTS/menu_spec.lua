@@ -149,6 +149,10 @@ describe("ui.menu", function()
       return items
     end
 
+    it("writes + into testing.nvim's in-memory clipboard, never the system one", function()
+      assert.equals("testing-fake-clipboard", vim.g.clipboard and vim.g.clipboard.name)
+    end)
+
     it("copies the selection made before the menu opened", function()
       local items = built_in_visual({ 1, 7 }, { 2, 3 })
       find(items, "Copy Marked").cmd()
