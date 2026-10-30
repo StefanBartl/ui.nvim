@@ -54,8 +54,14 @@ describe("ui.kit.create_on_missing", function()
     local res = run(target, com.CREATE)
     assert.equals("created", res.action)
     assert.equals("file", res.kind)
+    assert.equals(target, res.path)
     assert.equals(1, vim.fn.filereadable(target))
-    assert.equals(target, vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
+    -- by the file it shows: Neovim may name a buffer opened through a symlinked directory (macOS'
+    -- /var -> /private/var) by its real path
+    local function real(p)
+      return vim.fs.normalize(vim.uv.fs_realpath(p) or p)
+    end
+    assert.equals(real(target), real(vim.api.nvim_buf_get_name(0)))
     vim.cmd("enew!")
   end)
 
@@ -70,15 +76,17 @@ describe("ui.kit.create_on_missing", function()
     run(root .. "/x/y.lua", com.CANCEL)
     assert.same({ com.CREATE, com.CANCEL }, seen[1].choices)
 
-    local revealed
+    local shown
     package.loaded["filetree"] = {
       is_initialized = function()
         return true
       end,
       adapter = function()
         return {
+          -- like filetree.nvim's oil / mini.files / netrw backends: reveal a file and show the
+          -- directory fnamemodify(p, ":h") names
           open_reveal = function(p)
-            revealed = p
+            shown = vim.fs.normalize(vim.fn.fnamemodify(p, ":h"))
             return true
           end,
         }
@@ -87,7 +95,7 @@ describe("ui.kit.create_on_missing", function()
     local res = run(root .. "/x/y.lua", com.FILETREE)
     assert.same({ com.CREATE, com.FILETREE, com.CANCEL }, seen[1].choices)
     assert.equals("filetree", res.action)
-    assert.equals(root, revealed)
+    assert.equals(root, shown)
     assert.equals(0, vim.fn.isdirectory(root .. "/x"))
   end)
 end)
