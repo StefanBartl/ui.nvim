@@ -207,10 +207,11 @@ describe("ui.menu setup()", function()
   end)
 
   it("copies the user's tables instead of holding them", function()
-    local hints = { save = "<C-s>" }
-    menu.setup({ mouse = false, key = false, prewarm = false, hints = hints })
-    hints.save = "changed"
-    assert.equals("<C-s>", menu.config().hints.save)
+    -- `integrations` defaults to `true`, so the old `vim.tbl_deep_extend` took the user's table by reference
+    local integ = { lsp = false }
+    menu.setup({ mouse = false, key = false, prewarm = false, integrations = integ })
+    integ.lsp = true
+    assert.is_false(menu.config().integrations.lsp)
   end)
 
   it("takes integrations as a boolean or a per-name table", function()
