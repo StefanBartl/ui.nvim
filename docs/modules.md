@@ -232,7 +232,7 @@ without their own `CursorHold` wiring:
   that phase and repaints the statusline once when it answers; the first
   idle redraw therefore renders empty. A buffer outside any repo (no `.git`
   upwards) renders empty without starting git. Options:
-  `opts.max_count` (1..3, default 3) and `opts.subject_width` (columns per
+  `opts.max_count` (1..3, default 3) and `opts.subject_width` (display columns per
   subject, default 32; longer subjects end in `…`). Commit subjects are
   cleaned of control and invisible characters before they are shown.
 - `idle_breadcrumbs` — a drop-in replacement for `breadcrumbs` that renders

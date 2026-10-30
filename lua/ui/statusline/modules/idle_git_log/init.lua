@@ -18,6 +18,7 @@ local git = require("lib.nvim.git")
 local idle = require("ui.statusline.utils.idle")
 local primitives = require("ui.statusline.utils.primitives")
 local safe = require("lib.lua.strings.safe")
+local width = require("lib.lua.strings.width")
 
 -- The upper bound the idea names ("letzte ein bis drei Commits"): more would
 -- crowd every other segment out of a statusline.
@@ -152,12 +153,14 @@ local function format(entry, max_count, subject_width)
   for i = 1, math.min(max_count, #entry.lines) do
     local line = entry.lines[i]
     -- Commit text is foreign: `safe.clean` strips escape sequences and
-    -- invisible characters and cuts to `subject_width`; `%` would otherwise
-    -- be read as a statusline item.
+    -- invisible characters; `width.truncate` then cuts to `subject_width`
+    -- display columns, "…" included (a character count would let a subject
+    -- of wide characters take twice the room); `%` would otherwise be read
+    -- as a statusline item.
     -- A cut right after a word would leave "First …"; keep the ellipsis on
     -- the word.
-    local subject =
-      safe.clean(line.subject, subject_width):gsub("%s+…$", "…"):gsub("%%", "%%%%")
+    local cut = width.truncate(safe.clean(line.subject), subject_width, { ellipsis = "…" })
+    local subject = cut:gsub("%s+…$", "…"):gsub("%%", "%%%%")
     parts[#parts + 1] = line.sha .. " " .. subject
   end
   if #parts == 0 then
