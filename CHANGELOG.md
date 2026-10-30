@@ -9,7 +9,7 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 - The kit lives only in lib.nvim: every `ui.kit.*` module is a re-export of `lib.nvim.ui.kit.*` (same table, one theme state). `scripts/mirror_kit.lua` and the kit drift spec are gone; `kit.keys` (viewer keys), the status tokens and the viewer hook moved to lib.nvim. Specs that stub a kit module through `package.loaded` use the lib.nvim name.
 
-- `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`, `ui.windowpicker` and `ui.zen` keep their options in a `lib.lua.config.new` store (`ui.util.config`): an unknown key gets a did-you-mean warning and a value of the wrong type (or out of range) falls back to its default instead of being taken as is; each module has `issues()`, and `:checkhealth ui` lists them under "Module options". `ui.notify` takes level names (`min_level = "warn"`, `timeouts = { error = 8000 }`).
+- `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`, `ui.vim_ui` (`enable()`), `ui.windowpicker` and `ui.zen` keep their options in a `lib.lua.config.new` store (`ui.util.config`): an unknown key gets a did-you-mean warning and a value of the wrong type (or out of range) falls back to its default instead of being taken as is; each module has `issues()`, and `:checkhealth ui` lists them under "Module options". `ui.notify` takes level names (`min_level = "warn"`, `timeouts = { error = 8000 }`).
 
 ### Fixed
 

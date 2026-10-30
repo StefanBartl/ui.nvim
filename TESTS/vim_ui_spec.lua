@@ -98,12 +98,52 @@ describe("ui.vim_ui", function()
         select = "yes",
       })
       vim.notify = real_notify
-      assert.equals(4, #warned)
+      assert.is_true(#warned >= 1)
+      assert.equals(4, #vim_ui.issues())
       local cfg = vim_ui.config()
       assert.equals(4, cfg.buttons_max)
       assert.is_nil(cfg.fallback_select)
       assert.same({}, cfg.passthrough_kinds)
       assert.is_true(cfg.select)
+    end)
+
+    it("reports a misspelt option with a did-you-mean hint and keeps the default", function()
+      local warned = {}
+      local real_notify = vim.notify
+      vim.notify = function(msg)
+        warned[#warned + 1] = tostring(msg)
+      end
+      vim_ui.enable({ buttons_mx = 2, chooser_max = 3 })
+      vim.notify = real_notify
+      local cfg = vim_ui.config()
+      assert.equals(4, cfg.buttons_max)
+      assert.equals(3, cfg.chooser_max)
+      local issues = table.concat(vim_ui.issues(), "\n")
+      assert.truthy(issues:find("did you mean 'buttons_max'", 1, true), issues)
+      assert.truthy(table.concat(warned, "\n"):find("[ui.vim_ui]", 1, true))
+    end)
+
+    it("rejects a count with a fraction and keeps the default", function()
+      local real_notify = vim.notify
+      vim.notify = function() end
+      vim_ui.enable({ buttons_max = 2.5, chooser_max = -1 })
+      vim.notify = real_notify
+      local cfg = vim_ui.config()
+      assert.equals(4, cfg.buttons_max)
+      assert.equals(12, cfg.chooser_max)
+      local issues = table.concat(vim_ui.issues(), "\n")
+      assert.truthy(issues:find("buttons_max", 1, true), issues)
+      assert.truthy(issues:find("chooser_max", 1, true), issues)
+    end)
+
+    it("starts from the defaults on every call and accepts a fallback function", function()
+      local fb = function() end
+      vim_ui.enable({ buttons_max = 2, fallback_select = fb })
+      assert.equals(fb, vim_ui.config().fallback_select)
+      assert.same({}, vim_ui.issues())
+      vim_ui.enable({ chooser_max = 5 })
+      assert.equals(4, vim_ui.config().buttons_max)
+      assert.is_nil(vim_ui.config().fallback_select)
     end)
   end)
 

@@ -276,7 +276,7 @@ A level can also be named (`min_level = "warn"`, `timeouts = { error = 8000 }`);
 `:UI notify off` puts the previous handler back.
 
 The module `setup()`s of `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`,
-`ui.windowpicker` and `ui.zen` share one rule: every call starts from the
+`ui.windowpicker` and `ui.zen` (and `ui.vim_ui.enable()`) share one rule: every call starts from the
 shipped defaults (an option an earlier call set and a later one leaves out is
 back at its default), the tables you pass are copied, and an unknown key or a
 value of the wrong type is warned about once and ignored. `:checkhealth ui`

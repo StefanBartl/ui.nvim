@@ -197,7 +197,7 @@ kind `mark`) are listed under "Optional integrations".
 ## Module options
 
 The options of `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`,
-`ui.windowpicker` and `ui.zen` go through one config store
+`ui.vim_ui` (its `enable()`), `ui.windowpicker` and `ui.zen` go through one config store
 (`lib.lua.config.new`, via `ui.util.config`): every `setup()` starts from the
 shipped defaults, and an unknown key or a value of the wrong type (or out of
 range) is left out, so its default applies. It is reported once as a warning

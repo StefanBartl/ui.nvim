@@ -18,6 +18,7 @@ M.MODULES = {
   "ui.keys",
   "ui.menu",
   "ui.notify",
+  "ui.vim_ui",
   "ui.windowpicker",
   "ui.zen",
 }

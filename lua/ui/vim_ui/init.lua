@@ -35,12 +35,51 @@ local DEFAULTS = {
   input = true,
   buttons_max = 4,
   chooser_max = 12,
-  fallback_select = nil,
   passthrough_kinds = {},
+  -- `fallback_select` has no default (the `vim.ui.select` found when this was switched on): see `optional` below
 }
 
+---The options in force: DEFAULTS plus what the last `enable()` was given, kept current by the store's
+---`on_change`. Read it, never write to it.
 ---@type Ui.VimUi.Opts
-local cfg = vim.deepcopy(DEFAULTS)
+local cfg
+
+---@internal
+---`buttons_max`/`chooser_max` are counts: a number with a fraction is reported and dropped here, before the
+---check (which covers the type and `>= 0`), so the default applies.
+---@param opts table  a private copy of the options
+---@param issues string[]
+---@return table
+local function normalize(opts, issues)
+  for _, key in ipairs({ "buttons_max", "chooser_max" }) do
+    local v = opts[key]
+    if type(v) == "number" and v ~= math.floor(v) then
+      issues[#issues + 1] = ("option '%s': %s is not a whole number -- using the default"):format(
+        key,
+        tostring(v)
+      )
+      opts[key] = nil
+    end
+  end
+  return opts
+end
+
+---The config store: every `enable(opts)` starts from a fresh copy of DEFAULTS, like a `setup()` (options of an
+---earlier call do not stay). An unknown key or a value of the wrong type or out of range is reported once and
+---left out, so its default applies (`M.issues()`).
+local store = require("ui.util.config").new("ui.vim_ui", DEFAULTS, {
+  schema = {
+    buttons_max = { "number", min = 0 },
+    chooser_max = { "number", min = 0 },
+    passthrough_kinds = { "table", of = "string" },
+  },
+  optional = { fallback_select = "function" },
+  normalize = normalize,
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 local enabled = false
 
@@ -50,54 +89,6 @@ local previous = {}
 
 --- The runtime's own functions, for a fallback that has nothing else (never ours: that would loop).
 local native = { select = vim.ui.select, input = vim.ui.input }
-
-local function warn(msg)
-  vim.notify("[ui.vim_ui] " .. msg, vim.log.levels.WARN)
-end
-
----@param opts table|nil
----@return Ui.VimUi.Opts
-local function normalize(opts)
-  -- every `enable(opts)` starts from the defaults, like a `setup()`: options of an earlier call do not stay
-  local out = vim.deepcopy(DEFAULTS)
-  if type(opts) ~= "table" then
-    return out
-  end
-  for _, key in ipairs({ "select", "input" }) do
-    if opts[key] ~= nil then
-      if type(opts[key]) == "boolean" then
-        out[key] = opts[key]
-      else
-        warn(("%s must be true or false, ignored"):format(key))
-      end
-    end
-  end
-  for _, key in ipairs({ "buttons_max", "chooser_max" }) do
-    local v = opts[key]
-    if v ~= nil then
-      if type(v) == "number" and v >= 0 and v == math.floor(v) then
-        out[key] = v
-      else
-        warn(("%s must be a whole number >= 0, ignored"):format(key))
-      end
-    end
-  end
-  if opts.fallback_select ~= nil then
-    if type(opts.fallback_select) == "function" then
-      out.fallback_select = opts.fallback_select
-    else
-      warn("fallback_select must be a function, ignored")
-    end
-  end
-  if opts.passthrough_kinds ~= nil then
-    if type(opts.passthrough_kinds) == "table" then
-      out.passthrough_kinds = vim.deepcopy(opts.passthrough_kinds)
-    else
-      warn("passthrough_kinds must be a list of strings, ignored")
-    end
-  end
-  return out
-end
 
 ---@return function
 local function fallback_select()
@@ -310,12 +301,20 @@ local function apply()
   end
 end
 
---- Switch the provider on (again, with other options).
+--- Switch the provider on (again, with other options). Every call starts from the defaults; an unknown key or
+--- a value of the wrong type is reported once and ignored (`M.issues()`).
 ---@param opts? Ui.VimUi.Opts
 function M.enable(opts)
-  cfg = normalize(opts)
+  store.setup(type(opts) == "table" and opts or nil)
   enabled = true
   apply()
+end
+
+--- What the last `enable()` ignored (unknown keys, values of the wrong type or out of range), one line each;
+--- empty when everything was accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 --- Put the previous `vim.ui.select` / `vim.ui.input` back. A function that somebody installed on top of ours

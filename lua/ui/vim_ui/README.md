@@ -22,6 +22,11 @@ require("ui.vim_ui").enable({
 `require("ui.vim_ui").disable()` (or `ui.setup({ vim_ui = false })`) puts the previous functions back. A function
 somebody wrapped on top of ours stays where it is.
 
+Every `enable(opts)` starts from these defaults (options of an earlier call do not stay). An unknown key (with a
+did-you-mean hint) or a value of the wrong type or out of range (`buttons_max`/`chooser_max` are whole numbers
+`>= 0`) is warned about once and ignored, so its default applies; `require("ui.vim_ui").issues()` and
+`:checkhealth ui` ("Module options") list what the last call ignored.
+
 ## What it does
 
 - **`vim.ui.select`**
