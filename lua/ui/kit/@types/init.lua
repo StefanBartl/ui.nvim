@@ -391,6 +391,7 @@
 ---@field layout Ui.Kit.LayoutModule
 ---@field chooser Ui.Kit.ChooserModule  # low-level escape hatch behind kit.select -- see its own doc comment
 ---@field chip Ui.Kit.ChipModule  # persistent editor-corner status chip (mount/refresh/pulse/unmount)
+---@field history Ui.Kit.HistoryModule  # back/forward trail of positions with a CLEAR sentinel (pure data, no UI)
 
 --- `ui.kit.buttons`: the row layout, focus highlight and mouse hit-test that
 --- `kit.confirm` and the button row of `kit.input`/`kit.form` share. Stateless.
@@ -448,6 +449,36 @@
 ---@field setup fun(opts?: Ui.Kit.SetupOpts)
 ---@field presets fun(): string[]
 ---@field default fun(): string  # name of the currently active default preset
+
+--- Options for `kit.history.new`.
+---@class Ui.Kit.HistoryOpts
+---@field state table       # the consumer's state; its `keys` as they are now become the first entry
+---@field keys string[]     # the fields of `state` an entry holds (shallow copies)
+---@field max? integer      # keep at most this many entries; the oldest goes first (default: unbounded)
+---@field dedupe? boolean   # a move that changes none of `keys` makes no stop (default true)
+
+--- `kit.history` (`lib.nvim.ui.kit.history`): the module.
+---@class Ui.Kit.HistoryModule
+---@field CLEAR table  # sentinel: in a patch, removes the field instead of keeping it
+---@field apply fun(target: table, patch: table): table  # patch in place, honouring CLEAR
+---@field new fun(opts: Ui.Kit.HistoryOpts): Ui.Kit.History
+
+--- A history made by `kit.history.new` (methods; the entries include the current position).
+---@class Ui.Kit.History
+---@field go fun(self: Ui.Kit.History, state: table, changes: table): boolean  # record, apply, push; false = no stop made
+---@field push fun(self: Ui.Kit.History, state: table): boolean  # new stop after the current one, forward history dropped
+---@field step fun(self: Ui.Kit.History, state: table, delta: integer): boolean  # restore the entry `delta` away; false = out of range
+---@field back fun(self: Ui.Kit.History, state: table, count?: integer): boolean
+---@field forward fun(self: Ui.Kit.History, state: table, count?: integer): boolean
+---@field record fun(self: Ui.Kit.History, state: table)  # overwrite the current entry from `state`
+---@field patch fun(self: Ui.Kit.History, state: table, fields: table)  # change state without a stop: apply, then record
+---@field reset fun(self: Ui.Kit.History, state: table)  # start over with one entry
+---@field current fun(self: Ui.Kit.History): table
+---@field index fun(self: Ui.Kit.History): integer
+---@field len fun(self: Ui.Kit.History): integer
+---@field can_back fun(self: Ui.Kit.History): boolean
+---@field can_forward fun(self: Ui.Kit.History): boolean
+---@field entries fun(self: Ui.Kit.History): table[]
 
 return {}
 
