@@ -48,11 +48,27 @@ local M = {}
 ---@field mode string
 ---@field groups table<string, string>
 ---@field default_prefix string
-local cfg = {
+local DEFAULTS = {
   mode = "n",
   groups = {},
   default_prefix = "<leader>",
 }
+
+---The tunables in force: DEFAULTS plus what the last `setup()` was given, kept
+---current by the store's `on_change`. Read it, never write to it.
+---@type Ui.Keys.Config
+local cfg
+
+---The config store: every `setup()` starts from a fresh copy of DEFAULTS;
+---`groups` is a map of the user's own prefixes to labels. An unknown key or a
+---value of the wrong type is reported and left out (`M.issues()`).
+local store = require("ui.util.config").new("ui.keys", DEFAULTS, {
+  schema = { groups = { "table", of = "string" } },
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 ---@internal
 ---@param lhs string
@@ -260,21 +276,20 @@ function M.open(prefix, opts)
   })
 end
 
----Override the shipped tunables. `groups` is merged.
+---Override the shipped tunables. Every call starts from them, so an option
+---(or a `groups` label) an earlier call set and this one leaves out is gone
+---again. An unknown key or a value of the wrong type is reported once and
+---ignored (`M.issues()`).
 ---@param opts Ui.Keys.Opts|nil
 function M.setup(opts)
-  opts = opts or {}
-  if type(opts.mode) == "string" then
-    cfg.mode = opts.mode
-  end
-  if type(opts.groups) == "table" then
-    for k, v in pairs(opts.groups) do
-      cfg.groups[k] = v
-    end
-  end
-  if type(opts.default_prefix) == "string" then
-    cfg.default_prefix = opts.default_prefix
-  end
+  store.setup(opts)
+end
+
+---What the last `setup()` ignored (unknown keys, values of the wrong type),
+---one line each; empty when everything was accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 ---@return Ui.Keys.Config

@@ -271,7 +271,16 @@ a host that routes notifications through noice or snacks should not lose
 that to `all = true`. `true` installs `ui.notify` with the shipped tunables;
 a table (`{ history_size = 200, min_level = vim.log.levels.INFO, timeouts =
 { [vim.log.levels.ERROR] = 8000 }, titles = { ... } }`) overrides them.
+A level can also be named (`min_level = "warn"`, `timeouts = { error = 8000 }`);
+`timeouts` and `titles` are merged per level into the shipped ones.
 `:UI notify off` puts the previous handler back.
+
+The module `setup()`s of `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`,
+`ui.windowpicker` and `ui.zen` share one rule: every call starts from the
+shipped defaults (an option an earlier call set and a later one leaves out is
+back at its default), the tables you pass are copied, and an unknown key or a
+value of the wrong type is warned about once and ignored. `:checkhealth ui`
+lists what the last call ignored ([health](health.md#module-options)).
 
 `vim_ui` is explicit-only too: it takes `vim.ui.select` and `vim.ui.input` over for every plugin that
 calls them. A short list becomes buttons, a medium one the chooser, a long one goes to the picker you name

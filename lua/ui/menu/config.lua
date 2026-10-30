@@ -1,5 +1,6 @@
 ---@module 'ui.menu.config'
---- Defaults and merging for `ui.menu`.
+--- Defaults of `ui.menu`, and its config store (`lib.lua.config.new` via
+--- `ui.util.config`).
 
 local M = {}
 
@@ -74,27 +75,38 @@ M.DEFAULTS = {
   extra = {},
 }
 
----@type Ui.Menu.Opts
-local current = vim.deepcopy(M.DEFAULTS)
+---The config store: every `apply()` starts from a fresh copy of DEFAULTS. A
+---list (`extra`, `contributors`) replaces the default one as a whole; an
+---unknown key (a misspelt entry or section name included) or a value of the
+---wrong type is reported and left out, so its default applies (`M.issues()`).
+local store = require("ui.util.config").new("ui.menu", M.DEFAULTS, {
+  schema = {
+    key = "string|false",
+    renderer = { "string", enum = { "auto", "kit", "nvzone" } },
+    hints = { "table", of = "string" },
+    integrations = "boolean|table",
+  },
+})
 
 --- Merge `opts` over the defaults (replacing what a previous `setup` set).
 ---@param opts Ui.Menu.Opts|nil
 ---@return Ui.Menu.Opts
 function M.apply(opts)
-  current = vim.tbl_deep_extend("force", vim.deepcopy(M.DEFAULTS), opts or {})
-  -- Lists are replaced, not merged index by index.
-  if opts and opts.extra then
-    current.extra = vim.deepcopy(opts.extra)
-  end
-  if opts and opts.contributors then
-    current.contributors = vim.deepcopy(opts.contributors)
-  end
-  return current
+  store.setup(opts)
+  return store.get()
 end
 
+--- The options in force. The live table: read it, never write to it.
 ---@return Ui.Menu.Opts
 function M.get()
-  return current
+  return store.get()
+end
+
+--- What the last `apply()` ignored, one line each; empty when everything was
+--- accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 return M

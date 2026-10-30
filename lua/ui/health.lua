@@ -532,6 +532,35 @@ local function check_slots()
   end
 end
 
+--- The modules whose options go through `ui.util.config`: what their last
+--- `setup()` ignored. Looks at the session without starting anything: a module
+--- that was never required has had no `setup()` to report on.
+---@return nil
+local function check_module_options()
+  health.start("Module options")
+
+  local loaded = 0
+  for _, name in ipairs(require("ui.util.config").MODULES) do
+    local mod = package.loaded[name]
+    if type(mod) == "table" and type(mod.issues) == "function" then
+      loaded = loaded + 1
+      local ok, issues = pcall(mod.issues)
+      if not ok then
+        health.error(("%s: issues() failed: %s"):format(name, tostring(issues)))
+      elseif #issues == 0 then
+        health.ok(("%s: no rejected options from the last setup() call"):format(name))
+      else
+        for _, issue in ipairs(issues) do
+          health.warn(("%s: %s"):format(name, issue))
+        end
+      end
+    end
+  end
+  if loaded == 0 then
+    health.info("none of " .. table.concat(require("ui.util.config").MODULES, ", ") .. " is loaded")
+  end
+end
+
 ---@return nil
 local function check_soft_dependencies()
   health.start("Optional integrations")
@@ -591,6 +620,7 @@ function M.check()
   check_context()
   check_screenkey()
   check_slots()
+  check_module_options()
   check_soft_dependencies()
 end
 

@@ -277,4 +277,11 @@ function M.config()
   return config.get()
 end
 
+--- What the last `setup()` ignored (unknown keys, values of the wrong type),
+--- one line each; empty when everything was accepted.
+---@return string[]
+function M.issues()
+  return config.issues()
+end
+
 return M

@@ -9,8 +9,11 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 - The kit lives only in lib.nvim: every `ui.kit.*` module is a re-export of `lib.nvim.ui.kit.*` (same table, one theme state). `scripts/mirror_kit.lua` and the kit drift spec are gone; `kit.keys` (viewer keys), the status tokens and the viewer hook moved to lib.nvim. Specs that stub a kit module through `package.loaded` use the lib.nvim name.
 
+- `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`, `ui.windowpicker` and `ui.zen` keep their options in a `lib.lua.config.new` store (`ui.util.config`): an unknown key gets a did-you-mean warning and a value of the wrong type (or out of range) falls back to its default instead of being taken as is; each module has `issues()`, and `:checkhealth ui` lists them under "Module options". `ui.notify` takes level names (`min_level = "warn"`, `timeouts = { error = 8000 }`).
+
 ### Fixed
 
+- `ui.colorpicker`, `ui.keys`, `ui.notify`: `setup()` wrote into the live config, so an option (or a `groups` label, a per-level timeout) set by an earlier call stayed after a later call left it out; every call now starts from the defaults. `ui.menu`, `ui.windowpicker`: the tables passed to `setup()` are copied instead of held.
 - `kit.confirm`: a question of tens of thousands of characters on one line froze the editor (the hard wrap was quadratic); a question is cut at 4000 characters and wrapped in one pass. A replaced dialog is answered on the next loop turn, so an answer that opens a dialog (a `kit.async` coroutine asking again) no longer closes the replacement before it is shown.
 - `kit.ask`: a question behind a dialog that closed without the close event is no longer left waiting (slow re-check); a question withdrawn by `abandoned()` is not answered when its wait runs out; a dialog that cannot be built answers the question as cancelled; letter and digit hotkeys are ignored for half a second after it opens.
 - `kit.async.input` / `form` / `submit`: leaving through the caller's own `on_back` resumes the coroutine.

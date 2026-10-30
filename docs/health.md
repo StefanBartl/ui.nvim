@@ -194,6 +194,26 @@ kind `mark`) are listed under "Optional integrations".
 
 ---
 
+## Module options
+
+The options of `ui.colorpicker`, `ui.keys`, `ui.menu`, `ui.notify`,
+`ui.windowpicker` and `ui.zen` go through one config store
+(`lib.lua.config.new`, via `ui.util.config`): every `setup()` starts from the
+shipped defaults, and an unknown key or a value of the wrong type (or out of
+range) is left out, so its default applies. It is reported once as a warning
+when `setup()` runs, and again here. Only modules that are already loaded are
+asked; this section loads nothing.
+
+| Line | Means |
+| --- | --- |
+| OK `<module>: no rejected options from the last setup() call` | Every option was accepted |
+| WARN `<module>: unknown option '<key>' (did you mean '<other>'?)` | The key is not one of that module's options (often a misspelling); it had no effect |
+| WARN `<module>: option '<key>' must be ... -- using the default` | The value had the wrong type or was out of range; the default is used |
+| INFO `none of ... is loaded` | None of these modules was required in this session |
+| ERROR `<module>: issues() failed` | Asking the module raised; the message says why |
+
+---
+
 ## Optional integrations
 
 Which foreign modules this plugin probes, and which of them resolve right

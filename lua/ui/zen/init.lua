@@ -53,9 +53,28 @@ local DEFAULTS = {
   hide_ruler = true,
 }
 
----The tunables in force: DEFAULTS plus what the last `setup()` was given.
+---The tunables in force: DEFAULTS plus what the last `setup()` was given, kept
+---current by the store's `on_change`. Read it, never write to it.
 ---@type Ui.Zen.Config
-local cfg = vim.deepcopy(DEFAULTS)
+local cfg
+
+---The config store: every `setup()` starts from a fresh copy of DEFAULTS. `wo`
+---is merged key by key into the default window options and takes any window
+---option; `on_open`/`on_close` have no default. An unknown key or a value of
+---the wrong type is reported and left out (`M.issues()`).
+local store = require("ui.util.config").new("ui.zen", DEFAULTS, {
+  schema = {
+    width = { "number", min = 0 },
+    height = { "number", min = 0 },
+    backdrop = { "number", min = 0, max = 1 },
+    wo = { "table" },
+  },
+  optional = { on_open = "function", on_close = "function" },
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 ---@class Ui.Zen.State
 ---@field win integer
@@ -336,21 +355,21 @@ end
 
 ---Override the shipped tunables. Every call starts from them, so an option an
 ---earlier call set and this one leaves out is back at its default. `wo` is
----merged into the default window options, not replaced.
+---merged into the default window options, not replaced. An unknown key or a
+---value of the wrong type is reported once and ignored (`M.issues()`).
 ---@param opts Ui.Zen.Opts|nil
 function M.setup(opts)
-  opts = opts or {}
-  cfg = vim.deepcopy(DEFAULTS)
-  for k, v in pairs(opts) do
-    if k == "wo" and type(v) == "table" then
-      cfg.wo = vim.tbl_extend("force", cfg.wo, v)
-    elseif cfg[k] ~= nil or k == "on_open" or k == "on_close" then
-      cfg[k] = v
-    end
-  end
+  store.setup(opts)
   if M.is_open() then
     relayout()
   end
+end
+
+---What the last `setup()` ignored (unknown keys, values of the wrong type or
+---out of range), one line each; empty when everything was accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 ---@return Ui.Zen.Config

@@ -26,12 +26,12 @@ local M = {}
 
 ---@class Ui.Notify.Opts
 ---@field history_size? integer
----@field min_level? integer                  # levels below this are recorded, not shown
----@field timeouts? table<integer, integer>   # ms per level; 0 = stays until cleared
----@field titles? table<integer, string>      # toast title per level
+---@field min_level? integer|string           # levels below this are recorded, not shown; a level or its name ("warn")
+---@field timeouts? table<integer|string, integer>  # ms per level (or level name); 0 = stays until cleared
+---@field titles? table<integer|string, string>     # toast title per level (or level name)
 
 ---@class Ui.Notify.Config: Ui.Notify.Opts
-local cfg = {
+local DEFAULTS = {
   history_size = 200,
   min_level = vim.log.levels.INFO,
   timeouts = {
@@ -50,6 +50,12 @@ local cfg = {
     [vim.log.levels.ERROR] = "Error",
   },
 }
+
+---The tunables in force: DEFAULTS plus what the last `setup()` was given, kept
+---current by the store's `on_change` (the store is made below `norm_level`).
+---Read it, never write to it.
+---@type Ui.Notify.Config
+local cfg
 
 local LEVEL_NAMES = {
   [vim.log.levels.TRACE] = "TRACE",
@@ -123,6 +129,81 @@ local function norm_level(level)
   end
   return level
 end
+
+---@internal
+---A level as `setup()` may name it: a number, or a name such as `"warn"`.
+---@param level any
+---@return integer|nil  nil when it names no level
+local function level_of(level)
+  if type(level) == "string" then
+    return vim.log.levels[level:upper()]
+  end
+  if type(level) == "number" then
+    return level
+  end
+  return nil
+end
+
+---@internal
+---`setup()` takes level names (`"warn"`) wherever a level goes: as
+---`min_level`, and as the keys of `timeouts`/`titles`. They become numbers
+---here, before the check; a name that is no level is reported and dropped.
+---@param opts table  a private copy of the options
+---@param issues string[]
+---@return table
+local function normalize(opts, issues)
+  if type(opts.min_level) == "string" then
+    local level = level_of(opts.min_level)
+    if level == nil then
+      issues[#issues + 1] = ("option 'min_level': %q is not a log level -- using the default"):format(
+        opts.min_level
+      )
+    end
+    opts.min_level = level
+  end
+  for _, key in ipairs({ "timeouts", "titles" }) do
+    local map = opts[key]
+    if type(map) == "table" then
+      local out = {}
+      for k, v in pairs(map) do
+        local level = level_of(k)
+        if level == nil then
+          issues[#issues + 1] = ("option '%s': %s is not a log level -- ignored"):format(
+            key,
+            vim.inspect(k)
+          )
+        else
+          out[level] = v
+        end
+      end
+      opts[key] = out
+    end
+  end
+  return opts
+end
+
+---The config store: every `setup()` starts from a fresh copy of DEFAULTS.
+---`timeouts` and `titles` are merged per level (a level left out keeps its
+---default). An unknown key, a value of the wrong type or a `history_size`
+---below 1 is reported and left out (`M.issues()`).
+local store = require("ui.util.config").new("ui.notify", DEFAULTS, {
+  schema = {
+    history_size = { "number", min = 1 },
+    min_level = "number",
+    timeouts = { "table", of = { "number", min = 0 } },
+    titles = { "table", of = "string" },
+  },
+  merge = { timeouts = "entries", titles = "entries" },
+  normalize = normalize,
+  resolve = function(c)
+    c.history_size = math.floor(c.history_size)
+    return c
+  end,
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 ---@internal
 ---Record one entry, trimming the ring.
@@ -327,26 +408,22 @@ function M.show_history()
   })
 end
 
----Override the shipped tunables. Tables are merged.
+---Override the shipped tunables. Every call starts from them, so an option an
+---earlier call set and this one leaves out is back at its default; `timeouts`
+---and `titles` are merged per level into the default ones. Levels may be
+---given by name (`"warn"`). An unknown key or a value of the wrong type is
+---reported once and ignored (`M.issues()`).
 ---@param opts Ui.Notify.Opts|nil
 function M.setup(opts)
-  opts = opts or {}
-  if type(opts.history_size) == "number" then
-    cfg.history_size = math.max(1, math.floor(opts.history_size))
-  end
-  if opts.min_level ~= nil then
-    cfg.min_level = norm_level(opts.min_level)
-  end
-  if type(opts.timeouts) == "table" then
-    for k, v in pairs(opts.timeouts) do
-      cfg.timeouts[norm_level(k)] = v
-    end
-  end
-  if type(opts.titles) == "table" then
-    for k, v in pairs(opts.titles) do
-      cfg.titles[norm_level(k)] = v
-    end
-  end
+  store.setup(opts)
+end
+
+---What the last `setup()` ignored (unknown keys, values of the wrong type,
+---names that are no log level), one line each; empty when everything was
+---accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 ---@return Ui.Notify.Config

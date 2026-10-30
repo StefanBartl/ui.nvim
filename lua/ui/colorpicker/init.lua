@@ -37,7 +37,7 @@ local NS = api.nvim_create_namespace("ui_colorpicker")
 ---@field shades integer       # cells in the shades row
 ---@field shade_step number    # lightness change per shade cell, in points
 ---@field yank_register string # register `y` and the default pick write to
-local cfg = {
+local DEFAULTS = {
   default = "#61afef",
   hues = 24,
   rows = 7,
@@ -46,6 +46,27 @@ local cfg = {
   shade_step = 8,
   yank_register = '"',
 }
+
+---The tunables in force: DEFAULTS plus what the last `setup()` was given, kept
+---current by the store's `on_change`. Read it, never write to it.
+---@type Ui.Colorpicker.Config
+local cfg
+
+---The config store: every `setup()` starts from a fresh copy of DEFAULTS; an
+---unknown key, a value of the wrong type or a cell count below 1 is reported
+---and left out (`M.issues()`).
+local store = require("ui.util.config").new("ui.colorpicker", DEFAULTS, {
+  schema = {
+    hues = { "number", min = 1 },
+    rows = { "number", min = 1 },
+    cols = { "number", min = 1 },
+    shades = { "number", min = 1 },
+  },
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 -- Highlight groups are keyed by fixed SCREEN SLOT (row, col), not by hex:
 -- the picker's grid, hue row and shades row occupy a small, constant set of
@@ -416,16 +437,21 @@ function M.current()
   return nil
 end
 
----Override the shipped tunables.
----@param opts table|nil
+---Override the shipped tunables. Every call starts from them, so an option an
+---earlier call set and this one leaves out is back at its default. An unknown
+---key or a value of the wrong type is reported once and ignored (`M.issues()`).
+---@param opts Ui.Colorpicker.Config|table|nil
 function M.setup(opts)
-  for k, v in pairs(opts or {}) do
-    if cfg[k] ~= nil then
-      cfg[k] = v
-    end
-  end
+  store.setup(opts)
   slot_groups = {}
   slot_hex = {}
+end
+
+---What the last `setup()` ignored (unknown keys, values of the wrong type or
+---out of range), one line each; empty when everything was accepted.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 ---@return Ui.Colorpicker.Config

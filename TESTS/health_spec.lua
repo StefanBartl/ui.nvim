@@ -147,6 +147,7 @@ describe("ui.health", function()
       "Context",
       "Screenkey",
       "Slots",
+      "Module options",
       "Optional integrations",
     }, starts)
   end)

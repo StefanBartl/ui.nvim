@@ -50,9 +50,20 @@ local DEFAULTS = {
   debug = false,
 }
 
----The options in force: DEFAULTS plus what the last `setup()` was given.
+---The options in force: DEFAULTS plus what the last `setup()` was given, kept
+---current by the store's `on_change`. Read it, never write to it.
 ---@type Ui.WindowPicker.Opts
-local cfg = vim.deepcopy(DEFAULTS)
+local cfg
+
+---The config store: every `setup()` starts from a fresh copy of DEFAULTS; an
+---unknown key or a value of the wrong type is reported and left out, so its
+---default applies (`M.issues()`).
+local store = require("ui.util.config").new("ui.windowpicker", DEFAULTS, {
+  on_change = function(current)
+    cfg = current
+  end,
+})
+cfg = store.get()
 
 ---Cells a hint spans. Three, not one: `make_scratch` used to read any
 ---resolved width <= 2 as "no size given" and fall back to 60 columns, so a
@@ -329,10 +340,18 @@ function M.pick(opts)
 end
 
 ---Override the shipped defaults. Every call starts from them, so an option an
----earlier call set and this one leaves out is back at its default.
+---earlier call set and this one leaves out is back at its default. An unknown
+---key or a value of the wrong type is reported once and ignored (`M.issues()`).
 ---@param opts Ui.WindowPicker.Opts|nil
 function M.setup(opts)
-  cfg = vim.tbl_extend("force", vim.deepcopy(DEFAULTS), opts or {})
+  store.setup(opts)
+end
+
+---What the last `setup()` ignored (unknown keys, values of the wrong type),
+---one line each; empty when everything was accepted. For `:checkhealth ui`.
+---@return string[]
+function M.issues()
+  return store.issues()
 end
 
 ---The most recent `pick()` call (caller traceback, candidate count, whether it
