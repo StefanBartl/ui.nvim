@@ -20,7 +20,6 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 ### Added
 
 - `kit.confirm`: every button has a hotkey that picks it at once, marked in the button. `y`/`n` go to Yes/No (also a label that starts with the word, e.g. `Yes, delete`), then the `&` letters, then the first free letter of each label (on a collision the next free letter, earlier buttons first), else the digit (shown as a superscript). New theme token `hotkey` (`KitHotkey`, an underline). The focus still starts on `default`; `<CR>` still confirms it.
-
 - `kit.history` (`ui.kit.history`, re-export of `lib.nvim.ui.kit.history`): a back/forward trail of positions with a `CLEAR` sentinel for patches -- `new({ state, keys, max?, dedupe? })`, `go`/`back`/`forward`/`step`/`patch`; pure data, no UI.
 - `kit.confirm` / `kit.ask` options: `default` (focused button), `choices` as a `vim.fn.confirm` string with `&` hotkeys (plus `y`/`n` for Yes/No and the digits 1-9), `<C-c>` cancels, focus moving elsewhere cancels (`keep_on_focus_lost`; `kit.ask` keeps by default), `kind = danger|warn|info`, `legend = true`.
 - `kit.async`: `run`, `await`, `confirm`, `ask`, `input`, `form`, `select`, `submit` -- coroutines over the callback components, so a flow of several questions reads as straight code and the editor keeps running while it waits. `kit.sync` is deprecated: it waits in `vim.wait()`, Neovim does not run typed keys during it, and the dialog returned after its timeout (ten minutes by default) without ever seeing them. It warns once per session.
