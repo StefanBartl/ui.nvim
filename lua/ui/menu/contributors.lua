@@ -43,6 +43,23 @@ local function installed(name)
   return package.loaded[name] ~= nil or pcall(require, name)
 end
 
+--- Modules that must not be `require`d before another module of theirs is
+--- loaded. lazy.nvim loads a plugin as soon as any module under it is asked
+--- for: requiring `filetree.integrations.menu` from the idle preload pulled a
+--- `VeryLazy` filetree.nvim in at startup, before the tree plugin it builds on
+--- was configured. Until `filetree` itself is loaded, only a real open of the
+--- menu (the user asking for it) may load it.
+---@type table<string, string>
+local WAIT_FOR = { ["filetree.integrations.menu"] = "filetree" }
+
+---False while `module` waits for the module named in `WAIT_FOR`.
+---@param module string
+---@return boolean
+local function may_require_now(module)
+  local owner = WAIT_FOR[module]
+  return owner == nil or package.loaded[module] ~= nil or package.loaded[owner] ~= nil
+end
+
 ---True when `plugin` (a lazy.nvim plugin name, e.g. `"dap.nvim"`) is
 ---configured, without loading it: lazy.nvim's own registry answers this
 ---without a `require`, unlike `installed()` above, which is exactly the point
@@ -195,8 +212,10 @@ end
 ---@param buf integer
 ---@param cfg Ui.Menu.Opts
 ---@param mouse boolean  see `lazy_entry`
+---@param warm boolean  a hidden pre-open (`ui.menu.warm`), not the user's:
+---  leaves out what `WAIT_FOR` says must not be loaded yet
 ---@return Ui.ContextMenu.Item[]
-local function submenus(buf, cfg, mouse)
+local function submenus(buf, cfg, mouse, warm)
   local out = {}
   local specs = {}
   vim.list_extend(specs, BUILTIN)
@@ -237,7 +256,11 @@ local function submenus(buf, cfg, mouse)
   -- filetree.nvim: its own tree buffer binds its own <RightMouse>, so the one
   -- thing worth offering from ANY other buffer is a single row -- open (or
   -- close) the tree, revealing this buffer's file.
-  if integration_on(cfg, "filetree") and installed("filetree.integrations.menu") then
+  if
+    integration_on(cfg, "filetree")
+    and (not warm or may_require_now("filetree.integrations.menu"))
+    and installed("filetree.integrations.menu")
+  then
     local ok, ft_menu = pcall(require, "filetree.integrations.menu")
     local on = ok and type(ft_menu.window_entry) == "function"
     if on and type(ft_menu.enabled) == "function" then
@@ -309,11 +332,12 @@ end
 ---@param cfg Ui.Menu.Opts
 ---@param mouse? boolean  anchor a `lazy` contributor's own popup the same way
 ---  this menu was opened (default true, matching `<RightMouse>`); see `lazy_entry`
+---@param warm? boolean  built for a hidden pre-open, not shown to the user (see `submenus`)
 ---@return Ui.ContextMenu.Item[]
-function M.build(buf, cfg, mouse)
+function M.build(buf, cfg, mouse, warm)
   local out = {}
 
-  local subs = submenus(buf, cfg, mouse ~= false)
+  local subs = submenus(buf, cfg, mouse ~= false, warm == true)
   -- An "Integrations" frame with nothing in it must not be a state that can occur.
   if #subs > 0 then
     out[#out + 1] = contextmenu.heading("Integrations")
@@ -395,7 +419,7 @@ function M.prewarm(modules, done, delay, alive)
       end
       return
     end
-    if package.loaded[name] == nil then
+    if package.loaded[name] == nil and may_require_now(name) then
       pcall(require, name)
     end
     vim.defer_fn(step, 20)

@@ -125,7 +125,11 @@ renderer, from an ordinary window): that takes
 the one-time costs of the first draw out of the first real open -- measured
 ~150 ms first open against ~57 ms warm, without it. A second `setup()` does not start a second preload, and `prewarm = false` in a later
 one stops a preload that is still running. `prewarm = false` keeps a lazy
-plugin unloaded until the first open, at that price. A plugin that opted out only on its own side
+plugin unloaded until the first open, at that price. The filetree row is the
+exception: neither the preload nor the unseen warm open asks for
+`filetree.integrations.menu` before filetree.nvim itself is loaded (it is
+commonly `VeryLazy` and must load after the tree plugin's config), only a real
+open does. A plugin that opted out only on its own side
 (`integrations.ui_menu = false` in its setup) is still loaded by `prewarm`, because
 ui.nvim can only read that switch after the plugin is loaded; name it in
 `menu = { integrations = { <name> = false } }` as well to keep it unloaded. A `plugin = "..."` gate on

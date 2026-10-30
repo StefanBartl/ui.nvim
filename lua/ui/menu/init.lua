@@ -36,11 +36,13 @@ local BOUND = {}
 ---  "Git Actions") the same way this menu itself was, or will be, opened --
 ---  at the pointer (default) or at the cursor for a `key`-bound, mouse-less
 ---  open. Passed through to `ui.menu.contributors`/`ui.menu.sections`.
+---@param warm? boolean  built for `M.warm`'s hidden pre-open, not for the user:
+---  a sister plugin that is not loaded yet is not loaded for it
 ---@return Ui.ContextMenu.Item[]
-function M.items(buf, mouse)
+function M.items(buf, mouse, warm)
   buf = buf or vim.api.nvim_get_current_buf()
   local cfg = config.get()
-  local out = contributors.build(buf, cfg, mouse)
+  local out = contributors.build(buf, cfg, mouse, warm)
   vim.list_extend(out, sections.build(cfg, mouse))
   return out
 end
@@ -157,7 +159,7 @@ function M.warm()
     return false
   end
   local ok, surface = pcall(function()
-    return contextmenu.open(M.items(vim.api.nvim_win_get_buf(win), false), { mouse = false })
+    return contextmenu.open(M.items(vim.api.nvim_win_get_buf(win), false, true), { mouse = false })
   end)
   if type(surface) == "table" and type(surface.close) == "function" then
     pcall(surface.close, surface)

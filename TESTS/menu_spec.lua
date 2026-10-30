@@ -897,6 +897,71 @@ describe("ui.menu", function()
       end))
       assert.same({ "a", "b" }, loaded)
     end)
+
+    -- lazy.nvim loads a plugin as soon as one of its modules is required: the
+    -- preload (and the hidden warm open after it) asking for
+    -- filetree.integrations.menu pulled a VeryLazy filetree.nvim in at startup,
+    -- before the tree plugin's config ran.
+    describe("filetree.integrations.menu waits for filetree.nvim", function()
+      local saved_ft, saved_menu, required
+
+      before_each(function()
+        saved_ft, saved_menu =
+          package.loaded["filetree"], package.loaded["filetree.integrations.menu"]
+        package.loaded["filetree"], package.loaded["filetree.integrations.menu"] = nil, nil
+        required = 0
+        package.preload["filetree.integrations.menu"] = function()
+          required = required + 1
+          return {
+            window_entry = function()
+              return { name = "Open filetree", cmd = function() end }
+            end,
+          }
+        end
+        menu.setup({ mouse = false, key = false, prewarm = false })
+      end)
+
+      after_each(function()
+        package.preload["filetree.integrations.menu"] = nil
+        package.loaded["filetree"], package.loaded["filetree.integrations.menu"] =
+          saved_ft, saved_menu
+      end)
+
+      local function run_prewarm()
+        local done = false
+        contributors.prewarm({ "filetree.integrations.menu" }, function()
+          done = true
+        end, 0)
+        assert.is_true(vim.wait(2000, function()
+          return done
+        end))
+      end
+
+      it("the preload does not require it while filetree is not loaded", function()
+        run_prewarm()
+        assert.equals(0, required)
+        package.loaded["filetree"] = {}
+        run_prewarm()
+        assert.equals(1, required)
+      end)
+
+      it("the hidden warm build leaves the row out; a real open still asks", function()
+        local b = vim.api.nvim_create_buf(false, true)
+        local function has_row(items)
+          for _, it_ in ipairs(items) do
+            if it_.name == "Open filetree" then
+              return true
+            end
+          end
+          return false
+        end
+        assert.is_false(has_row(menu.items(b, false, true)))
+        assert.equals(0, required)
+        assert.is_true(has_row(menu.items(b, false)))
+        assert.equals(1, required)
+        vim.api.nvim_buf_delete(b, { force = true })
+      end)
+    end)
   end)
 
   describe("warm", function()
