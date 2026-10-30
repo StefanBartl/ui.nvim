@@ -310,11 +310,10 @@ local ENTRIES = {
     },
     open = function(ctx)
       for i = 1, 3 do
-        kit().toast({ title = "Toast " .. i, message = ("background job %d done"):format(i) })
+        local surf =
+          kit().toast({ title = "Toast " .. i, message = ("background job %d done"):format(i) })
+        ctx.track(closer_of(surf))
       end
-      ctx.track(function()
-        require("ui.kit.toast").clear()
-      end)
     end,
   },
   {

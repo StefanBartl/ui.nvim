@@ -82,6 +82,10 @@ describe("ui.kit_playground", function()
       assert.is_true(opened, entry.id .. " opened no window")
 
       close()
+      if entry.id == "toast" then
+        -- screen() clears every toast itself, so check the closer before it runs (0 before).
+        assert.are.equal(0, require("ui.kit.toast").active(), "toast closer left toasts open")
+      end
       local closed = vim.wait(1000, function()
         local floats, tabs = screen()
         return floats == floats0 and tabs == tabs0
@@ -206,6 +210,17 @@ describe("ui.kit_playground", function()
     assert.is_true(vim.wait(1000, function()
       return float_count() == floats0
     end, 10))
+  end)
+
+  it("toast: the closer closes the demo's toasts and no other", function()
+    screen()
+    local foreign = require("ui.kit").toast({ title = "foreign", message = "not the demo's" })
+    local close = playground.run("toast")
+    assert.are.equal(4, require("ui.kit.toast").active())
+    close()
+    assert.are.equal(1, require("ui.kit.toast").active())
+    assert.is_true(foreign:is_valid())
+    assert.are.equal("", table.concat(errors, " | "))
   end)
 
   it("history: n records a stop, b and f walk the trail, c clears fn", function()
