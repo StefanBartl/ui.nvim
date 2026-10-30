@@ -516,7 +516,7 @@
 ---@field title? string       # shown in the window bar, themed with the `title` token
 ---@field theme? Ui.Kit.ThemeArg
 ---@field enter? boolean      # move the cursor into it (default true)
----@field exclusive? boolean  # hide a sidebar visible at the same position and restore it on close/hide (default true)
+---@field exclusive? boolean  # hide every sidebar visible at the same position in this tabpage and restore them on close/hide (default true)
 ---@field filetype? string
 ---@field modifiable? boolean # default false
 ---@field on_close? fun()     # called once when the sidebar is closed for good (not on hide)
@@ -532,7 +532,7 @@
 ---@field set_last_line fun(self: Ui.Kit.Sidebar, text: string)
 ---@field append_lines fun(self: Ui.Kit.Sidebar, lines: string[])
 ---@field set_title fun(self: Ui.Kit.Sidebar, title: string|nil)
----@field focus fun(self: Ui.Kit.Sidebar)  # shows a hidden sidebar first
+---@field focus fun(self: Ui.Kit.Sidebar)  # shows it in this tabpage first
 ---@field on_close fun(self: Ui.Kit.Sidebar, cb: fun())
 ---@field is_valid fun(self: Ui.Kit.Sidebar): boolean  # same as is_visible
 ---@field close fun(self: Ui.Kit.Sidebar)  # for good: window, buffer, callbacks; restores what it displaced
@@ -541,7 +541,7 @@
 ---@field size integer        # last width/height (kept across hide/show)
 ---@field title string|nil
 ---@field exclusive boolean
----@field show fun(self: Ui.Kit.Sidebar, enter?: boolean): boolean  # show a hidden sidebar (displacing the slot's occupant)
+---@field show fun(self: Ui.Kit.Sidebar, enter?: boolean): boolean  # show it in this tabpage (hidden, or moved from another tabpage), displacing the slot's occupants
 ---@field hide fun(self: Ui.Kit.Sidebar): boolean  # off screen, kept; restores what it displaced; false for the tabpage's last window
 ---@field is_visible fun(self: Ui.Kit.Sidebar): boolean
 ---@field is_closed fun(self: Ui.Kit.Sidebar): boolean
@@ -550,7 +550,7 @@
 ---@class Ui.Kit.SidebarModule
 ---@field BUF_VAR string      # buffer variable naming the sidebar a buffer belongs to ("ui_kit_sidebar")
 ---@field open fun(opts?: Ui.Kit.SidebarOpts): Ui.Kit.Sidebar|nil
----@field toggle fun(opts: Ui.Kit.SidebarOpts): Ui.Kit.Sidebar|nil  # hide when visible, else show/open
+---@field toggle fun(opts: Ui.Kit.SidebarOpts): Ui.Kit.Sidebar|nil  # hide when visible in this tabpage, else show/open; opts.name is required (raises without)
 ---@field get fun(name: string): Ui.Kit.Sidebar|nil
 ---@field find fun(name: string): integer|nil  # its window, by buffer variable; nil when hidden or closed
 ---@field list fun(): Ui.Kit.Sidebar[]
