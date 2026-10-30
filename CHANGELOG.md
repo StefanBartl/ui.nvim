@@ -19,6 +19,7 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ### Added
 
+- `kit.history` (`ui.kit.history`, re-export of `lib.nvim.ui.kit.history`): a back/forward trail of positions with a `CLEAR` sentinel for patches -- `new({ state, keys, max?, dedupe? })`, `go`/`back`/`forward`/`step`/`patch`; pure data, no UI.
 - `kit.confirm` / `kit.ask` options: `default` (focused button), `choices` as a `vim.fn.confirm` string with `&` hotkeys (plus `y`/`n` for Yes/No and the digits 1-9), `<C-c>` cancels, focus moving elsewhere cancels (`keep_on_focus_lost`; `kit.ask` keeps by default), `kind = danger|warn|info`, `legend = true`.
 - `kit.async`: `run`, `await`, `confirm`, `ask`, `input`, `form`, `select`, `submit` -- coroutines over the callback components, so a flow of several questions reads as straight code and the editor keeps running while it waits. `kit.sync` is deprecated: it waits in `vim.wait()`, Neovim does not run typed keys during it, and the dialog returned after its timeout (ten minutes by default) without ever seeing them. It warns once per session.
 - Statusline segment `showcmd` (`ui.statusline.modules.showcmd`, opt-in): the pending key sequence, e.g. `2d`, drawn through Neovim's own `%S` item. While the key is in the active `order`, `'showcmdloc'` is `"statusline"`; a variant switch without it, the menu's "Remove" and `render.disable()` hand the earlier value back. Tagged `essential`, so `responsive` mode keeps it in a narrow window (it takes no columns while idle).
