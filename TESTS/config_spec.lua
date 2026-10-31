@@ -60,6 +60,29 @@ describe("ui.config", function()
     assert.is_not.same({ "leaked1", "leaked2" }, require("ui.config.DEFAULTS").theme.theme_toggle)
   end)
 
+  -- A subtable that exists only in the host's override must be copied into the
+  -- assembled config: `vim.tbl_deep_extend` kept it by reference, so an edit of
+  -- the returned config changed the host's own opts table (and vice versa).
+  it("copies override-only subtables of theme and tabline instead of sharing them", function()
+    local theme_extra = { nested = { value = 1 } }
+    local tabline_extra = { nested = { value = 2 } }
+    local assembled = cfg.setup({
+      theme = { host_only = theme_extra },
+      tabline = { host_only = tabline_extra },
+    })
+    assert.same(theme_extra, assembled.theme.host_only)
+    assert.same(tabline_extra, assembled.ui.tabline.host_only)
+    assert.is_false(rawequal(theme_extra, assembled.theme.host_only))
+    assert.is_false(rawequal(theme_extra.nested, assembled.theme.host_only.nested))
+    assert.is_false(rawequal(tabline_extra, assembled.ui.tabline.host_only))
+    assert.is_false(rawequal(tabline_extra.nested, assembled.ui.tabline.host_only.nested))
+  end)
+
+  it("still replaces a list override wholesale", function()
+    local assembled = cfg.setup({ theme = { theme_toggle = { "only" } } })
+    assert.same({ "only" }, assembled.theme.theme_toggle)
+  end)
+
   it("records the assembled config for ui.config.last()", function()
     local assembled = cfg.setup({ theme = { theme_toggle = { "x", "y" } } })
     assert.same(assembled, cfg.last())

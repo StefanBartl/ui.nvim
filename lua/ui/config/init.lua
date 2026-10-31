@@ -118,6 +118,20 @@ end
 --- error and no visible effect beyond "my override didn't apply".
 local KNOWN_SETUP_KEYS = { theme = true, tabline = true, variant = true }
 
+--- Merge a host override over a default table. `lib.lua.config.deep_merge`,
+--- not `vim.tbl_deep_extend`: the latter keeps a subtable that exists only in
+--- the override by reference, so `config.theme.<new key>` would be the very
+--- table the host passed in, and an in-place edit of either would show up in
+--- the other. List handling is the same in both (a list-like override
+--- replaces the default wholesale, never index by index), so this changes
+--- nothing but the sharing.
+---@param base table
+---@param override table
+---@return table
+local function merge(base, override)
+  return require("lib.lua.config").deep_merge(base, override)
+end
+
 ---Setup complete configuration
 ---@param user_opts? table Optional user overrides for theme, plus an
 ---  optional `variant` table to bring your own statusline preset (see
@@ -147,7 +161,7 @@ function M.setup(user_opts)
   -- 2. Allow user overrides for theme
   if user_opts.theme ~= nil then
     if type(user_opts.theme) == "table" then
-      theme_config = vim.tbl_deep_extend("force", theme_config, user_opts.theme)
+      theme_config = merge(theme_config, user_opts.theme)
     else
       notify.warn("[ui.config] opts.theme must be a table, got " .. type(user_opts.theme))
     end
@@ -171,7 +185,7 @@ function M.setup(user_opts)
   local tabline_config = vim.deepcopy(require("ui.config.DEFAULTS").tabline)
   if user_opts.tabline ~= nil then
     if type(user_opts.tabline) == "table" then
-      tabline_config = vim.tbl_deep_extend("force", tabline_config, user_opts.tabline)
+      tabline_config = merge(tabline_config, user_opts.tabline)
     else
       notify.warn("[ui.config] opts.tabline must be a table, got " .. type(user_opts.tabline))
     end

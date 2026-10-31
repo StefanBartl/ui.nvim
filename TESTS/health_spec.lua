@@ -254,6 +254,18 @@ describe("ui.health", function()
     assert.is_true(said, "no 'none of ... is loaded' line under Module options")
   end)
 
+  -- `ui.vim_ui` has no setup(): its options come through enable(), and the ok
+  -- line has to name the call a user actually made.
+  it("names enable() as the entry point of ui.vim_ui", function()
+    local vim_ui = require("ui.vim_ui")
+    vim_ui.enable({})
+    local calls = capture()
+    vim_ui.disable()
+    package.loaded["ui.vim_ui"] = nil
+    assert.is_true(has(calls, "ok", "ui.vim_ui: no rejected options from the last enable() call"))
+    assert.is_false(has(calls, "ok", "ui.vim_ui: no rejected options from the last setup() call"))
+  end)
+
   describe("the Context section", function()
     local context = require("ui.context")
 

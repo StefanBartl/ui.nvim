@@ -548,7 +548,9 @@ local function check_module_options()
       if not ok then
         health.error(("%s: issues() failed: %s"):format(name, tostring(issues)))
       elseif #issues == 0 then
-        health.ok(("%s: no rejected options from the last setup() call"):format(name))
+        -- `ui.vim_ui` takes its options through `enable()`, it has no setup().
+        local entry = type(mod.setup) == "function" and "setup()" or "enable()"
+        health.ok(("%s: no rejected options from the last %s call"):format(name, entry))
       else
         for _, issue in ipairs(issues) do
           health.warn(("%s: %s"):format(name, issue))
