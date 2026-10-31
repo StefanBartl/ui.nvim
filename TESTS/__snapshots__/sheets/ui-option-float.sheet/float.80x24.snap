@@ -1,0 +1,54 @@
+testing.nvim screen v1
+size: 80x24
+cursor: 2,2
+mode: n
+--- text
+01|
+02|~       ╭──────────────────────────────:UI──────────────────────────────╮
+03|~       │ color           Open the colour picker, optionally on a col…  │
+04|~       │ context         Same command as sticky, older name            │
+05|~       │ help            Print the long help text                      │
+06|~       │ keys            List the mappings under a prefix              │
+07|~       │ kit-playground  Try every ui.kit popup, one demo each         │
+08|~       │ kit-preset      Pick or switch the popup/toast border and c…  │
+09|~       │ kit-presets     List all popup/toast presets                  │
+10|~       │ modules         List the available statusline segments        │
+11|~       │ notify          Toggle notify toasts, open or clear the his…  │
+12|~       │ picker          Open the visual theme picker with live prev…  │
+13|~       │ progress        Show what is running now                      │
+14|~       │ screenkey       Toggle the screenkey HUD                      │
+15|~       │ slots           Numbered slots: list, run, add, edit, move,…  │
+16|~       │ status          Show the current UI configuration             │
+17|~       │ sticky          The sticky context: toggle, depth, line cap…  │
+18|~       │ tabline-style   Pick a tabline style from a list, or switch…  │
+19|~       │ tabline-styles  List all tabline styles                       │
+20|~       │ theme           Show the current colorscheme, or switch to …  │
+21|~       │ themes          List every colorscheme, the active one mark…  │
+22|~       │ toggle          Switch between the two configured themes      │
+23|[No Name╰───────────────────────────────────────────────────────────────╯    All
+24|                                                              1,1           Top
+--- attrs
+01|
+02|aaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+03|aaaaaaaabdeeeeeeeeeeeeeeddffffffffffffffffffffffffffffffffffffffffffffddbaaaaaaa
+04|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbaaaaaaa
+05|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+06|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbaaaaaaa
+07|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbaaaaaaa
+08|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+09|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbbbaaaaaaa
+10|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbaaaaaaa
+11|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+12|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+13|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+14|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+15|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+16|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbaaaaaaa
+17|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+18|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+19|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+20|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+21|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbaaaaaaa
+22|aaaaaaaabbggggggggggggggbbhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbbbbbbaaaaaaa
+23|iiiiiiiibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbiiiiiii
+24|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
