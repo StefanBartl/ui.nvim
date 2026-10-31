@@ -13,6 +13,7 @@ Behavior changes of ui.nvim that a user or a host config can notice. The format 
 
 ### Fixed
 
+- Statusline catalog: `breadcrumbs` added through "Add module" or a saved layout rendered empty (with a "no module" warning), because its source was the `ui.statusline.modules.lsp` helper table. It now points at the new function module `ui.statusline.modules.breadcrumbs`.
 - `ui.colorpicker`, `ui.keys`, `ui.notify`: `setup()` wrote into the live config, so an option (or a `groups` label, a per-level timeout) set by an earlier call stayed after a later call left it out; every call now starts from the defaults. `ui.menu`, `ui.windowpicker`: the tables passed to `setup()` are copied instead of held.
 - `kit.confirm`: a question of tens of thousands of characters on one line froze the editor (the hard wrap was quadratic); a question is cut at 4000 characters and wrapped in one pass. A replaced dialog is answered on the next loop turn, so an answer that opens a dialog (a `kit.async` coroutine asking again) no longer closes the replacement before it is shown.
 - `kit.ask`: a question behind a dialog that closed without the close event is no longer left waiting (slow re-check); a question withdrawn by `abandoned()` is not answered when its wait runs out; a dialog that cannot be built answers the question as cancelled; letter and digit hotkeys are ignored for half a second after it opens.

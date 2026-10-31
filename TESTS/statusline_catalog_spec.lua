@@ -40,6 +40,59 @@ describe("ui.statusline.catalog", function()
     end
   end)
 
+  -- `render.generate()` renders a function or a string module and warns
+  -- "no module for %q" for anything else -- a source that resolves to a
+  -- helper table (breadcrumbs once pointed at `ui.statusline.modules.lsp`)
+  -- renders empty when added via "Add module" or a saved layout.
+  it("every non-builtin entry's source is a renderable module (function or string)", function()
+    for _, entry in ipairs(catalog) do
+      if not entry.builtin then
+        local mod = require(entry.source)
+        local kind = type(mod)
+        assert.is_true(
+          kind == "function" or kind == "string",
+          entry.key .. "'s source " .. entry.source .. " is a " .. kind
+        )
+      end
+    end
+  end)
+
+  it("breadcrumbs added through ensure_module_loaded renders its content", function()
+    local render = require("ui.statusline.render")
+    local entry
+    for _, e in ipairs(catalog) do
+      if e.key == "breadcrumbs" then
+        entry = e
+      end
+    end
+    local cfg = { order = { "breadcrumbs" }, modules = {} }
+    assert.is_true((render.ensure_module_loaded(cfg, entry)))
+    assert.equals("function", type(cfg.modules.breadcrumbs))
+
+    -- Pin the symbol chain through my.nvim's provider seam (as
+    -- TESTS/idle_breadcrumbs_spec.lua does) so the segment has content.
+    local provider = "my.hl_config.breadcrumbs.ctx.providers.lsp_symbols"
+    local lsp_cfg = require("ui.statusline.modules.lsp.config")
+    local saved_cfg = lsp_cfg.get_cfg()
+    lsp_cfg.set("debounce_ms", 0)
+    package.loaded[provider] = {
+      context = function()
+        return "Outer → catalog_probe()"
+      end,
+    }
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, vim.fs.normalize(vim.fn.tempname()) .. "/probe.lua")
+    vim.api.nvim_set_current_buf(buf)
+
+    local ok, out = pcall(render.generate, cfg)
+    package.loaded[provider] = nil
+    lsp_cfg.update(saved_cfg)
+    vim.api.nvim_buf_delete(buf, { force = true })
+
+    assert.is_true(ok, tostring(out))
+    assert.is_truthy(out:find("catalog_probe()", 1, true), out)
+  end)
+
   it("every entry's optional `live` reader, if present, is a function", function()
     for _, entry in ipairs(catalog) do
       if entry.live ~= nil then

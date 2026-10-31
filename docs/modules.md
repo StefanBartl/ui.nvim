@@ -93,7 +93,7 @@ modules = {
 | `since_last_save` | Duration since the buffer became modified, escalating muted -> `DiagnosticWarn` -> `DiagnosticError` the longer it sits unsaved | — | `ui.statusline.modules.since_last_save` |
 | `idle_clock` | Wall-clock time, e.g. `"14:32"`, shown only once the editor has been idle (`CursorHold`) and hidden again on the next keystroke | — | `ui.statusline.modules.idle_clock` |
 | `idle_git_log` | The last one to three commits of the buffer's repo, e.g. `"a1b2c3d Fix the parser · 9f8e7d6 Add tests"`, read once per idle phase and shown only while idle; empty outside a repo | git | `ui.statusline.modules.idle_git_log` |
-| `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.lsp` |
+| `breadcrumbs` | Repo-relative path + symbol context, mode-band coloured. The LSP half comes from `my.nvim` when it is installed; Tree-sitter otherwise — see below | my.nvim (soft) | `ui.statusline.modules.breadcrumbs` |
 | `idle_breadcrumbs` | `breadcrumbs`, with a wider budget and no fixed path cap while the editor is idle (less shortening of path and symbol chain); identical to `breadcrumbs` otherwise | my.nvim (soft) | `ui.statusline.modules.idle_breadcrumbs` |
 | `matchup_offscreen` | vim-matchup's offscreen-match source line (syntax-highlighted, gutter stripped), as one segment | vim-matchup, with `matchup_matchparen_offscreen = { method = "status_manual" }` | `ui.statusline.modules.matchup_offscreen` |
 

@@ -257,7 +257,7 @@ return {
     key = "breadcrumbs",
     summary = "Repo-relative path + LSP/Treesitter symbol context, mode-band coloured.",
     builtin = false,
-    source = "ui.statusline.modules.lsp",
+    source = "ui.statusline.modules.breadcrumbs",
     used_by = {},
   },
   {
