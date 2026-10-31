@@ -75,6 +75,7 @@ describe("ui.statusline.catalog", function()
     local lsp_cfg = require("ui.statusline.modules.lsp.config")
     local saved_cfg = lsp_cfg.get_cfg()
     lsp_cfg.set("debounce_ms", 0)
+    local saved_provider = package.loaded[provider]
     package.loaded[provider] = {
       context = function()
         return "Outer → catalog_probe()"
@@ -85,7 +86,7 @@ describe("ui.statusline.catalog", function()
     vim.api.nvim_set_current_buf(buf)
 
     local ok, out = pcall(render.generate, cfg)
-    package.loaded[provider] = nil
+    package.loaded[provider] = saved_provider
     lsp_cfg.update(saved_cfg)
     vim.api.nvim_buf_delete(buf, { force = true })
 

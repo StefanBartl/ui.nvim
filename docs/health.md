@@ -206,7 +206,7 @@ asked; this section loads nothing.
 
 | Line | Means |
 | --- | --- |
-| OK `<module>: no rejected options from the last setup() call` | Every option was accepted |
+| OK `<module>: no rejected options from the last setup() call` (for `ui.vim_ui`: `... last enable() call`) | Every option was accepted |
 | WARN `<module>: unknown option '<key>' (did you mean '<other>'?)` | The key is not one of that module's options (often a misspelling); it had no effect |
 | WARN `<module>: option '<key>' must be ... -- using the default` | The value had the wrong type or was out of range; the default is used |
 | INFO `none of ... is loaded` | None of these modules was required in this session |

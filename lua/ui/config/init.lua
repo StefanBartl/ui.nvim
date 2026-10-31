@@ -175,13 +175,13 @@ function M.setup(user_opts)
   -- registry the way statusline names do.
   --
   -- `vim.deepcopy()` here, not the shared DEFAULTS.tabline table directly:
-  -- a key present in only one of `vim.tbl_deep_extend`'s inputs is shared
-  -- by reference, not copied (documented the hard way in
-  -- `config/statusline/lsp.lua`'s own doc comment) -- without the copy,
-  -- `config.ui.tabline` would be the exact same table object as
-  -- `ui.config.DEFAULTS().tabline`, so any later in-place edit of the
-  -- returned config would permanently corrupt the shipped default for
-  -- every subsequent `M.setup()` call.
+  -- without a host override nothing is merged, and the assembly in step 4
+  -- (`vim.tbl_deep_extend`) keeps a key present in only one input by
+  -- reference -- so without the copy `config.ui.tabline` would be the exact
+  -- same table object as the cached `ui.config.DEFAULTS` tabline, and any
+  -- later in-place edit of the returned config would permanently corrupt
+  -- the shipped default for every subsequent `M.setup()` call. `merge()`
+  -- itself (`deep_merge`) shares nothing.
   local tabline_config = vim.deepcopy(require("ui.config.DEFAULTS").tabline)
   if user_opts.tabline ~= nil then
     if type(user_opts.tabline) == "table" then

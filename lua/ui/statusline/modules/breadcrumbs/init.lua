@@ -6,7 +6,7 @@
 --- not a segment itself -- `ui.statusline.render.generate()` only renders a
 --- function or a string, so the catalog entry `breadcrumbs` points here and
 --- "Add module" / a saved layout gets something it can actually call. This
---- is the same snippet docs/modules.md shows for wiring it in by hand.
+--- is the module docs/modules.md points the `breadcrumbs` key at.
 
 ---@return string
 return function()

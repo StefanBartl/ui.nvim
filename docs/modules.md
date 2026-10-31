@@ -281,24 +281,19 @@ what `:Recommender` itself would report; no separate config to keep in
 sync. The result is cached per buffer by `nvim_buf_get_changedtick`, so
 editing invalidates it but an unrelated redraw does not re-scan the buffer.
 
-`breadcrumbs` needs one extra piece most others don't — a highlight group to
-colour it by mode:
+`breadcrumbs` is coloured by the current mode band, which takes one extra
+piece (a highlight group per mode) -- `ui.statusline.modules.breadcrumbs`
+already wires it, so pointing the key at that module is enough:
 
 ```lua
-local hl_module = lazy.require("ui.statusline.modules.highlighting")
-local lsp_module = lazy.require("ui.statusline.modules.lsp")
-
 modules = {
-  breadcrumbs = function()
-    local band = hl_module.mode_band_group()
-    local content = lsp_module.render_breadcrumbs_inherit_lspfirst(band)
-    if not content or content == "" then
-      return ""
-    end
-    return hl_module.hl_open(band) .. content
-  end,
+  breadcrumbs = require("ui.statusline.modules.breadcrumbs"),
 },
 ```
+
+The module is a thin wrapper over `ui.statusline.modules.lsp`
+(`mode_band_group()`, `render_breadcrumbs_inherit_lspfirst(band)`,
+`hl_open(band)`); copy its few lines if you want a variant of your own.
 
 If your winbar (`ui.winbar.set()`, or a content plugin writing
 `vim.wo.winbar` directly) already draws breadcrumbs, you almost certainly do
