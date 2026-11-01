@@ -1,4 +1,5 @@
 ---@module 'ui.slots.view.chips'
+-- handrolled-ok: an index named `last`, not a clock subtraction
 --- The slot bar: one float at the edge of the editor, a chip per slot -- number,
 --- icon, label -- stacked from the top. Not a window anyone works in: it takes
 --- clicks and the wheel, and hands the focus straight back.
