@@ -1,4 +1,5 @@
 ---@module 'ui.slots.store'
+-- handrolled-ok: one event channel with id-based unsubscribe and per-listener pcall; too small for lib.nvim.hooks
 --- The slot table: which number holds which action, which slots are fixed, and
 --- how the rest is kept on disk. No windows, no keymaps; the views and the
 --- commands sit on top and subscribe to `on_change`.
