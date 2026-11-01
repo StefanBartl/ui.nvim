@@ -51,7 +51,8 @@ local MAX_N = config.MAX_N
 ---@field blocked string|nil         # why persistence is off for this scope
 ---@field dirty boolean
 ---@field gen integer                # bumped on every scope change; discards an overtaken save
----@field timer uv.uv_timer_t|nil
+---@field save Lib.Debounce.Handle|nil   # the batching debounce of `touch()`
+---@field save_ms integer|nil        # the window `save` was built with
 ---@field listeners table<integer, fun(event: string, n: integer|nil)>
 ---@field next_listener integer
 ---@field reported table<string, boolean>
@@ -63,7 +64,8 @@ local S = {
   blocked = nil,
   dirty = false,
   gen = 0,
-  timer = nil,
+  save = nil,
+  save_ms = nil,
   listeners = {},
   next_listener = 1,
   reported = {},
@@ -388,8 +390,8 @@ end
 ---@return boolean ok
 ---@return string|nil err
 function M.flush()
-  if S.timer then
-    S.timer:stop()
+  if S.save then
+    S.save.cancel()
   end
   if not S.dirty then
     return true
@@ -475,22 +477,21 @@ local function touch()
     M.flush()
     return
   end
-  if not S.timer then
-    S.timer = uv.new_timer()
-  end
-  local gen = S.gen
-  S.timer:stop()
-  S.timer:start(
-    delay,
-    0,
-    vim.schedule_wrap(function()
-      -- A scope change flushed already; an overtaken timer must not write the
+  -- The window is fixed at creation: rebuilt when the configured delay changes.
+  if not S.save or S.save_ms ~= delay then
+    if S.save then
+      S.save.cancel()
+    end
+    S.save = require("lib.nvim.debounce").new(function(gen)
+      -- A scope change flushed already; an overtaken save must not write the
       -- new scope's state under the old one's expectations.
       if gen == S.gen then
         M.flush()
       end
-    end)
-  )
+    end, delay)
+    S.save_ms = delay
+  end
+  S.save.call(S.gen)
 end
 
 -- Reading ---------------------------------------------------------------
@@ -788,10 +789,9 @@ end
 --- Forget everything and stop the timer (tests, and a host disabling the
 --- feature). Pending changes are NOT written.
 function M.reset()
-  if S.timer then
-    S.timer:stop()
-    S.timer:close()
-    S.timer = nil
+  if S.save then
+    S.save.cancel()
+    S.save, S.save_ms = nil, nil
   end
   S.fixed, S.dynamic = {}, {}
   S.path, S.root, S.blocked = nil, nil, nil
